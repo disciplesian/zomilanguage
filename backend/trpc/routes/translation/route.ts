@@ -4,10 +4,11 @@ import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, dbProcedure, publicProcedure } from '../../create-context';
 
 const MODELS_TO_TRY = [
-  'gemini-2.5-pro',
   'gemini-2.5-flash-preview-05-20',
   'gemini-2.5-flash',
+  'gemini-2.0-flash-001',
   'gemini-2.0-flash',
+  'gemini-1.5-flash',
 ];
 
 const ZOMI_SYSTEM_INSTRUCTION = `### SYSTEM CONFIGURATION: EXPERT TEDIM ZOMI LINGUIST & TRANSLATOR ###
