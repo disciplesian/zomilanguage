@@ -1,13 +1,23 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Platform, Dimensions } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Platform, Dimensions, SafeAreaView } from 'react-native';
 import { AlertTriangle, RefreshCw } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { isNativeModuleError } from '@/lib/errorHandler';
 
 const getIsTablet = () => {
   try {
-    const { width } = Dimensions.get('window');
-    return width >= 768;
+    const { width, height } = Dimensions.get('window');
+    const maxDim = Math.max(width, height);
+    const minDim = Math.min(width, height);
+    return minDim >= 600 || maxDim >= 900;
+  } catch {
+    return false;
+  }
+};
+
+const getIsWeb = () => {
+  try {
+    return Platform.OS === 'web';
   } catch {
     return false;
   }
@@ -28,7 +38,9 @@ interface State {
 
 class ErrorBoundary extends Component<Props, State> {
   private retryCount = 0;
-  private maxRetries = 3;
+  private maxRetries = 5;
+  private lastErrorTime = 0;
+  private errorCooldown = 1000;
   
   constructor(props: Props) {
     super(props);
@@ -68,11 +80,20 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   handleRetry = () => {
+    const now = Date.now();
+    if (now - this.lastErrorTime < this.errorCooldown) {
+      console.log('ErrorBoundary: Retry cooldown active');
+      return;
+    }
+    this.lastErrorTime = now;
+    
     this.retryCount++;
+    console.log(`ErrorBoundary: Retry attempt ${this.retryCount}/${this.maxRetries}`);
+    
     if (this.retryCount <= this.maxRetries) {
       this.setState({ hasError: false, error: null, errorInfo: null });
     } else {
-      console.warn('ErrorBoundary: Max retries reached');
+      console.warn('ErrorBoundary: Max retries reached, resetting counter');
       this.retryCount = 0;
       this.setState({ hasError: false, error: null, errorInfo: null });
     }
@@ -89,9 +110,10 @@ class ErrorBoundary extends Component<Props, State> {
       }
 
       const isTablet = getIsTablet();
+      const isWeb = getIsWeb();
 
       return (
-        <View style={[styles.container, isTablet && styles.containerTablet]}>
+        <SafeAreaView style={[styles.container, isTablet && styles.containerTablet, isWeb && styles.containerWeb]}>
           <View style={[styles.content, isTablet && styles.contentTablet]}>
             <View style={styles.iconContainer}>
               <AlertTriangle size={48} color={Colors.error} />
@@ -117,8 +139,11 @@ class ErrorBoundary extends Component<Props, State> {
                 )}
               </ScrollView>
             )}
+            <Text style={styles.platformInfo}>
+              {Platform.OS} • {typeof Platform.Version === 'number' ? `v${Platform.Version}` : Platform.Version}
+            </Text>
           </View>
-        </View>
+        </SafeAreaView>
       );
     }
 
@@ -136,6 +161,10 @@ const styles = StyleSheet.create({
   },
   containerTablet: {
     padding: 40,
+  },
+  containerWeb: {
+    maxWidth: 600,
+    marginHorizontal: 'auto',
   },
   content: {
     alignItems: 'center',
@@ -211,8 +240,14 @@ const styles = StyleSheet.create({
   errorStack: {
     fontSize: 10,
     color: Colors.textMuted,
-    fontFamily: 'monospace',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     marginTop: 8,
+  },
+  platformInfo: {
+    fontSize: 11,
+    color: Colors.textMuted,
+    marginTop: 16,
+    textAlign: 'center' as const,
   },
 });
 

@@ -1,4 +1,4 @@
-import { Platform, Dimensions } from 'react-native';
+import { Platform, Dimensions, AppState } from 'react-native';
 
 /**
  * Detects if the app is running on Mac Catalyst
@@ -138,72 +138,129 @@ export const safeNativeCallSync = <T>(
 };
 
 /**
+ * Checks if running on Android
+ */
+export const isAndroid = (): boolean => {
+  try {
+    return Platform.OS === 'android';
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Checks if running on web
+ */
+export const isWeb = (): boolean => {
+  try {
+    return Platform.OS === 'web';
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Gets safe dimensions that work on all platforms
+ */
+export const getSafeDimensions = (): { width: number; height: number } => {
+  try {
+    const { width, height } = Dimensions.get('window');
+    return { 
+      width: width || 375, 
+      height: height || 812 
+    };
+  } catch {
+    return { width: 375, height: 812 };
+  }
+};
+
+/**
+ * Checks if the app is in foreground
+ */
+export const isAppActive = (): boolean => {
+  try {
+    return AppState.currentState === 'active';
+  } catch {
+    return true;
+  }
+};
+
+/**
  * Global error handler for unhandled errors
  */
 export const setupGlobalErrorHandlers = () => {
-  // Handle unhandled promise rejections
-  const originalUnhandledRejection = (global as any).onunhandledrejection;
-  (global as any).onunhandledrejection = (event: any) => {
-    try {
-      const error = event?.reason || event;
-      
-      if (isNativeModuleError(error)) {
-        console.warn('Global: Suppressed native module error in promise rejection:', error?.message || error);
-        event?.preventDefault?.();
-        return;
-      }
-      
-      console.error('Global: Unhandled promise rejection:', error);
-      
-      if (originalUnhandledRejection) {
-        originalUnhandledRejection(event);
-      }
-    } catch (handlerError) {
-      console.error('Global: Error in unhandled rejection handler:', handlerError);
-    }
-  };
-
-  // Handle global errors
-  const originalError = (global as any).onerror;
-  (global as any).onerror = (message: any, source?: string, lineno?: number, colno?: number, error?: any) => {
-    try {
-      if (isNativeModuleError(error)) {
-        console.warn('Global: Suppressed native module error:', message || error?.message);
-        return true; // Prevent default error handling
-      }
-      
-      console.error('Global: Unhandled error:', message, error);
-      
-      if (originalError) {
-        return originalError(message, source, lineno, colno, error);
-      }
-      
-      return false;
-    } catch (handlerError) {
-      console.error('Global: Error in error handler:', handlerError);
-      return false;
-    }
-  };
-
-  // React Native specific error handler
-  if (typeof ErrorUtils !== 'undefined') {
-    const originalGlobalHandler = ErrorUtils.getGlobalHandler();
-    ErrorUtils.setGlobalHandler((error: Error, isFatal?: boolean) => {
+  try {
+    // Handle unhandled promise rejections
+    const originalUnhandledRejection = (global as any).onunhandledrejection;
+    (global as any).onunhandledrejection = (event: any) => {
       try {
+        const error = event?.reason || event;
+        
         if (isNativeModuleError(error)) {
-          console.warn('Global: Suppressed native module error in React Native:', error?.message);
-          // Don't call original handler for native module errors
+          console.warn('Global: Suppressed native module error in promise rejection:', error?.message || error);
+          event?.preventDefault?.();
           return;
         }
         
-        console.error('Global: React Native error:', error, 'isFatal:', isFatal);
+        console.error('Global: Unhandled promise rejection:', error);
         
-        if (originalGlobalHandler) {
-          originalGlobalHandler(error, isFatal);
+        if (originalUnhandledRejection) {
+          originalUnhandledRejection(event);
         }
       } catch (handlerError) {
-        console.error('Global: Error in React Native error handler:', handlerError);
+        console.error('Global: Error in unhandled rejection handler:', handlerError);
       }
-    });
+    };
+
+    // Handle global errors
+    const originalError = (global as any).onerror;
+    (global as any).onerror = (message: any, source?: string, lineno?: number, colno?: number, error?: any) => {
+      try {
+        if (isNativeModuleError(error)) {
+          console.warn('Global: Suppressed native module error:', message || error?.message);
+          return true;
+        }
+        
+        console.error('Global: Unhandled error:', message, error);
+        
+        if (originalError) {
+          return originalError(message, source, lineno, colno, error);
+        }
+        
+        return false;
+      } catch (handlerError) {
+        console.error('Global: Error in error handler:', handlerError);
+        return false;
+      }
+    };
+
+    // React Native specific error handler
+    if (typeof ErrorUtils !== 'undefined') {
+      try {
+        const originalGlobalHandler = ErrorUtils.getGlobalHandler();
+        ErrorUtils.setGlobalHandler((error: Error, isFatal?: boolean) => {
+          try {
+            if (isNativeModuleError(error)) {
+              console.warn('Global: Suppressed native module error in React Native:', error?.message);
+              return;
+            }
+            
+            console.error('Global: React Native error:', error, 'isFatal:', isFatal);
+            
+            if (originalGlobalHandler) {
+              originalGlobalHandler(error, isFatal);
+            }
+          } catch (handlerError) {
+            console.error('Global: Error in React Native error handler:', handlerError);
+          }
+        });
+      } catch (euError) {
+        console.warn('Global: Failed to set up ErrorUtils handler:', euError);
+      }
+    }
+
+    console.log('Global error handlers set up successfully for platform:', Platform.OS);
+  } catch (setupError) {
+    console.warn('Global: Failed to set up error handlers:', setupError);
   }
 };

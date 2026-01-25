@@ -1,5 +1,5 @@
 import { Audio } from 'expo-av';
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { Platform, Alert } from 'react-native';
 import { isMacCatalyst as detectMacCatalyst } from '@/lib/errorHandler';
 
@@ -22,11 +22,29 @@ export function useSpeechToText() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const durationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (durationIntervalRef.current) {
+        clearInterval(durationIntervalRef.current);
+        durationIntervalRef.current = null;
+      }
+    };
+  }, []);
 
   const startDurationTimer = useCallback(() => {
+    if (!mountedRef.current) return;
     setRecordingDuration(0);
+    if (durationIntervalRef.current) {
+      clearInterval(durationIntervalRef.current);
+    }
     durationIntervalRef.current = setInterval(() => {
-      setRecordingDuration(prev => prev + 1);
+      if (mountedRef.current) {
+        setRecordingDuration(prev => prev + 1);
+      }
     }, 1000);
   }, []);
 
@@ -207,12 +225,16 @@ export function useSpeechToText() {
             const result = await response.json();
             console.log('STT: Transcription result:', result);
             
-            setIsTranscribing(false);
+            if (mountedRef.current) {
+              setIsTranscribing(false);
+            }
             resolve(result.text || null);
           } catch (err) {
             console.error('STT: Transcription error:', err);
-            setError('Failed to transcribe audio. Please try again.');
-            setIsTranscribing(false);
+            if (mountedRef.current) {
+              setError('Failed to transcribe audio. Please try again.');
+              setIsTranscribing(false);
+            }
             resolve(null);
           }
           
@@ -290,13 +312,17 @@ export function useSpeechToText() {
       const result = await response.json();
       console.log('STT: Transcription result:', result);
 
-      setIsTranscribing(false);
+      if (mountedRef.current) {
+        setIsTranscribing(false);
+      }
       return result.text || null;
     } catch (err) {
       console.error('STT: Failed to transcribe:', err);
-      setError('Failed to transcribe audio. Please try again.');
-      setIsTranscribing(false);
-      Alert.alert('Error', 'Failed to transcribe audio. Please try again.');
+      if (mountedRef.current) {
+        setError('Failed to transcribe audio. Please try again.');
+        setIsTranscribing(false);
+        Alert.alert('Error', 'Failed to transcribe audio. Please try again.');
+      }
       return null;
     }
   }, [stopDurationTimer]);
@@ -330,8 +356,10 @@ export function useSpeechToText() {
       }
     }
     
-    setIsRecording(false);
-    setRecordingDuration(0);
+    if (mountedRef.current) {
+      setIsRecording(false);
+      setRecordingDuration(0);
+    }
   }, [stopDurationTimer]);
 
   const clearError = useCallback(() => {

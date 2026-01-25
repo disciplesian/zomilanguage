@@ -1,5 +1,5 @@
 import { Audio } from 'expo-av';
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { Platform } from 'react-native';
 import { isMacCatalyst as detectMacCatalyst } from '@/lib/errorHandler';
 
@@ -26,6 +26,25 @@ export function useTextToSpeech() {
   const soundRef = useRef<Audio.Sound | null>(null);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const isStoppingRef = useRef(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (soundRef.current) {
+        soundRef.current.unloadAsync().catch(() => {});
+        soundRef.current = null;
+      }
+      if (useWebTTS && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        try {
+          window.speechSynthesis.cancel();
+        } catch (e) {
+          console.warn('TTS: cleanup error:', e);
+        }
+      }
+    };
+  }, []);
 
   const stopInternal = useCallback(async () => {
     if (isStoppingRef.current) {
@@ -62,10 +81,14 @@ export function useTextToSpeech() {
         soundRef.current = null;
       }
       
-      setIsSpeaking(false);
+      if (mountedRef.current) {
+        setIsSpeaking(false);
+      }
     } catch (err) {
       console.error('TTS: Stop error', err);
-      setIsSpeaking(false);
+      if (mountedRef.current) {
+        setIsSpeaking(false);
+      }
     } finally {
       isStoppingRef.current = false;
     }
@@ -82,7 +105,9 @@ export function useTextToSpeech() {
     try {
       await stopInternal();
       
-      setIsSpeaking(true);
+      if (mountedRef.current) {
+        setIsSpeaking(true);
+      }
       console.log(`TTS: Speaking "${text.substring(0, 50)}..." at speed ${options.rate || currentSpeed}`);
 
       if (useWebTTS) {
@@ -103,7 +128,9 @@ export function useTextToSpeech() {
 
           utterance.onend = () => {
             console.log('TTS: Speech ended');
-            setIsSpeaking(false);
+            if (mountedRef.current) {
+              setIsSpeaking(false);
+            }
             utteranceRef.current = null;
           };
 
@@ -141,8 +168,10 @@ export function useTextToSpeech() {
                 console.error('TTS: Unexpected speech error:', errorType);
             }
             
-            setError(errorMessage);
-            setIsSpeaking(false);
+            if (mountedRef.current) {
+              setError(errorMessage);
+              setIsSpeaking(false);
+            }
             utteranceRef.current = null;
           };
 
@@ -154,13 +183,17 @@ export function useTextToSpeech() {
             window.speechSynthesis.speak(utterance);
           } catch (e) {
             console.warn('TTS: speechSynthesis.speak error:', e);
-            setError('Speech synthesis failed.');
-            setIsSpeaking(false);
+            if (mountedRef.current) {
+              setError('Speech synthesis failed.');
+              setIsSpeaking(false);
+            }
           }
         } else {
           console.warn('TTS: Speech synthesis not supported on this platform');
-          setError('Speech synthesis is not supported on this platform.');
-          setIsSpeaking(false);
+          if (mountedRef.current) {
+            setError('Speech synthesis is not supported on this platform.');
+            setIsSpeaking(false);
+          }
         }
       } else {
         try {
@@ -177,8 +210,10 @@ export function useTextToSpeech() {
                 errorMessage.includes('NSException') ||
                 errorMessage.includes('Native module')) {
               console.warn('TTS: Native audio not available on this platform');
-              setError('Audio playback is not available on this platform.');
-              setIsSpeaking(false);
+              if (mountedRef.current) {
+                setError('Audio playback is not available on this platform.');
+                setIsSpeaking(false);
+              }
               return;
             }
             console.warn('TTS: Audio mode setup warning (non-fatal):', audioModeError);
@@ -208,16 +243,20 @@ export function useTextToSpeech() {
                 errorMessage.includes('NSException') ||
                 errorMessage.includes('Native module')) {
               console.warn('TTS: Native audio not available on this platform');
-              setError('Audio playback is not available on this platform.');
-              setIsSpeaking(false);
+              if (mountedRef.current) {
+                setError('Audio playback is not available on this platform.');
+                setIsSpeaking(false);
+              }
               return;
             }
             throw createError;
           }
 
           if (!newSound) {
-            setError('Failed to create audio.');
-            setIsSpeaking(false);
+            if (mountedRef.current) {
+              setError('Failed to create audio.');
+              setIsSpeaking(false);
+            }
             return;
           }
 
@@ -227,34 +266,42 @@ export function useTextToSpeech() {
             if (status.isLoaded) {
               if (status.didJustFinish) {
                 console.log('TTS: Playback finished');
-                setIsSpeaking(false);
+                if (mountedRef.current) {
+                  setIsSpeaking(false);
+                }
                 newSound?.unloadAsync().catch(() => {});
                 soundRef.current = null;
               }
             } else if (status.error) {
               console.error('TTS: Playback error', status.error);
-              setError('Audio playback failed. Please try again.');
-              setIsSpeaking(false);
+              if (mountedRef.current) {
+                setError('Audio playback failed. Please try again.');
+                setIsSpeaking(false);
+              }
               soundRef.current = null;
             }
           });
         } catch (audioError: any) {
           console.error('TTS: Audio setup error', audioError);
           const errorMessage = audioError?.message || '';
-          if (errorMessage.includes('TurboModule') || 
-              errorMessage.includes('NSException') ||
-              errorMessage.includes('Native module')) {
-            setError('Audio playback is not available on this platform.');
-          } else {
-            setError('Failed to play audio. Please check your connection.');
+          if (mountedRef.current) {
+            if (errorMessage.includes('TurboModule') || 
+                errorMessage.includes('NSException') ||
+                errorMessage.includes('Native module')) {
+              setError('Audio playback is not available on this platform.');
+            } else {
+              setError('Failed to play audio. Please check your connection.');
+            }
+            setIsSpeaking(false);
           }
-          setIsSpeaking(false);
         }
       }
     } catch (err) {
       console.error('TTS: General error', err);
-      setError('Text-to-speech failed. Please try again.');
-      setIsSpeaking(false);
+      if (mountedRef.current) {
+        setError('Text-to-speech failed. Please try again.');
+        setIsSpeaking(false);
+      }
     }
   }, [currentSpeed, stopInternal]);
 

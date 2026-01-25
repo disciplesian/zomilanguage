@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect, useState, useRef, useMemo } from "react";
+import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { StatusBar } from "expo-status-bar";
 import { View, ActivityIndicator, Text, StyleSheet } from "react-native";
 import Colors from "@/constants/colors";
@@ -9,7 +9,7 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
 import { UserProfileProvider } from "@/contexts/UserProfileContext";
 import { trpc, getTrpcClient } from "@/lib/trpc";
-import { setupGlobalErrorHandlers, safeNativeCall, safeNativeCallSync } from "@/lib/errorHandler";
+import { setupGlobalErrorHandlers, safeNativeCall } from "@/lib/errorHandler";
 
 // Setup global error handlers as early as possible
 if (typeof global !== 'undefined') {
@@ -133,7 +133,9 @@ function RootLayoutNav() {
 export default function RootLayout() {
   const [isReady, setIsReady] = useState(false);
   const [hasError, setHasError] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const mountedRef = useRef(true);
+  const initAttemptedRef = useRef(false);
 
   const queryClient = useMemo(() => {
     try {
@@ -144,50 +146,69 @@ export default function RootLayout() {
             gcTime: 1000 * 60 * 30,
             retry: 2,
             retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+            networkMode: 'offlineFirst',
           },
           mutations: {
             retry: 1,
+            networkMode: 'offlineFirst',
           },
         },
       });
-    } catch {
+    } catch (error) {
+      console.warn('RootLayout: QueryClient creation failed:', error);
       return new QueryClient();
     }
   }, []);
 
   const [trpcClient, setTrpcClient] = useState<ReturnType<typeof getTrpcClient> | null>(null);
 
-  useEffect(() => {
-    let mounted = true;
-    const initClient = () => {
-      try {
-        const client = getTrpcClient();
-        if (mounted) {
-          setTrpcClient(client);
-        }
-      } catch (error) {
-        console.warn('RootLayout: tRPC client creation failed:', error);
-        if (mounted) {
-          setHasError(true);
-        }
+  const initializeApp = useCallback(async () => {
+    if (initAttemptedRef.current && !hasError) return;
+    initAttemptedRef.current = true;
+    
+    try {
+      console.log('RootLayout: Initializing app...');
+      const client = getTrpcClient();
+      if (mountedRef.current) {
+        setTrpcClient(client);
+        setHasError(false);
+        console.log('RootLayout: tRPC client initialized successfully');
       }
-    };
-    initClient();
-    return () => { mounted = false; };
-  }, []);
+    } catch (error) {
+      console.warn('RootLayout: tRPC client creation failed:', error);
+      if (mountedRef.current) {
+        setHasError(true);
+      }
+    }
+  }, [hasError]);
+
+  const handleRetry = useCallback(() => {
+    if (retryCount < 3) {
+      console.log('RootLayout: Retrying initialization...');
+      setRetryCount(prev => prev + 1);
+      setHasError(false);
+      initAttemptedRef.current = false;
+      initializeApp();
+    }
+  }, [retryCount, initializeApp]);
 
   useEffect(() => {
     mountedRef.current = true;
+    initializeApp();
+    return () => { mountedRef.current = false; };
+  }, [initializeApp]);
+
+  useEffect(() => {
+    if (!mountedRef.current) return;
     
     const timer = setTimeout(() => {
       if (mountedRef.current) {
         setIsReady(true);
         setTimeout(hideSplashSafe, 100);
       }
-    }, 100);
+    }, 150);
 
     return () => {
-      mountedRef.current = false;
       clearTimeout(timer);
     };
   }, []);
@@ -204,7 +225,14 @@ export default function RootLayout() {
     return (
       <View style={fallbackStyles.container}>
         <Text style={fallbackStyles.errorTitle}>Connection Error</Text>
-        <Text style={fallbackStyles.errorText}>Unable to connect. Please restart the app.</Text>
+        <Text style={fallbackStyles.errorText}>Unable to connect to services.</Text>
+        {retryCount < 3 ? (
+          <View style={fallbackStyles.retryButton}>
+            <Text style={fallbackStyles.retryText} onPress={handleRetry}>Tap to Retry</Text>
+          </View>
+        ) : (
+          <Text style={fallbackStyles.errorText}>Please restart the app.</Text>
+        )}
       </View>
     );
   }
@@ -244,5 +272,18 @@ const fallbackStyles = StyleSheet.create({
     fontSize: 14,
     color: Colors.textSecondary,
     textAlign: 'center',
+    marginBottom: 16,
+  },
+  retryButton: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  retryText: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: Colors.text,
   },
 });
