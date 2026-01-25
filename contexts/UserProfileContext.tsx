@@ -303,34 +303,6 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
     };
   }, [user]);
 
-  useEffect(() => {
-    if (!initRef.current) return;
-    
-    if (!user) {
-      setStats(getDefaultStats());
-      setActivities([]);
-      setProfile(null);
-      setIsLoading(false);
-      return;
-    }
-
-    const loadUserData = async () => {
-      try {
-        const statsData = await safeStorageGet(`${USER_STATS_KEY}_${user.userId}`);
-        if (statsData) {
-          const parsed = safeJSONParse<Partial<UserStats>>(statsData, {});
-          setStats({ ...getDefaultStats(), ...parsed });
-        }
-        setProfile(getDefaultProfile(user.userId, user.name, user.email));
-        setIsLoading(false);
-      } catch {
-        setIsLoading(false);
-      }
-    };
-
-    loadUserData();
-  }, [user]);
-
   const saveStats = useCallback(async (newStats: UserStats) => {
     if (!user) return;
     setStats(newStats);

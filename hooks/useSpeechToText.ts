@@ -1,7 +1,7 @@
 import { Audio } from 'expo-av';
 import { useState, useCallback, useRef } from 'react';
 import { Platform, Alert } from 'react-native';
-import { isMacCatalyst as detectMacCatalyst, safeNativeCall } from '@/lib/errorHandler';
+import { isMacCatalyst as detectMacCatalyst } from '@/lib/errorHandler';
 
 const STT_API_URL = 'https://toolkit.rork.com/stt/transcribe/';
 
