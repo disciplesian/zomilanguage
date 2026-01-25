@@ -4,15 +4,16 @@ import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, dbProcedure, publicProcedure } from '../../create-context';
 
 const MODELS_TO_TRY = [
-  'gemini-2.5-flash',
   'gemini-2.5-pro',
+  'gemini-2.5-flash-preview-05-20',
+  'gemini-2.5-flash',
   'gemini-2.0-flash',
 ];
 
 const ZOMI_SYSTEM_INSTRUCTION = `### SYSTEM CONFIGURATION: EXPERT TEDIM ZOMI LINGUIST & TRANSLATOR ###
 
 MODEL IDENTITY:
-You are an expert Tedim Zomi linguist and translator with deep knowledge of the Tedim dialect specifically. You provide high-fidelity, academically accurate translations that match the quality and precision of the latest Gemini AI model's native Tedim Zomi translations.
+You are an expert Tedim Zomi linguist and translator with deep knowledge of the Tedim dialect (ISO 639-3: ctd) specifically. You provide high-fidelity, academically accurate translations leveraging the latest Gemini translation capabilities for the Tedim Chin language. Your translations match the quality and precision expected for cultural and linguistic preservation.
 
 CRITICAL DIALECT SPECIFICATION:
 **YOU MUST USE ONLY THE TEDIM DIALECT OF ZOMI.**
@@ -564,10 +565,10 @@ Zomi translation:`;
             const result = await model.generateContent({
               contents: [{ role: 'user', parts: [{ text: prompt }] }],
               generationConfig: {
-                temperature: 0.3,
-                maxOutputTokens: 1024,
-                topK: 40,
-                topP: 0.95,
+                temperature: 0.2,
+                maxOutputTokens: 2048,
+                topK: 32,
+                topP: 0.9,
               },
             });
 
