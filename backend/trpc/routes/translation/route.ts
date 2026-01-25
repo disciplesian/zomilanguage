@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { TRPCError } from '@trpc/server';
-import { createTRPCRouter, protectedProcedure, publicProcedure } from '../../create-context';
+import { createTRPCRouter, dbProcedure, publicProcedure } from '../../create-context';
 
 const MODELS_TO_TRY = [
   'gemini-2.5-flash',
@@ -623,7 +623,7 @@ Zomi translation:`;
       }
     }),
 
-  translateWithOCR: protectedProcedure
+  translateWithOCR: dbProcedure
     .input(
       z.object({
         imageBase64: z.string(),

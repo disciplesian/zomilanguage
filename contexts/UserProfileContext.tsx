@@ -1,11 +1,11 @@
 import createContextHook from '@nkzw/create-context-hook';
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { useAuth } from './AuthContext';
 
 const USER_STATS_KEY = '@zomi_user_stats';
 const USER_ACTIVITIES_KEY = '@zomi_user_activities';
 const USER_FRIENDS_KEY = '@zomi_user_friends';
 const LEADERBOARD_KEY = '@zomi_leaderboard';
+const LOCAL_USER_KEY = '@zomi_local_user';
 
 const MAX_STORAGE_SIZE = 200000;
 const MAX_ACTIVITIES = 50;
@@ -61,6 +61,13 @@ const safeStorageSet = async (key: string, value: string): Promise<boolean> => {
     return false;
   }
 };
+
+export interface LocalUser {
+  id: string;
+  name: string;
+  avatar?: string;
+  bio?: string;
+}
 
 export interface UserBadge {
   id: string;
@@ -125,13 +132,11 @@ export interface Friend {
 export interface UserProfile {
   userId: string;
   name: string;
-  email: string;
   avatar?: string;
   bio?: string;
   location?: string;
   website?: string;
   isPublic: boolean;
-  showEmail: boolean;
   showStats: boolean;
   badges: UserBadge[];
   featuredBadge?: string;
@@ -183,12 +188,18 @@ const getDefaultStats = (): UserStats => ({
   joinedAt: new Date().toISOString(),
 });
 
-const getDefaultProfile = (userId: string, name: string, email: string): UserProfile => ({
-  userId,
-  name,
-  email,
+const getDefaultLocalUser = (): LocalUser => ({
+  id: 'local_user_' + Date.now().toString(36),
+  name: 'Zomi Learner',
+  bio: 'Learning Zomi language',
+});
+
+const getDefaultProfile = (localUser: LocalUser): UserProfile => ({
+  userId: localUser.id,
+  name: localUser.name,
+  avatar: localUser.avatar,
+  bio: localUser.bio,
   isPublic: true,
-  showEmail: false,
   showStats: true,
   badges: [],
 });
@@ -208,9 +219,7 @@ const calculateXPForNextLevel = (level: number): number => {
 };
 
 export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
-  const authContext = useAuth();
-  const user = authContext?.user ?? null;
-  
+  const [localUser, setLocalUser] = useState<LocalUser>(getDefaultLocalUser());
   const [stats, setStats] = useState<UserStats>(getDefaultStats());
   const [activities, setActivities] = useState<UserActivity[]>([]);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -218,33 +227,30 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
   const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
   const [leaderboard, setLeaderboard] = useState<{ userId: string; name: string; avatar?: string; points: number; level: number; }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const lastUserIdRef = useRef<string | null>(null);
+  const initRef = useRef(false);
 
   useEffect(() => {
-    const currentUserId = user?.userId ?? null;
-    
-    if (currentUserId === lastUserIdRef.current) {
-      return;
-    }
-    lastUserIdRef.current = currentUserId;
+    if (initRef.current) return;
+    initRef.current = true;
     
     let mounted = true;
     
     const loadData = async () => {
-      if (!user) {
-        if (mounted) {
-          setStats(getDefaultStats());
-          setActivities([]);
-          setProfile(null);
-          setFriends([]);
-          setFriendRequests([]);
-          setIsLoading(false);
-        }
-        return;
-      }
-
       try {
-        const statsData = await safeStorageGet(`${USER_STATS_KEY}_${user.userId}`);
+        const storedUserData = await safeStorageGet(LOCAL_USER_KEY);
+        let currentUser: LocalUser;
+        
+        if (storedUserData) {
+          currentUser = safeJSONParse<LocalUser>(storedUserData, getDefaultLocalUser());
+        } else {
+          currentUser = getDefaultLocalUser();
+          await safeStorageSet(LOCAL_USER_KEY, JSON.stringify(currentUser));
+        }
+        
+        if (!mounted) return;
+        setLocalUser(currentUser);
+
+        const statsData = await safeStorageGet(`${USER_STATS_KEY}_${currentUser.id}`);
         
         if (!mounted) return;
 
@@ -254,22 +260,22 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
         } else {
           const newStats = { ...getDefaultStats(), joinedAt: new Date().toISOString() };
           setStats(newStats);
-          safeStorageSet(`${USER_STATS_KEY}_${user.userId}`, JSON.stringify(newStats)).catch(() => {});
+          safeStorageSet(`${USER_STATS_KEY}_${currentUser.id}`, JSON.stringify(newStats)).catch(() => {});
         }
 
-        setProfile(getDefaultProfile(user.userId, user.name, user.email));
+        setProfile(getDefaultProfile(currentUser));
         
         if (mounted) {
           setIsLoading(false);
         }
 
         setTimeout(async () => {
-          if (!mounted || !user) return;
+          if (!mounted) return;
           
           try {
             const [activitiesData, friendsData, leaderboardData] = await Promise.all([
-              safeStorageGet(`${USER_ACTIVITIES_KEY}_${user.userId}`),
-              safeStorageGet(`${USER_FRIENDS_KEY}_${user.userId}`),
+              safeStorageGet(`${USER_ACTIVITIES_KEY}_${currentUser.id}`),
+              safeStorageGet(`${USER_FRIENDS_KEY}_${currentUser.id}`),
               safeStorageGet(LEADERBOARD_KEY),
             ]);
 
@@ -293,7 +299,7 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
               setLeaderboard(Array.isArray(parsed) ? parsed : []);
             }
           } catch {
-            // Ignore secondary data load errors
+            console.log('Failed to load secondary data');
           }
         }, 500);
       } catch {
@@ -309,20 +315,18 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
       mounted = false;
       clearTimeout(timer);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.userId]);
+  }, []);
 
   const saveStats = useCallback(async (newStats: UserStats) => {
-    if (!user) return;
     setStats(newStats);
-    await safeStorageSet(`${USER_STATS_KEY}_${user.userId}`, JSON.stringify(newStats));
+    await safeStorageSet(`${USER_STATS_KEY}_${localUser.id}`, JSON.stringify(newStats));
     
     const currentLeaderboard = [...leaderboard];
-    const existingIndex = currentLeaderboard.findIndex(l => l.userId === user.userId);
+    const existingIndex = currentLeaderboard.findIndex(l => l.userId === localUser.id);
     const entry = {
-      userId: user.userId,
-      name: user.name,
-      avatar: user.avatar,
+      userId: localUser.id,
+      name: localUser.name,
+      avatar: localUser.avatar,
       points: newStats.points,
       level: newStats.level,
     };
@@ -336,11 +340,9 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
     currentLeaderboard.sort((a, b) => b.points - a.points);
     setLeaderboard(currentLeaderboard);
     await safeStorageSet(LEADERBOARD_KEY, JSON.stringify(currentLeaderboard));
-  }, [user, leaderboard]);
+  }, [localUser, leaderboard]);
 
   const addActivity = useCallback(async (activity: Omit<UserActivity, 'id' | 'timestamp'>) => {
-    if (!user) return;
-    
     const newActivity: UserActivity = {
       ...activity,
       id: `activity_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -349,7 +351,7 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
     
     const newActivities = [newActivity, ...activities].slice(0, MAX_ACTIVITIES);
     setActivities(newActivities);
-    await safeStorageSet(`${USER_ACTIVITIES_KEY}_${user.userId}`, JSON.stringify(newActivities));
+    await safeStorageSet(`${USER_ACTIVITIES_KEY}_${localUser.id}`, JSON.stringify(newActivities));
     
     const today = new Date().toDateString();
     const lastActivity = new Date(stats.lastActivityDate).toDateString();
@@ -378,11 +380,9 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
     };
     
     await saveStats(newStats);
-  }, [user, activities, stats, saveStats]);
+  }, [localUser, activities, stats, saveStats]);
 
   const recordTranslation = useCallback(async () => {
-    if (!user) return;
-    
     const newStats = {
       ...stats,
       translationsCount: stats.translationsCount + 1,
@@ -396,11 +396,9 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
       points: 5,
       xp: 10,
     });
-  }, [user, stats, saveStats, addActivity]);
+  }, [stats, saveStats, addActivity]);
 
   const recordContribution = useCallback(async (wordZomi: string, wordEnglish: string) => {
-    if (!user) return;
-    
     const newStats = {
       ...stats,
       dictionaryContributions: stats.dictionaryContributions + 1,
@@ -414,11 +412,9 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
       points: 25,
       xp: 50,
     });
-  }, [user, stats, saveStats, addActivity]);
+  }, [stats, saveStats, addActivity]);
 
   const recordForumPost = useCallback(async (title: string) => {
-    if (!user) return;
-    
     const newStats = {
       ...stats,
       forumPosts: stats.forumPosts + 1,
@@ -432,11 +428,9 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
       points: 10,
       xp: 20,
     });
-  }, [user, stats, saveStats, addActivity]);
+  }, [stats, saveStats, addActivity]);
 
   const recordForumReply = useCallback(async () => {
-    if (!user) return;
-    
     const newStats = {
       ...stats,
       forumReplies: stats.forumReplies + 1,
@@ -450,11 +444,9 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
       points: 5,
       xp: 10,
     });
-  }, [user, stats, saveStats, addActivity]);
+  }, [stats, saveStats, addActivity]);
 
   const recordQuiz = useCallback(async (score: number, total: number) => {
-    if (!user) return;
-    
     const isPerfect = score === total;
     const newStats = {
       ...stats,
@@ -470,11 +462,9 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
       points: score * 10 + (isPerfect ? 50 : 0),
       xp: score * 15 + (isPerfect ? 100 : 0),
     });
-  }, [user, stats, saveStats, addActivity]);
+  }, [stats, saveStats, addActivity]);
 
   const recordListening = useCallback(async (score: number, total: number) => {
-    if (!user) return;
-    
     const newStats = {
       ...stats,
       listeningExercises: stats.listeningExercises + 1,
@@ -488,11 +478,9 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
       points: score * 10,
       xp: score * 15,
     });
-  }, [user, stats, saveStats, addActivity]);
+  }, [stats, saveStats, addActivity]);
 
   const recordLesson = useCallback(async (lessonTitle: string) => {
-    if (!user) return;
-    
     const newStats = {
       ...stats,
       lessonsCompleted: stats.lessonsCompleted + 1,
@@ -506,24 +494,43 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
       points: 25,
       xp: 50,
     });
-  }, [user, stats, saveStats, addActivity]);
+  }, [stats, saveStats, addActivity]);
+
+  const updateLocalUser = useCallback(async (updates: Partial<Pick<LocalUser, 'name' | 'bio' | 'avatar'>>) => {
+    const updatedUser = { ...localUser, ...updates };
+    setLocalUser(updatedUser);
+    await safeStorageSet(LOCAL_USER_KEY, JSON.stringify(updatedUser));
+    
+    if (profile) {
+      setProfile({ ...profile, ...updates });
+    }
+    
+    return { success: true };
+  }, [localUser, profile]);
 
   const updateProfile = useCallback(async (updates: Partial<UserProfile>) => {
     if (!profile) return { success: false, error: 'No profile loaded' };
     
     const newProfile = { ...profile, ...updates };
     setProfile(newProfile);
+    
+    if (updates.name || updates.bio || updates.avatar) {
+      await updateLocalUser({
+        name: updates.name,
+        bio: updates.bio,
+        avatar: updates.avatar,
+      });
+    }
+    
     return { success: true };
-  }, [profile]);
+  }, [profile, updateLocalUser]);
 
   const sendFriendRequest = useCallback(async (toUserId: string, toUserName: string) => {
-    if (!user) return { success: false, error: 'Not authenticated' };
-    
     const request: FriendRequest = {
       id: `req_${Date.now()}`,
-      fromUserId: user.userId,
-      fromUserName: user.name,
-      fromUserAvatar: user.avatar,
+      fromUserId: localUser.id,
+      fromUserName: localUser.name,
+      fromUserAvatar: localUser.avatar,
       toUserId,
       status: 'pending',
       createdAt: new Date().toISOString(),
@@ -531,17 +538,15 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
     
     const newRequests = [...friendRequests, request];
     setFriendRequests(newRequests);
-    await safeStorageSet(`${USER_FRIENDS_KEY}_${user.userId}`, JSON.stringify({
+    await safeStorageSet(`${USER_FRIENDS_KEY}_${localUser.id}`, JSON.stringify({
       friends,
       requests: newRequests,
     }));
     
     return { success: true };
-  }, [user, friends, friendRequests]);
+  }, [localUser, friends, friendRequests]);
 
   const respondToFriendRequest = useCallback(async (requestId: string, accept: boolean) => {
-    if (!user) return { success: false, error: 'Not authenticated' };
-    
     const request = friendRequests.find(r => r.id === requestId);
     if (!request) return { success: false, error: 'Request not found' };
     
@@ -562,27 +567,25 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
     const newRequests = friendRequests.filter(r => r.id !== requestId);
     setFriendRequests(newRequests);
     
-    await safeStorageSet(`${USER_FRIENDS_KEY}_${user.userId}`, JSON.stringify({
+    await safeStorageSet(`${USER_FRIENDS_KEY}_${localUser.id}`, JSON.stringify({
       friends: accept ? [...friends, { id: request.fromUserId, name: request.fromUserName, avatar: request.fromUserAvatar }] : friends,
       requests: newRequests,
     }));
     
     return { success: true };
-  }, [user, friends, friendRequests]);
+  }, [localUser, friends, friendRequests]);
 
   const removeFriend = useCallback(async (friendId: string) => {
-    if (!user) return { success: false, error: 'Not authenticated' };
-    
     const newFriends = friends.filter(f => f.id !== friendId);
     setFriends(newFriends);
     
-    await safeStorageSet(`${USER_FRIENDS_KEY}_${user.userId}`, JSON.stringify({
+    await safeStorageSet(`${USER_FRIENDS_KEY}_${localUser.id}`, JSON.stringify({
       friends: newFriends,
       requests: friendRequests,
     }));
     
     return { success: true };
-  }, [user, friends, friendRequests]);
+  }, [localUser, friends, friendRequests]);
 
   const unlockedBadges = useMemo(() => {
     const badges: UserBadge[] = [];
@@ -700,12 +703,12 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
   }, [stats.xp, stats.level]);
 
   const rank = useMemo(() => {
-    if (!user) return 0;
-    const index = leaderboard.findIndex(l => l.userId === user.userId);
+    const index = leaderboard.findIndex(l => l.userId === localUser.id);
     return index >= 0 ? index + 1 : 0;
-  }, [user, leaderboard]);
+  }, [localUser, leaderboard]);
 
   return {
+    localUser,
     stats,
     activities,
     profile,
@@ -717,6 +720,7 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
     xpProgress,
     rank,
     isLoading,
+    updateLocalUser,
     recordTranslation,
     recordContribution,
     recordForumPost,

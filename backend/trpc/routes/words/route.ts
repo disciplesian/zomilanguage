@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { createTRPCRouter, dbProcedure, protectedProcedure, moderatorProcedure } from '../../create-context';
+import { createTRPCRouter, dbProcedure } from '../../create-context';
 import type { WordContribution } from '@/backend/db/schema';
 
 const wordsRouter = createTRPCRouter({
@@ -27,7 +27,7 @@ const wordsRouter = createTRPCRouter({
       return result[0] || [];
     }),
 
-  pending: moderatorProcedure
+  pending: dbProcedure
     .query(async ({ ctx }) => {
       const result = await ctx.db.query<[(WordContribution & { contributorName: string })[]]>(
         'SELECT *, (SELECT name FROM user WHERE id = userId) as contributorName FROM word_contribution WHERE status = $pending ORDER BY createdAt ASC',
@@ -36,8 +36,9 @@ const wordsRouter = createTRPCRouter({
       return result[0] || [];
     }),
 
-  submit: protectedProcedure
+  submit: dbProcedure
     .input(z.object({
+      deviceId: z.string(),
       zomi: z.string().min(1).max(100),
       english: z.string().min(1).max(200),
       pronunciation: z.string().max(100).optional(),
@@ -47,9 +48,10 @@ const wordsRouter = createTRPCRouter({
       dialectSpecific: z.string().max(100).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      const { deviceId, ...rest } = input;
       const result = await ctx.db.create('word_contribution', {
-        ...input,
-        userId: ctx.userId,
+        ...rest,
+        userId: deviceId,
         status: 'pending',
         votes: 0,
         createdAt: new Date().toISOString(),
@@ -58,13 +60,13 @@ const wordsRouter = createTRPCRouter({
 
       await ctx.db.query(
         'UPDATE user_stats SET contributionsCount += 1, points += 15, updatedAt = $now WHERE userId = $userId',
-        { userId: ctx.userId, now: new Date().toISOString() }
+        { userId: deviceId, now: new Date().toISOString() }
       );
 
       return result;
     }),
 
-  vote: protectedProcedure
+  vote: dbProcedure
     .input(z.object({ wordId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       await ctx.db.query(
@@ -74,11 +76,12 @@ const wordsRouter = createTRPCRouter({
       return { success: true };
     }),
 
-  moderate: moderatorProcedure
+  moderate: dbProcedure
     .input(z.object({
       wordId: z.string(),
       status: z.enum(['approved', 'rejected']),
       note: z.string().optional(),
+      moderatorId: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       await ctx.db.query(
@@ -87,19 +90,21 @@ const wordsRouter = createTRPCRouter({
           wordId: input.wordId,
           status: input.status,
           note: input.note,
-          moderatorId: ctx.userId,
+          moderatorId: input.moderatorId || 'system',
           now: new Date().toISOString(),
         }
       );
 
-      await ctx.db.create('moderation_action', {
-        moderatorId: ctx.userId,
-        targetType: 'word',
-        targetId: input.wordId,
-        action: input.status === 'approved' ? 'approve' : 'reject',
-        reason: input.note,
-        createdAt: new Date().toISOString(),
-      });
+      if (input.moderatorId) {
+        await ctx.db.create('moderation_action', {
+          moderatorId: input.moderatorId,
+          targetType: 'word',
+          targetId: input.wordId,
+          action: input.status === 'approved' ? 'approve' : 'reject',
+          reason: input.note,
+          createdAt: new Date().toISOString(),
+        });
+      }
 
       return { success: true };
     }),

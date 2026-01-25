@@ -13,7 +13,6 @@ import {
   Switch,
   Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   User,
@@ -44,9 +43,7 @@ import {
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import GlassCard from '@/components/GlassCard';
-import GlassButton from '@/components/GlassButton';
 import Colors from '@/constants/colors';
-import { useAuth } from '@/contexts/AuthContext';
 import { useUserProfile, UserBadge } from '@/contexts/UserProfileContext';
 
 const TIER_COLORS: Record<string, { bg: string; border: string; text: string }> = {
@@ -73,9 +70,8 @@ const BADGE_ICONS: Record<string, React.ComponentType<{ size: number; color: str
 };
 
 export default function ProfileScreen() {
-  const router = useRouter();
-  const { user, isAuthenticated, updateProfile: updateAuthProfile } = useAuth();
   const { 
+    localUser,
     stats, 
     activities, 
     friends, 
@@ -85,12 +81,13 @@ export default function ProfileScreen() {
     xpProgress,
     xpForNextLevel,
     rank,
+    updateLocalUser,
   } = useUserProfile();
 
   const [activeTab, setActiveTab] = useState<'stats' | 'badges' | 'leaderboard' | 'friends'>('stats');
   const [showEditModal, setShowEditModal] = useState(false);
-  const [editName, setEditName] = useState(user?.name || '');
-  const [editBio, setEditBio] = useState(user?.bio || '');
+  const [editName, setEditName] = useState(localUser?.name || '');
+  const [editBio, setEditBio] = useState(localUser?.bio || '');
   const [editLocation, setEditLocation] = useState('');
   const [isPublicProfile, setIsPublicProfile] = useState(true);
   const [showStats, setShowStats] = useState(true);
@@ -105,6 +102,13 @@ export default function ProfileScreen() {
     }).start();
   }, [fadeAnim]);
 
+  useEffect(() => {
+    if (localUser) {
+      setEditName(localUser.name || '');
+      setEditBio(localUser.bio || '');
+    }
+  }, [localUser]);
+
   const handlePickImage = useCallback(async () => {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -118,19 +122,19 @@ export default function ProfileScreen() {
     });
 
     if (!result.canceled && result.assets[0]) {
-      await updateAuthProfile({ avatar: result.assets[0].uri });
+      await updateLocalUser({ avatar: result.assets[0].uri });
     }
-  }, [updateAuthProfile]);
+  }, [updateLocalUser]);
 
   const handleSaveProfile = useCallback(async () => {
     if (Platform.OS !== 'web') {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
     
-    await updateAuthProfile({ name: editName, bio: editBio });
+    await updateLocalUser({ name: editName, bio: editBio });
     setShowEditModal(false);
     Alert.alert('Success', 'Profile updated successfully!');
-  }, [editName, editBio, updateAuthProfile]);
+  }, [editName, editBio, updateLocalUser]);
 
   const getUnlockedBadgesCount = () => unlockedBadges.filter(b => b.unlockedAt).length;
 
@@ -139,30 +143,6 @@ export default function ProfileScreen() {
     const tierColor = TIER_COLORS[badge.tier] || TIER_COLORS.bronze;
     return <IconComponent size={24} color={badge.unlockedAt ? tierColor.text : Colors.textMuted} />;
   };
-
-  if (!isAuthenticated) {
-    return (
-      <View style={styles.container}>
-        <LinearGradient
-          colors={[Colors.background, Colors.backgroundTertiary, Colors.background]}
-          style={StyleSheet.absoluteFillObject}
-        />
-        <View style={styles.notAuthContainer}>
-          <User size={64} color={Colors.textMuted} />
-          <Text style={styles.notAuthTitle}>Sign In Required</Text>
-          <Text style={styles.notAuthSubtitle}>
-            Create an account to track your progress, earn badges, and connect with other learners.
-          </Text>
-          <GlassButton
-            title="Sign In"
-            variant="cyan"
-            onPress={() => router.push('/auth/login' as any)}
-            style={styles.signInButton}
-          />
-        </View>
-      </View>
-    );
-  }
 
   return (
     <View style={styles.container}>
@@ -184,15 +164,15 @@ export default function ProfileScreen() {
         <Animated.View style={{ opacity: fadeAnim }}>
           <View style={styles.profileHeader}>
             <TouchableOpacity style={styles.avatarContainer} onPress={handlePickImage}>
-              {user?.avatar ? (
-                <Image source={{ uri: user.avatar }} style={styles.avatar} />
+              {localUser?.avatar ? (
+                <Image source={{ uri: localUser.avatar }} style={styles.avatar} />
               ) : (
                 <LinearGradient
                   colors={[Colors.glassCyan, Colors.glassPurple]}
                   style={styles.avatarPlaceholder}
                 >
                   <Text style={styles.avatarInitial}>
-                    {user?.name?.charAt(0).toUpperCase() || 'U'}
+                    {localUser?.name?.charAt(0).toUpperCase() || 'U'}
                   </Text>
                 </LinearGradient>
               )}
@@ -203,12 +183,12 @@ export default function ProfileScreen() {
 
             <View style={styles.profileInfo}>
               <View style={styles.nameRow}>
-                <Text style={styles.userName}>{user?.name || 'User'}</Text>
+                <Text style={styles.userName}>{localUser?.name || 'Zomi Learner'}</Text>
                 <TouchableOpacity onPress={() => setShowEditModal(true)}>
                   <Edit3 size={18} color={Colors.primary} />
                 </TouchableOpacity>
               </View>
-              <Text style={styles.userBio}>{user?.bio || 'No bio yet'}</Text>
+              <Text style={styles.userBio}>{localUser?.bio || 'Learning Zomi language'}</Text>
               
               <View style={styles.levelBadge}>
                 <Zap size={14} color={Colors.accent} />
@@ -398,7 +378,7 @@ export default function ProfileScreen() {
             <View style={styles.tabContent}>
               <GlassCard style={styles.leaderboardCard}>
                 {leaderboard.slice(0, 20).map((entry, index) => {
-                  const isCurrentUser = entry.userId === user?.userId;
+                  const isCurrentUser = entry.userId === localUser?.id;
                   
                   return (
                     <View
@@ -663,29 +643,6 @@ const styles = StyleSheet.create({
     maxWidth: 1200,
     alignSelf: 'center' as const,
     width: '100%',
-  },
-  notAuthContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 40,
-  },
-  notAuthTitle: {
-    fontSize: 24,
-    fontWeight: '700' as const,
-    color: Colors.text,
-    marginTop: 20,
-    marginBottom: 12,
-  },
-  notAuthSubtitle: {
-    fontSize: 16,
-    color: Colors.textSecondary,
-    textAlign: 'center' as const,
-    lineHeight: 24,
-    marginBottom: 30,
-  },
-  signInButton: {
-    width: 200,
   },
   profileHeader: {
     flexDirection: 'row',

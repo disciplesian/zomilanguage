@@ -7,7 +7,6 @@ import { View, ActivityIndicator, Text, StyleSheet } from "react-native";
 import Colors from "@/constants/colors";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
-import { AuthProvider } from "@/contexts/AuthContext";
 import { UserProfileProvider } from "@/contexts/UserProfileContext";
 import { trpc, getTrpcClient } from "@/lib/trpc";
 import { setupGlobalErrorHandlers, safeNativeCall, safeNativeCallSync } from "@/lib/errorHandler";
@@ -132,27 +131,7 @@ function RootLayoutNav() {
             presentation: "card",
           }} 
         />
-        <Stack.Screen 
-          name="auth/login" 
-          options={{ 
-            title: "Login",
-            presentation: "card",
-          }} 
-        />
-        <Stack.Screen 
-          name="auth/signup" 
-          options={{ 
-            title: "Sign Up",
-            presentation: "card",
-          }} 
-        />
-        <Stack.Screen 
-          name="admin/user-management" 
-          options={{ 
-            title: "User Management",
-            presentation: "card",
-          }} 
-        />
+
       </Stack>
     </>
   );
@@ -238,11 +217,9 @@ export default function RootLayout() {
         <trpc.Provider client={trpcClient} queryClient={queryClient}>
           <QueryClientProvider client={queryClient}>
             <ThemeProvider>
-              <AuthProvider>
-                <UserProfileProvider>
-                  <RootLayoutNav />
-                </UserProfileProvider>
-              </AuthProvider>
+              <UserProfileProvider>
+                <RootLayoutNav />
+              </UserProfileProvider>
             </ThemeProvider>
           </QueryClientProvider>
         </trpc.Provider>

@@ -1,10 +1,11 @@
 import { z } from 'zod';
-import { createTRPCRouter, protectedProcedure } from '../../create-context';
+import { createTRPCRouter, dbProcedure } from '../../create-context';
 import type { TranslationHistory } from '@/backend/db/schema';
 
 const historyRouter = createTRPCRouter({
-  list: protectedProcedure
+  list: dbProcedure
     .input(z.object({
+      deviceId: z.string(),
       limit: z.number().min(1).max(100).default(50),
       offset: z.number().min(0).default(0),
       type: z.enum(['text', 'image', 'document', 'audio']).optional(),
@@ -12,7 +13,7 @@ const historyRouter = createTRPCRouter({
     }))
     .query(async ({ ctx, input }) => {
       let query = 'SELECT * FROM translation_history WHERE userId = $userId';
-      const params: Record<string, unknown> = { userId: ctx.userId };
+      const params: Record<string, unknown> = { userId: input.deviceId };
 
       if (input.type) {
         query += ' AND translationType = $type';
@@ -32,17 +33,19 @@ const historyRouter = createTRPCRouter({
       return result[0] || [];
     }),
 
-  favorites: protectedProcedure
-    .query(async ({ ctx }) => {
+  favorites: dbProcedure
+    .input(z.object({ deviceId: z.string() }))
+    .query(async ({ ctx, input }) => {
       const result = await ctx.db.query<[TranslationHistory[]]>(
         'SELECT * FROM translation_history WHERE userId = $userId AND isFavorite = true ORDER BY createdAt DESC',
-        { userId: ctx.userId }
+        { userId: input.deviceId }
       );
       return result[0] || [];
     }),
 
-  add: protectedProcedure
+  add: dbProcedure
     .input(z.object({
+      deviceId: z.string(),
       sourceText: z.string(),
       translatedText: z.string(),
       sourceLanguage: z.enum(['zomi', 'english']),
@@ -52,27 +55,31 @@ const historyRouter = createTRPCRouter({
       fileThumbnail: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      const { deviceId, ...rest } = input;
       const result = await ctx.db.create('translation_history', {
-        ...input,
-        userId: ctx.userId,
+        ...rest,
+        userId: deviceId,
         isFavorite: false,
         createdAt: new Date().toISOString(),
       });
 
       await ctx.db.query(
         'UPDATE user_stats SET translationsCount += 1, updatedAt = $now WHERE userId = $userId',
-        { userId: ctx.userId, now: new Date().toISOString() }
+        { userId: deviceId, now: new Date().toISOString() }
       );
 
       return result;
     }),
 
-  toggleFavorite: protectedProcedure
-    .input(z.object({ id: z.string() }))
+  toggleFavorite: dbProcedure
+    .input(z.object({ 
+      id: z.string(),
+      deviceId: z.string(),
+    }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.db.query<[TranslationHistory[]]>(
         'SELECT * FROM translation_history WHERE id = $id AND userId = $userId LIMIT 1',
-        { id: input.id, userId: ctx.userId }
+        { id: input.id, userId: input.deviceId }
       );
 
       const item = result[0]?.[0];
@@ -88,21 +95,25 @@ const historyRouter = createTRPCRouter({
       return { success: true, isFavorite: !item.isFavorite };
     }),
 
-  delete: protectedProcedure
-    .input(z.object({ id: z.string() }))
+  delete: dbProcedure
+    .input(z.object({ 
+      id: z.string(),
+      deviceId: z.string(),
+    }))
     .mutation(async ({ ctx, input }) => {
       await ctx.db.query(
         'DELETE FROM translation_history WHERE id = $id AND userId = $userId',
-        { id: input.id, userId: ctx.userId }
+        { id: input.id, userId: input.deviceId }
       );
       return { success: true };
     }),
 
-  clear: protectedProcedure
-    .mutation(async ({ ctx }) => {
+  clear: dbProcedure
+    .input(z.object({ deviceId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
       await ctx.db.query(
         'DELETE FROM translation_history WHERE userId = $userId',
-        { userId: ctx.userId }
+        { userId: input.deviceId }
       );
       return { success: true };
     }),

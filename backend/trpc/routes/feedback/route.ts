@@ -1,10 +1,11 @@
 import { z } from 'zod';
-import { createTRPCRouter, protectedProcedure, adminProcedure } from '../../create-context';
+import { createTRPCRouter, dbProcedure } from '../../create-context';
 import type { Feedback } from '@/backend/db/schema';
 
 const feedbackRouter = createTRPCRouter({
-  submit: protectedProcedure
+  submit: dbProcedure
     .input(z.object({
+      deviceId: z.string().optional(),
       type: z.enum(['bug', 'feature', 'translation', 'general']),
       title: z.string().min(3).max(200),
       content: z.string().min(10).max(2000),
@@ -12,9 +13,10 @@ const feedbackRouter = createTRPCRouter({
       appVersion: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      const { deviceId, ...rest } = input;
       const result = await ctx.db.create('feedback', {
-        ...input,
-        userId: ctx.userId,
+        ...rest,
+        userId: deviceId || 'anonymous',
         status: 'new',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -23,7 +25,7 @@ const feedbackRouter = createTRPCRouter({
       return result;
     }),
 
-  list: adminProcedure
+  list: dbProcedure
     .input(z.object({
       status: z.enum(['new', 'in_progress', 'resolved', 'closed']).optional(),
       type: z.enum(['bug', 'feature', 'translation', 'general']).optional(),
@@ -50,7 +52,7 @@ const feedbackRouter = createTRPCRouter({
       return result[0] || [];
     }),
 
-  updateStatus: adminProcedure
+  updateStatus: dbProcedure
     .input(z.object({
       feedbackId: z.string(),
       status: z.enum(['new', 'in_progress', 'resolved', 'closed']),

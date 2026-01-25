@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { createTRPCRouter, dbProcedure, protectedProcedure } from '../../create-context';
+import { createTRPCRouter, dbProcedure } from '../../create-context';
 import type { UserStats, User } from '@/backend/db/schema';
 
 const statsRouter = createTRPCRouter({
@@ -13,16 +13,17 @@ const statsRouter = createTRPCRouter({
       return result[0] || [];
     }),
 
-  myStats: protectedProcedure
-    .query(async ({ ctx }) => {
+  myStats: dbProcedure
+    .input(z.object({ deviceId: z.string() }))
+    .query(async ({ ctx, input }) => {
       const result = await ctx.db.query<[UserStats[]]>(
         'SELECT * FROM user_stats WHERE userId = $userId LIMIT 1',
-        { userId: ctx.userId }
+        { userId: input.deviceId }
       );
 
       if (!result[0] || result[0].length === 0) {
         const created = await ctx.db.create('user_stats', {
-          userId: ctx.userId,
+          userId: input.deviceId,
           translationsCount: 0,
           contributionsCount: 0,
           postsCount: 0,

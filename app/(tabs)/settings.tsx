@@ -18,22 +18,15 @@ import {
   Shield,
   Heart,
   ExternalLink,
-  Users,
-  LogOut,
-  UserCog,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import GlassCard from '@/components/GlassCard';
 import { useTheme } from '@/contexts/ThemeContext';
-import { useAuth } from '@/contexts/AuthContext';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const { user, isAuthenticated, logout } = useAuth();
   
-  const isAdmin = user?.role === 'admin';
-  const isModerator = user?.role === 'admin' || user?.role === 'moderator';
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -65,23 +58,10 @@ export default function SettingsScreen() {
       case 'terms':
         router.push('/terms' as any);
         break;
-
-      case 'moderation':
-        router.push('/admin/moderation' as any);
-        break;
-      case 'user-management':
-        router.push('/admin/user-management' as any);
-        break;
-      case 'login':
-        router.push('/auth/login' as any);
-        break;
-      case 'logout':
-        logout();
-        break;
       default:
         console.log('Action:', action);
     }
-  }, [router, logout]);
+  }, [router]);
 
   const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -135,42 +115,6 @@ export default function SettingsScreen() {
             </GlassCard>
           </View>
 
-          {isModerator && (
-            <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Administration</Text>
-              
-              <GlassCard style={styles.aboutCard}>
-                {isAdmin && (
-                  <>
-                    <TouchableOpacity 
-                      style={styles.aboutItem}
-                      onPress={() => handlePress('user-management')}
-                    >
-                      <View style={[styles.aboutIcon, { backgroundColor: colors.glassPurple }]}>
-                        <UserCog size={20} color={colors.tertiary} />
-                      </View>
-                      <Text style={[styles.aboutText, { color: colors.text }]}>User Management</Text>
-                      <ChevronRight size={18} color={colors.textMuted} />
-                    </TouchableOpacity>
-
-                    <View style={[styles.settingDivider, { backgroundColor: colors.glassBorder }]} />
-                  </>
-                )}
-
-                <TouchableOpacity 
-                  style={styles.aboutItem}
-                  onPress={() => handlePress('moderation')}
-                >
-                  <View style={[styles.aboutIcon, { backgroundColor: colors.glassYellow }]}>
-                    <Users size={20} color={colors.accent} />
-                  </View>
-                  <Text style={[styles.aboutText, { color: colors.text }]}>Content Moderation</Text>
-                  <ChevronRight size={18} color={colors.textMuted} />
-                </TouchableOpacity>
-              </GlassCard>
-            </View>
-          )}
-
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>About</Text>
             
@@ -211,55 +155,6 @@ export default function SettingsScreen() {
                 <Text style={[styles.aboutText, { color: colors.text }]}>Terms of Service</Text>
                 <ChevronRight size={18} color={colors.textMuted} />
               </TouchableOpacity>
-            </GlassCard>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Account</Text>
-            
-            <GlassCard style={styles.aboutCard}>
-              {isAuthenticated ? (
-                <>
-                  <View style={styles.userInfoItem}>
-                    <View style={[styles.aboutIcon, { backgroundColor: colors.glassCyan }]}>
-                      <Users size={20} color={colors.primary} />
-                    </View>
-                    <View style={styles.userInfoContent}>
-                      <Text style={[styles.userName, { color: colors.text }]}>{user?.name || 'User'}</Text>
-                      <Text style={[styles.userEmail, { color: colors.textSecondary }]}>{user?.email}</Text>
-                      {isAdmin && (
-                        <View style={[styles.adminBadge, { backgroundColor: colors.glassPurple }]}>
-                          <Text style={[styles.adminBadgeText, { color: colors.tertiary }]}>{user?.role?.toUpperCase()}</Text>
-                        </View>
-                      )}
-                    </View>
-                  </View>
-
-                  <View style={[styles.settingDivider, { backgroundColor: colors.glassBorder }]} />
-
-                  <TouchableOpacity 
-                    style={styles.aboutItem}
-                    onPress={() => handlePress('logout')}
-                  >
-                    <View style={[styles.aboutIcon, { backgroundColor: colors.glassPink }]}>
-                      <LogOut size={20} color={colors.error} />
-                    </View>
-                    <Text style={[styles.aboutText, { color: colors.error }]}>Log Out</Text>
-                    <ChevronRight size={18} color={colors.textMuted} />
-                  </TouchableOpacity>
-                </>
-              ) : (
-                <TouchableOpacity 
-                  style={styles.aboutItem}
-                  onPress={() => handlePress('login')}
-                >
-                  <View style={[styles.aboutIcon, { backgroundColor: colors.glassCyan }]}>
-                    <Users size={20} color={colors.primary} />
-                  </View>
-                  <Text style={[styles.aboutText, { color: colors.text }]}>Log In / Sign Up</Text>
-                  <ChevronRight size={18} color={colors.textMuted} />
-                </TouchableOpacity>
-              )}
             </GlassCard>
           </View>
 
@@ -348,34 +243,6 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontWeight: '700' as const,
     marginBottom: 12,
   },
-  settingsCard: {
-    padding: 0,
-    overflow: 'hidden',
-  },
-  settingItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-  },
-  settingIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  settingContent: {
-    flex: 1,
-    marginLeft: 14,
-  },
-  settingTitle: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    marginBottom: 2,
-  },
-  settingDescription: {
-    fontSize: 13,
-  },
   settingDivider: {
     height: 1,
     marginLeft: 74,
@@ -442,33 +309,5 @@ const createStyles = (colors: any) => StyleSheet.create({
   scriptureRef: {
     fontSize: 12,
     fontWeight: '500' as const,
-  },
-  userInfoItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-  },
-  userInfoContent: {
-    flex: 1,
-    marginLeft: 14,
-  },
-  userName: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-  },
-  userEmail: {
-    fontSize: 13,
-    marginTop: 2,
-  },
-  adminBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    marginTop: 6,
-  },
-  adminBadgeText: {
-    fontSize: 10,
-    fontWeight: '700' as const,
   },
 });
