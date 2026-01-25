@@ -24,10 +24,8 @@ import {
   X,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
-import { useRouter } from 'expo-router';
 
 import GlassCard from '@/components/GlassCard';
-import GlassButton from '@/components/GlassButton';
 import Colors from '@/constants/colors';
 import { trpc } from '@/lib/trpc';
 import { useUserProfile } from '@/contexts/UserProfileContext';
@@ -40,7 +38,6 @@ export default function HistoryScreen() {
   const [showFilters, setShowFilters] = useState(false);
 
   const { localUser } = useUserProfile();
-  const router = useRouter();
 
   const historyQuery = trpc.history.list.useQuery(
     { deviceId: localUser.id, limit: 100 },

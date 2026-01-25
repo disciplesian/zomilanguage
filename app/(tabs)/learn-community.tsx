@@ -13,7 +13,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+
 import { 
   GraduationCap,
   Users,
@@ -74,7 +74,6 @@ const categoryColors: Record<string, string> = {
 };
 
 export default function LearnCommunityScreen() {
-  const router = useRouter();
   const { localUser } = useUserProfile();
   const isAuthenticated = true;
   const user = localUser;
@@ -163,7 +162,7 @@ export default function LearnCommunityScreen() {
       }
       return newSet;
     });
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated]);
 
   const handleVoteWord = useCallback((wordId: string) => {
     if (!isAuthenticated) {
@@ -190,7 +189,7 @@ export default function LearnCommunityScreen() {
       }
       return newSet;
     });
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated]);
 
   const handleOpenNewPostModal = useCallback(() => {
     if (!isAuthenticated) {
@@ -205,7 +204,7 @@ export default function LearnCommunityScreen() {
       return;
     }
     setShowNewPostModal(true);
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated]);
 
   const handleOpenContributeModal = useCallback(() => {
     if (!isAuthenticated) {
@@ -220,7 +219,7 @@ export default function LearnCommunityScreen() {
       return;
     }
     setShowContributeModal(true);
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated]);
 
   const handleSubmitPost = useCallback(() => {
     if (!isAuthenticated || !user) {
