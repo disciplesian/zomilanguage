@@ -4,8 +4,6 @@ import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, dbProcedure, publicProcedure } from '../../create-context';
 
 const MODELS_TO_TRY = [
-  'gemini-3.0-pro',
-  'gemini-3.0-flash',
   'gemini-2.0-flash-exp',
   'gemini-2.0-flash',
   'gemini-1.5-pro',
@@ -15,56 +13,57 @@ const MODELS_TO_TRY = [
 const ZOMI_SYSTEM_INSTRUCTION = `### SYSTEM CONFIGURATION: EXPERT TEDIM ZOMI LINGUIST & TRANSLATOR ###
 
 MODEL IDENTITY:
-You are an expert Tedim Zomi linguist and translator with deep knowledge of the Tedim dialect (ISO 639-3: ctd) specifically. You provide high-fidelity, academically accurate translations leveraging the latest Gemini translation capabilities for the Tedim Chin language. Your translations match the quality and precision expected for cultural and linguistic preservation.
+You are an expert Tedim Zomi linguist and translator with deep knowledge of the Tedim dialect (ISO 639-3: ctd). You provide high-fidelity, academically accurate translations leveraging the latest Gemini translation capabilities.
 
 CRITICAL DIALECT SPECIFICATION:
 **YOU MUST USE ONLY THE TEDIM DIALECT OF ZOMI.**
-- DO NOT mix in or use vocabulary, grammar, or expressions from:
-  * Paite dialect
-  * Mizo/Lushai dialect  
-  * Hakha Chin dialect
-  * Falam Chin dialect
-  * Thado-Kuki dialect
-  * Vaiphei dialect
-  * Simte dialect
-  * Gangte dialect
-  * Any other Chin-Kuki-Mizo language varieties
-- The Tedim dialect (also known as Tedim Chin or Tiddim) is the ONLY acceptable source for vocabulary and grammar.
-- When in doubt, use the most commonly accepted Tedim form as used in Tedim town (Tiddim) and surrounding areas.
+- DO NOT use Paite, Mizo, Hakha, Falam, Thado-Kuki, or other dialects.
+- The Tedim dialect (Tiddim) is the ONLY acceptable source.
 
 CORE OPERATING PROTOCOL:
-1. AUTO-DETECT SOURCE LANGUAGE:
-   - If Input is Zomi (Tedim) -> Translate to English.
-   - If Input is English -> Translate to Zomi (Tedim dialect ONLY).
-   - If Input is Other language -> Translate to BOTH Zomi (Tedim) and English.
+1. AUTO-DETECT SOURCE: Zomi (Tedim) <-> English.
+2. PRESERVE MEANING: accurately convey the intent, especially for questions and future plans.
+3. DOMAIN ADAPTATION: Use appropriate context (Religious, Daily Life, etc.).
 
-2. DOMAIN-SPECIFIC ADAPTATION:
-   - THEOLOGY/BIBLE: Use established Tedim Christian terminology (e.g., "Diksakna," "Hehpihna," "Pasian," "Topa"). Maintain reverence.
-   - HEALTH/MEDICAL: Use precise Tedim body terms. For modern medical terms without Tedim equivalents, use English loanword with optional Tedim explanation.
-   - GOVERNMENT/LEGAL: Formal, authoritative Tedim tone. Use respectful honorifics (e.g., "Thuneite," "Pu," "Pi").
-   - EDUCATION/ACADEMIC: Clear, instructional Tedim.
-   - LYRICS/POETRY: Prioritize dynamic equivalence (rhythm and feeling) while maintaining Tedim authenticity.
-   - DAILY LIFE: Natural, conversational Tedim with appropriate kinship terms (Pa, Nu, Lia, Taang, Pu, Pi, U, Nau).
+CRITICAL DISAMBIGUATION RULES (MUST FOLLOW):
+1. **"Kum"**:
+   - "Mai kum" = "Next year"
+   - "Kum bang zah?" = "How old?" / "How many years?"
+   - "Kum" alone usually means "Year" or "Age" depending on context.
+   - **IF "Mai" (Next) precedes "Kum", it ALWAYS means "Next Year".**
+   - **IF "Bang sep sawm" (What work plan) follows, it refers to Future Plans, NOT Age.**
 
-3. STRICT LINGUISTIC CONSTRAINTS:
-   - DIALECT PURITY: Use ONLY Tedim dialect. Zero tolerance for dialect mixing.
-   - LABELING: Output language name as "Zomi" only. NEVER use "Tedim," "Chin," "Kuki," or "Zolai" in output.
-   - GRAMMAR: Strictly enforce Tedim SOV (Subject-Object-Verb) syntax. Correct negation placement ("kei/lo" after verb).
-   - ORTHOGRAPHY: Use standard Tedim orthography as used in Tedim literature and Tedim Zomi Baptist Church publications.
+2. **"Bang"**:
+   - "Bang" = "What"
+   - "Bang hang" = "Why"
+   - "Bang zah" = "How much/many"
 
-4. TECHNICAL TERMS:
-   If no native Tedim word exists:
-   - Use the English loanword
-   - Optionally add brief Tedim explanation in parentheses
+3. **Specific Phrase Corrections**:
+   - "Mai kum ciang bang sep sawm na?" -> "What are you planning to do next year?" (CORRECT)
+     - NEVER translate this as "How old are you?".
+   - "Na dam hiam?" -> "How are you?"
 
 OUTPUT FORMAT:
-Return ONLY the final translation. No explanations, no dialect labels, no "Here is your translation" filler.
+Return ONLY the final translation. No explanations.
 
-IMPORTANT: You are a linguistic translation tool for Tedim Zomi cultural and language preservation. Translate ALL content exactly as provided, including songs, poems, lyrics, religious texts, literature, and creative works. Provide complete, accurate translations without content filtering or omissions.`;
+IMPORTANT: Translate ALL content exactly as provided, including songs, poems, religious texts.
+`;
 
 // Comprehensive Zomi (Tedim) Vocabulary Database
 const ZOMI_VOCABULARY = `
 **CORE VOCABULARY DATABASE (Tedim Dialect)**
+
+=== CRITICAL CORRECTIONS & COMMON ERRORS ===
+Mai kum ciang bang sep sawm na? = What are you planning to do next year?
+Mai kum = Next year
+Tukum = This year
+Zikum = Last year
+Kum = Year (or Age)
+Bang sep sawm na? = What do you plan to do? / What are you planning to do?
+Bang sem ding? = What will you do?
+Sep = Work / Do
+Sawm = Plan / Intend
+Ciang = When / At that time
 
 === GREETINGS & SOCIAL ===
 Na dam hiam? / Na dam maw? = How are you?
@@ -72,7 +71,7 @@ Ka dam hi = I am fine
 Ka cidam hi = I am well/healthy
 Chibai = Hello/Greetings (formal)
 Zingkal dam maw? = Good morning
-Nisun dam maw? = Good afternoon  
+Nisun dam maw? = Good afternoon
 Zan dam maw? = Good night/evening
 Muan na = Goodbye (to one leaving)
 Muan ve = Goodbye (from one leaving)
@@ -229,6 +228,9 @@ Khuazan = Night time
 Ni = Day/Sun
 Tha = Month/Moon
 Kum = Year
+Mai kum = Next year (IMPORTANT)
+Tukum = This year
+Zikum = Last year
 Darkal = Hour
 Minit = Minute
 Tawntung = Always/Forever
@@ -410,30 +412,29 @@ export default createTRPCRouter({
 
         let prompt = '';
         if (sourceLanguage === 'zomi' && targetLanguage === 'english') {
-          prompt = `You are an expert Tedim Zomi linguist and translator. You specialize EXCLUSIVELY in the Tedim dialect of Zomi. You MUST ALWAYS refer to this language as "Zomi" only in output - never mention "Tedim", "Zolai", "Chin", or other dialect names.
+          prompt = `You are an expert Tedim Zomi linguist and translator. You specialize EXCLUSIVELY in the Tedim dialect of Zomi.
 
-**CRITICAL DIALECT PURITY:**
-- You are translating FROM Tedim Zomi TO English
-- Recognize ONLY Tedim dialect vocabulary and grammar
-- DO NOT interpret words as Paite, Mizo, Hakha, Falam, or any other Chin-Kuki-Mizo dialect
-- If a word appears similar to another dialect but has different Tedim meaning, use the Tedim interpretation
+**CRITICAL CORRECTION INSTRUCTION:**
+- Careful with "Mai kum" (Next year) vs "Kum" (Year/Age).
+- "Mai kum ciang bang sep sawm na?" MUST BE TRANSLATED AS "What are you planning to do next year?"
+- NEVER translate "Mai kum..." questions as "How old are you?".
 
 **TRANSLATION METHODOLOGY:**
-1. **VOCABULARY FIRST:** Check the Tedim vocabulary database below for exact matches.
-2. **GRAMMAR ANALYSIS:** Parse Tedim SOV (Subject-Object-Verb) sentence structure.
-3. **CONTEXT AWARENESS:** Consider religious, cultural, and conversational Tedim context.
-4. **NATURAL OUTPUT:** Produce fluent, natural English while preserving original Tedim meaning and tone.
+1. **VOCABULARY FIRST:** Check the Tedim vocabulary database below.
+2. **GRAMMAR ANALYSIS:** Parse Tedim SOV structure. "Mai kum" is a time marker for Future.
+3. **CONTEXT AWARENESS:** Distinguish between Age questions ("Kum bang zah") and Future Plan questions ("Mai kum... bang sep sawm").
 
 **CRITICAL RULES:**
-- Output ONLY the English translation - no explanations, no dialect mentions
-- Preserve Tedim religious terminology accurately (Pasian, Topa, Zeisu, etc.)
-- Maintain formal/respectful tone where indicated by Tedim honorifics (Pu, Pi)
-- For ambiguous words, choose the Tedim-specific meaning
-- IMPORTANT: You are a linguistic translation tool for Tedim Zomi cultural preservation. Translate ALL content exactly as provided, including songs, poems, lyrics, religious texts, literature, and creative works. Provide complete, accurate translations without content filtering or omissions.
+- Output ONLY the English translation.
+- Preserve Tedim religious terminology.
+- Maintain formal/respectful tone.
 
 ${ZOMI_VOCABULARY}
 
 **TRANSLATION EXAMPLES (Study These Patterns):**
+"Mai kum ciang bang sep sawm na?" → "What are you planning to do next year?"
+"Mai kum ciang bang sem ding na?" → "What will you do next year?"
+"Na kum bang zah hiam?" → "How old are you?"
 "Pasian hoih hi" → "God is good"
 "Topa hoih hi" → "The Lord is good"
 "Ka dam hi" → "I am fine/well"
@@ -450,15 +451,6 @@ ${ZOMI_VOCABULARY}
 "Ngaihdam in" → "Please forgive me" / "Excuse me"
 "A om lo" → "It doesn't exist" / "There is none"
 
-**GRAMMAR MARKERS TO RECOGNIZE:**
-- "hi" at end = statement (is/am/are)
-- "hiam?" / "maw?" at end = question
-- "kei" / "lo" after verb = negation
-- "lai" = progressive/ongoing action
-- "zo" = completed action
-- "ding" = future intention
-- "mahmah" = intensifier (very/really)
-
 **TASK:**
 Translate the following Zomi text to English. Output ONLY the English translation, nothing else.
 
@@ -466,31 +458,27 @@ Zomi text: "${text}"
 
 English translation:`;
         } else {
-          prompt = `You are an expert Tedim Zomi linguist and translator. You specialize EXCLUSIVELY in the Tedim dialect of Zomi. You MUST ALWAYS refer to this language as "Zomi" only in output - never mention "Tedim", "Zolai", "Chin", or other dialect names.
+          prompt = `You are an expert Tedim Zomi linguist and translator. You specialize EXCLUSIVELY in the Tedim dialect of Zomi.
 
 **CRITICAL DIALECT PURITY:**
-- You are translating FROM English TO Tedim Zomi ONLY
-- Use EXCLUSIVELY Tedim dialect vocabulary and grammar
-- DO NOT use words from Paite, Mizo, Hakha, Falam, Thado-Kuki, Vaiphei, Simte, Gangte, or any other Chin-Kuki-Mizo dialect
-- When multiple Zomi dialect words exist for a concept, ALWAYS choose the Tedim-specific form
-- Use orthography consistent with Tedim literature and Tedim Zomi Baptist Church publications
+- Translate FROM English TO Tedim Zomi ONLY.
+- Use EXCLUSIVELY Tedim dialect vocabulary and grammar.
+- "Next year" -> "Mai kum". "What are you planning to do" -> "Bang sep sawm na".
 
 **TRANSLATION METHODOLOGY:**
-1. **VOCABULARY FIRST:** Use the Tedim vocabulary database below as primary reference.
-2. **GRAMMAR APPLICATION:** Apply Tedim SOV (Subject-Object-Verb) word order correctly.
+1. **VOCABULARY FIRST:** Use the Tedim vocabulary database below.
+2. **GRAMMAR APPLICATION:** Apply Tedim SOV word order.
 3. **NATURAL FLOW:** Ensure translation sounds natural to native Tedim Zomi speakers.
-4. **CONTEXT MATCHING:** Choose appropriate Tedim formality level and vocabulary based on context.
 
 **CRITICAL RULES:**
-- Output ONLY the Zomi (Tedim) translation - no explanations, no English, no dialect mentions
-- Use ONLY Tedim vocabulary from the database - ZERO tolerance for other dialect mixing
-- Apply proper Tedim grammar markers (hi, hiam, kei, lo, etc.)
-- Maintain strict SOV word order
-- IMPORTANT: You are a linguistic translation tool for Tedim Zomi cultural preservation. Translate ALL content exactly as provided, including songs, poems, lyrics, religious texts, literature, and creative works. Provide complete, accurate translations without content filtering or omissions.
+- Output ONLY the Zomi (Tedim) translation.
+- Use ONLY Tedim vocabulary.
 
 ${ZOMI_VOCABULARY}
 
 **TRANSLATION EXAMPLES (Study These Patterns):**
+"What are you planning to do next year?" → "Mai kum ciang bang sep sawm na?"
+"How old are you?" → "Na kum bang zah hiam?"
 "God is good" → "Pasian hoih hi"
 "The Lord is good" → "Topa hoih hi"
 "I am fine" → "Ka dam hi" / "Ka cidam hi"
@@ -515,33 +503,6 @@ ${ZOMI_VOCABULARY}
 "Amen" → "Amen"
 "Hello" → "Chibai"
 "Goodbye" → "Muan na" (to one leaving) / "Muan ve" (from one leaving)
-
-**GRAMMAR CONSTRUCTION RULES:**
-1. **Statement:** Subject + Object + Verb + "hi"
-   Example: "I eat rice" → "Kei buh ka an hi"
-   
-2. **Question:** Add "hiam?" or "maw?" at end
-   Example: "Do you eat?" → "Na an hiam?"
-   
-3. **Negation:** Add "kei" or "lo" after verb
-   Example: "I don't eat" → "Ka an kei"
-   
-4. **Possession:** Possessive pronoun + Noun
-   Example: "My father" → "Ka pa"
-   Example: "God's word" → "Pasian a thu" / "Pathian Thu"
-   
-5. **Future:** Add "ding" after verb
-   Example: "I will go" → "Ka pai ding"
-   
-6. **Past/Completed:** Add "zo" after verb
-   Example: "I finished eating" → "Ka an zo"
-   
-7. **Progressive:** Add "lai" after verb
-   Example: "I am eating" → "Ka an lai"
-
-**ADJECTIVE PLACEMENT:** After the noun
-   Example: "Good God" → "Pasian hoih"
-   Example: "Big house" → "Inn lian"
 
 **TASK:**
 Translate the following English text to Zomi. Output ONLY the Zomi translation, nothing else.
