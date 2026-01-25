@@ -208,7 +208,9 @@ const calculateXPForNextLevel = (level: number): number => {
 };
 
 export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
-  const { user } = useAuth();
+  const authContext = useAuth();
+  const user = authContext?.user ?? null;
+  
   const [stats, setStats] = useState<UserStats>(getDefaultStats());
   const [activities, setActivities] = useState<UserActivity[]>([]);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -216,20 +218,26 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
   const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
   const [leaderboard, setLeaderboard] = useState<{ userId: string; name: string; avatar?: string; points: number; level: number; }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const initRef = useRef(false);
+  const lastUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (initRef.current) return;
-    initRef.current = true;
+    const currentUserId = user?.userId ?? null;
     
-    const mountedRef = { current: true };
+    if (currentUserId === lastUserIdRef.current) {
+      return;
+    }
+    lastUserIdRef.current = currentUserId;
+    
+    let mounted = true;
     
     const loadData = async () => {
       if (!user) {
-        if (mountedRef.current) {
+        if (mounted) {
           setStats(getDefaultStats());
           setActivities([]);
           setProfile(null);
+          setFriends([]);
+          setFriendRequests([]);
           setIsLoading(false);
         }
         return;
@@ -238,7 +246,7 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
       try {
         const statsData = await safeStorageGet(`${USER_STATS_KEY}_${user.userId}`);
         
-        if (!mountedRef.current) return;
+        if (!mounted) return;
 
         if (statsData) {
           const parsed = safeJSONParse<Partial<UserStats>>(statsData, {});
@@ -251,12 +259,12 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
 
         setProfile(getDefaultProfile(user.userId, user.name, user.email));
         
-        if (mountedRef.current) {
+        if (mounted) {
           setIsLoading(false);
         }
 
         setTimeout(async () => {
-          if (!mountedRef.current || !user) return;
+          if (!mounted || !user) return;
           
           try {
             const [activitiesData, friendsData, leaderboardData] = await Promise.all([
@@ -265,7 +273,7 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
               safeStorageGet(LEADERBOARD_KEY),
             ]);
 
-            if (!mountedRef.current) return;
+            if (!mounted) return;
 
             if (activitiesData) {
               const parsed = safeJSONParse<UserActivity[]>(activitiesData, []);
@@ -289,19 +297,20 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
           }
         }, 500);
       } catch {
-        if (mountedRef.current) {
+        if (mounted) {
           setIsLoading(false);
         }
       }
     };
 
-    const timer = setTimeout(loadData, 300);
+    const timer = setTimeout(loadData, 100);
     
     return () => {
-      mountedRef.current = false;
+      mounted = false;
       clearTimeout(timer);
     };
-  }, [user]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.userId]);
 
   const saveStats = useCallback(async (newStats: UserStats) => {
     if (!user) return;
