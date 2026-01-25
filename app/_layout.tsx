@@ -133,6 +133,7 @@ function RootLayoutNav() {
 export default function RootLayout() {
   const [isReady, setIsReady] = useState(false);
   const [hasError, setHasError] = useState(false);
+  const [initComplete, setInitComplete] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const mountedRef = useRef(true);
   const initAttemptedRef = useRef(false);
@@ -172,12 +173,14 @@ export default function RootLayout() {
       if (mountedRef.current) {
         setTrpcClient(client);
         setHasError(false);
+        setInitComplete(true);
         console.log('RootLayout: tRPC client initialized successfully');
       }
     } catch (error) {
       console.warn('RootLayout: tRPC client creation failed:', error);
       if (mountedRef.current) {
         setHasError(true);
+        setInitComplete(true);
       }
     }
   }, [hasError]);
@@ -187,6 +190,7 @@ export default function RootLayout() {
       console.log('RootLayout: Retrying initialization...');
       setRetryCount(prev => prev + 1);
       setHasError(false);
+      setInitComplete(false);
       initAttemptedRef.current = false;
       initializeApp();
     }
@@ -213,7 +217,7 @@ export default function RootLayout() {
     };
   }, []);
 
-  if (!isReady) {
+  if (!isReady || !initComplete) {
     return (
       <View style={fallbackStyles.container}>
         <ActivityIndicator size="large" color={Colors.primary} />
