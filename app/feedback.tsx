@@ -21,7 +21,7 @@ import GlassCard from '@/components/GlassCard';
 import GlassButton from '@/components/GlassButton';
 import Colors from '@/constants/colors';
 import { trpc } from '@/lib/trpc';
-import { useAuth } from '@/contexts/AuthContext';
+import { useUserProfile } from '@/contexts/UserProfileContext';
 
 const FEEDBACK_TYPES = [
   { value: 'bug', label: 'Bug Report', color: Colors.error },
@@ -35,7 +35,7 @@ export default function FeedbackScreen() {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
 
-  const { user } = useAuth();
+  const { localUser } = useUserProfile();
   const router = useRouter();
 
   const submitMutation = trpc.feedback.submit.useMutation({
@@ -132,7 +132,7 @@ export default function FeedbackScreen() {
             <Text style={styles.headerSubtitle}>Help us improve Zomi Translator</Text>
           </View>
 
-          {!user && (
+          {!localUser && (
             <GlassCard style={styles.infoCard}>
               <AlertCircle size={20} color={Colors.accent} />
               <Text style={styles.infoText}>

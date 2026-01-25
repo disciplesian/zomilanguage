@@ -55,7 +55,7 @@ import {
   ForumPost, 
   ContributedWord 
 } from '@/constants/translations';
-import { useAuth } from '@/contexts/AuthContext';
+import { useUserProfile } from '@/contexts/UserProfileContext';
 
 const { width } = Dimensions.get('window');
 
@@ -75,7 +75,9 @@ const categoryColors: Record<string, string> = {
 
 export default function LearnCommunityScreen() {
   const router = useRouter();
-  const { user, isAuthenticated } = useAuth();
+  const { localUser } = useUserProfile();
+  const isAuthenticated = true;
+  const user = localUser;
   
   const [activeTab, setActiveTab] = useState<'learn' | 'community'>('learn');
   const [communitySubTab, setCommunitySubTab] = useState<'forum' | 'contribute'>('forum');
@@ -143,7 +145,7 @@ export default function LearnCommunityScreen() {
         'Please login to like posts.',
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Login', onPress: () => router.push('/auth/login' as any) },
+          { text: 'Login', onPress: () => console.log('Action requires user') },
         ]
       );
       return;
@@ -170,7 +172,7 @@ export default function LearnCommunityScreen() {
         'Please login to vote on contributions.',
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Login', onPress: () => router.push('/auth/login' as any) },
+          { text: 'Login', onPress: () => console.log('Action requires user') },
         ]
       );
       return;
@@ -197,7 +199,7 @@ export default function LearnCommunityScreen() {
         'Please login to create posts in the community forum.',
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Login', onPress: () => router.push('/auth/login' as any) },
+          { text: 'Login', onPress: () => console.log('Action requires user') },
         ]
       );
       return;
@@ -212,7 +214,7 @@ export default function LearnCommunityScreen() {
         'Please login to contribute words to the dictionary.',
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Login', onPress: () => router.push('/auth/login' as any) },
+          { text: 'Login', onPress: () => console.log('Action requires user') },
         ]
       );
       return;
@@ -230,7 +232,7 @@ export default function LearnCommunityScreen() {
       title: newPostTitle, 
       content: newPostContent, 
       category: newPostCategory,
-      userId: user.userId,
+      userId: user.id,
     });
     setShowNewPostModal(false);
     setNewPostTitle('');
@@ -247,7 +249,7 @@ export default function LearnCommunityScreen() {
       return;
     }
     
-    console.log('Submitting word:', { ...newWord, userId: user.userId });
+    console.log('Submitting word:', { ...newWord, userId: user.id });
     setShowContributeModal(false);
     setNewWord({ zomi: '', english: '', pronunciation: '', example: '' });
     if (Platform.OS !== 'web') {
@@ -417,7 +419,7 @@ export default function LearnCommunityScreen() {
         title="Login to Participate"
         variant="yellow"
         icon={<LogIn size={18} color={Colors.text} />}
-        onPress={() => router.push('/auth/login' as any)}
+        onPress={() => console.log('Action requires user')}
         fullWidth
       />
     </GlassCard>

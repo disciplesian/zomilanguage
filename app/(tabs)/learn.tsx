@@ -42,7 +42,6 @@ import GlassButton from '@/components/GlassButton';
 import ScriptureOfTheDay from '@/components/ScriptureOfTheDay';
 import Colors from '@/constants/colors';
 import { useUserProfile } from '@/contexts/UserProfileContext';
-import { useAuth } from '@/contexts/AuthContext';
 import { 
   LEARNING_ACHIEVEMENTS, 
   LEARNING_LESSONS, 
@@ -66,7 +65,6 @@ const achievementIcons: Record<string, React.ComponentType<{ size: number; color
 };
 
 export default function LearnScreen() {
-  const { isAuthenticated } = useAuth();
   const { recordQuiz, recordListening, recordLesson } = useUserProfile();
   
   const [currentLevel] = useState(2);
@@ -160,13 +158,11 @@ export default function LearnScreen() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
       
-      if (isAuthenticated) {
-        await recordLesson(currentLesson.title);
-      }
+      await recordLesson(currentLesson.title);
       
       Alert.alert('Lesson Complete!', `You earned 25 XP!`);
     }
-  }, [currentLesson, lessonStep, isAuthenticated, recordLesson]);
+  }, [currentLesson, lessonStep, recordLesson]);
 
   const handlePrevLessonStep = useCallback(() => {
     if (lessonStep > 0) {
@@ -226,11 +222,9 @@ export default function LearnScreen() {
       const earnedXP = quizScore * 10;
       setTotalXP(prev => prev + earnedXP);
       
-      if (isAuthenticated) {
-        await recordQuiz(quizScore, quizQuestions.length);
-      }
+      await recordQuiz(quizScore, quizQuestions.length);
     }
-  }, [currentQuizIndex, quizQuestions.length, quizScore, isAuthenticated, recordQuiz]);
+  }, [currentQuizIndex, quizQuestions.length, quizScore, recordQuiz]);
 
   const handleStartListening = useCallback(() => {
     if (Platform.OS !== 'web') {
@@ -283,11 +277,9 @@ export default function LearnScreen() {
       const earnedXP = listeningScore * 10;
       setTotalXP(prev => prev + earnedXP);
       
-      if (isAuthenticated) {
-        await recordListening(listeningScore, listeningExercises.length);
-      }
+      await recordListening(listeningScore, listeningExercises.length);
     }
-  }, [currentListeningIndex, listeningExercises.length, listeningScore, isAuthenticated, recordListening]);
+  }, [currentListeningIndex, listeningExercises.length, listeningScore, recordListening]);
 
   const getAchievementColor = (color: string): 'cyan' | 'pink' | 'yellow' | 'purple' | 'green' | 'default' => {
     switch (color) {

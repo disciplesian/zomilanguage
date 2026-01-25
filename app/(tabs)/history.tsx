@@ -30,7 +30,7 @@ import GlassCard from '@/components/GlassCard';
 import GlassButton from '@/components/GlassButton';
 import Colors from '@/constants/colors';
 import { trpc } from '@/lib/trpc';
-import { useAuth } from '@/contexts/AuthContext';
+import { useUserProfile } from '@/contexts/UserProfileContext';
 
 type FilterType = 'all' | 'text' | 'image' | 'document' | 'audio';
 
@@ -39,12 +39,12 @@ export default function HistoryScreen() {
   const [filterType, setFilterType] = useState<FilterType>('all');
   const [showFilters, setShowFilters] = useState(false);
 
-  const { isAuthenticated } = useAuth();
+  const { localUser } = useUserProfile();
   const router = useRouter();
 
   const historyQuery = trpc.history.list.useQuery(
-    { limit: 100 },
-    { enabled: isAuthenticated }
+    { deviceId: localUser.id, limit: 100 },
+    { enabled: !!localUser.id }
   );
 
   const deleteMutation = trpc.history.delete.useMutation({
@@ -96,7 +96,7 @@ export default function HistoryScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
-            deleteMutation.mutate({ id });
+            deleteMutation.mutate({ id, deviceId: localUser.id });
           },
         },
       ]
@@ -104,7 +104,7 @@ export default function HistoryScreen() {
   };
 
   const handleToggleFavorite = (id: string) => {
-    toggleFavoriteMutation.mutate({ id });
+    toggleFavoriteMutation.mutate({ id, deviceId: localUser.id });
   };
 
   const getTypeIcon = (type: string) => {
@@ -122,31 +122,7 @@ export default function HistoryScreen() {
     }
   };
 
-  if (!isAuthenticated) {
-    return (
-      <View style={styles.container}>
-        <LinearGradient
-          colors={['#2A2F45', '#363D5A', '#323854', '#2A2F45']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFillObject}
-        />
-        <View style={styles.emptyContainer}>
-          <History size={64} color={Colors.textSecondary} />
-          <Text style={styles.emptyTitle}>Login Required</Text>
-          <Text style={styles.emptySubtitle}>
-            Sign in to view your translation history
-          </Text>
-          <GlassButton
-            title="Sign In"
-            variant="cyan"
-            onPress={() => router.push('/auth/login' as any)}
-            style={styles.loginButton}
-          />
-        </View>
-      </View>
-    );
-  }
+  
 
   return (
     <View style={styles.container}>
