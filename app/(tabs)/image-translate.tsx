@@ -124,7 +124,21 @@ export default function ImageTranslation() {
         messages: [
           {
             role: 'user',
-            content: `Translate this text to Zomi language. If it's already in Zomi, translate to English. Return ONLY the translation:\n\n${originalText}`,
+            content: `You are an expert Tedim Zomi linguist.
+            
+Task: Translate the following text to Zomi (Tedim dialect).
+- If the text is already in Zomi, translate it to English.
+- If the text is in another language, translate it to Zomi (Tedim).
+
+**CRITICAL TEDIM DIALECT RULES:**
+- Use ONLY Tedim dialect vocabulary (e.g., "Lungdam" for Thank you, "Pasian" for God).
+- DO NOT use vocabulary from Paite, Mizo, Hakha, or Falam.
+- Use proper Tedim orthography and grammar (SOV order, "kei/lo" for negation after verb).
+
+Return ONLY the translation, nothing else.
+
+Text to translate:
+${originalText}`,
           },
         ],
       });

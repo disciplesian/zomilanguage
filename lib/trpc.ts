@@ -145,10 +145,19 @@ const getAuthData = async (): Promise<AuthUserData | null> => {
 
 const getBaseUrl = (): string => {
   try {
-    const url = typeof process !== 'undefined' && process.env ? process.env.EXPO_PUBLIC_RORK_API_BASE_URL : undefined;
-    if (url && typeof url === 'string') {
+    const url = process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
+    if (url && typeof url === 'string' && url.length > 0) {
       return url.replace(/\/$/, '');
     }
+    
+    // Fallback for Web: Use relative path if no env var, assuming proxy or same-origin
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.location) {
+         return window.location.origin;
+      }
+      return ''; 
+    }
+    
     return 'https://api.rork.app';
   } catch {
     return 'https://api.rork.app';
@@ -191,9 +200,9 @@ const fetchWithRetry = async (
         signal: controller.signal,
       };
       
-      if (Platform.OS !== 'web') {
-        (fetchOptions as any).keepalive = true;
-      }
+      // Only add keepalive if explicitly supported and not on web (where it can cause issues with some proxies)
+      // and mostly relevant for background/page-unload requests which isn't the primary case here.
+      // Removed keepalive to prevent potential "Network request failed" on some Android/Web configs.
       
       const response = await fetch(url, fetchOptions);
       clearTimeout(timeoutId);

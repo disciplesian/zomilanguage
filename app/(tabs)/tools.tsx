@@ -154,7 +154,9 @@ export default function ToolsScreen() {
         messages: [
           {
             role: 'user',
-            content: `Compare these two translations and provide a brief analysis of differences in meaning, tone, and accuracy:
+            content: `Compare these two translations (in Zomi/Tedim and/or English) and provide a brief analysis of differences in meaning, tone, and accuracy.
+
+Context: The target language is Tedim Zomi (ISO 639-3: ctd).
 
 Text 1: "${comparisonText1}"
 
@@ -162,8 +164,8 @@ Text 2: "${comparisonText2}"
 
 Provide a concise comparison highlighting:
 1. Semantic differences
-2. Tone/register differences
-3. Which might be more accurate (if determinable)
+2. Tone/register differences (Formal/Informal Tedim)
+3. Which might be more accurate according to standard Tedim usage
 Keep it brief and practical.`,
           },
         ],
@@ -194,7 +196,11 @@ Keep it brief and practical.`,
         messages: [
           {
             role: 'user',
-            content: `Generate flashcards for learning Zomi-English vocabulary. For each word/phrase provided, create a flashcard with the Zomi word on front and English translation on back (or vice versa if English is provided).
+            content: `Generate flashcards for learning Zomi (Tedim dialect) - English vocabulary.
+            
+**CRITICAL:** Use ONLY Tedim dialect vocabulary. Do not use Paite/Mizo terms.
+
+For each word/phrase provided, create a flashcard with the Zomi (Tedim) word on front and English translation on back (or vice versa if English is provided).
 
 Input: "${flashcardInput}"
 
@@ -276,7 +282,15 @@ Generate 5-10 useful flashcards based on the input.`,
         messages: [
           {
             role: 'user',
-            content: `Translate the following text from ${sourceLanguage} to ${targetLanguage}. Preserve the original formatting, paragraphs, and structure as much as possible. Return ONLY the translation, nothing else.
+            content: `You are an expert Tedim Zomi linguist and translator.
+
+Task: Translate the following text from ${sourceLanguage} to ${targetLanguage}.
+
+**CRITICAL RULES:**
+- Use ONLY Tedim dialect (ISO 639-3: ctd) vocabulary and grammar.
+- DO NOT use words from Paite, Mizo, Hakha, or Falam.
+- Preserve the original formatting, paragraphs, and structure as much as possible.
+- Return ONLY the translation, nothing else.
 
 Text to translate:
 ${processedDocument.extractedText}`,

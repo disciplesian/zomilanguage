@@ -191,56 +191,42 @@ export default function TranslatorScreen() {
       
       let prompt = '';
       if (sourceLanguage === 'zomi' && targetLanguage === 'english') {
-        prompt = `You are an expert Tedim Zomi linguist. You specialize EXCLUSIVELY in the Tedim dialect. Always refer to the language as "Zomi" only.
+        prompt = `You are an expert Tedim Zomi linguist and translator. You specialize EXCLUSIVELY in the Tedim dialect (ISO 639-3: ctd).
 
-**CRITICAL:** Use ONLY Tedim dialect. DO NOT interpret as Paite, Mizo, Hakha, Falam, or any other Chin-Kuki-Mizo dialect.
+**CRITICAL DIALECT PURITY:**
+- You are translating FROM Tedim Zomi TO English.
+- Recognize ONLY Tedim dialect vocabulary and grammar.
+- DO NOT interpret words as Paite, Mizo, Hakha, Falam, or any other Chin-Kuki-Mizo dialect.
+- If a word appears similar to another dialect but has different Tedim meaning, use the Tedim interpretation.
 
-**TEDIM VOCABULARY:**
-Greetings: Na dam hiam?=How are you?, Ka dam hi=I am fine, Lungdam=Thank you, Chibai=Hello
-Religious: Pasian/Pathian=God, Zeisu=Jesus, Zeisu Khazih=Jesus Christ, Topa=Lord, Lhangphong=Holy Spirit, Biakinn=Church, Tawhna=Prayer, Upna=Faith, Mawh=Sin, Honkhiatna=Salvation
-Pronouns: Kei=I, Nang=You, Ama=He/She, Amau=They
-Possessives: Ka=my, Na=your, A=his/her, Kan=our
-Common: hoih=good, sia=bad, lian=big, te=small, dam=well/healthy, it=love, pai=go, hong=come
+**TEDIM VOCABULARY & GRAMMAR:**
+- Greetings: Na dam hiam?=How are you?, Ka dam hi=I am fine, Lungdam=Thank you, Chibai=Hello
+- Religious: Pasian/Pathian=God, Zeisu=Jesus, Zeisu Khazih=Jesus Christ, Topa=Lord, Lhangphong=Holy Spirit, Biakinn=Church, Tawhna=Prayer, Upna=Faith, Mawh=Sin, Honkhiatna=Salvation
+- Grammar: "hi"=is/am/are, "hiam?/maw?"=question, "kei/lo"=negation, "zo"=past, "ding"=future, "lai"=progressive
 
-**EXAMPLES:**
-"Pasian hoih hi" → "God is good"
-"Topa hoih hi" → "The Lord is good"
-"Ka lungdam hi" → "Thank you" / "I am grateful"
-"Sungpai" → "diarrhea"
-"Ka theih kei" → "I don't know"
-
-**GRAMMAR:** "hi"=is/am/are, "hiam?/maw?"=question, "kei/lo"=negation, "zo"=past, "ding"=future, "lai"=progressive
-
-Output ONLY the English translation, nothing else.
+**TASK:**
+Translate the following Zomi text to English. Output ONLY the English translation, nothing else.
 
 Zomi text: "${text.trim()}"
 
 English translation:`;
       } else {
-        prompt = `You are an expert Tedim Zomi linguist. You specialize EXCLUSIVELY in the Tedim dialect. Always refer to the language as "Zomi" only. Use SOV word order.
+        prompt = `You are an expert Tedim Zomi linguist and translator. You specialize EXCLUSIVELY in the Tedim dialect (ISO 639-3: ctd).
 
-**CRITICAL:** Use ONLY Tedim dialect vocabulary. DO NOT use words from Paite, Mizo, Hakha, Falam, Thado-Kuki, Vaiphei, Simte, Gangte, or any other Chin-Kuki-Mizo dialect.
+**CRITICAL DIALECT PURITY:**
+- You are translating FROM English TO Tedim Zomi.
+- Use EXCLUSIVELY Tedim dialect vocabulary and grammar.
+- DO NOT use words from Paite, Mizo, Hakha, Falam, Thado-Kuki, Vaiphei, Simte, Gangte, or any other Chin-Kuki-Mizo dialect.
+- Use orthography consistent with Tedim literature and Tedim Zomi Baptist Church publications.
 
-**TEDIM VOCABULARY:**
-Greetings: How are you?=Na dam hiam?, I am fine=Ka dam hi, Thank you=Lungdam/Ka lungdam hi, Hello=Chibai
-Religious: God=Pasian/Pathian, Jesus=Zeisu, Jesus Christ=Zeisu Khazih, Lord=Topa, Holy Spirit=Lhangphong, Church=Biakinn, Prayer=Tawhna, Faith=Upna, Sin=Mawh, Salvation=Honkhiatna
-Pronouns: I=Kei, You=Nang, He/She=Ama, They=Amau
-Possessives: my=Ka, your=Na, his/her=A, our=Kan
-Common: good=hoih, bad=sia, big=lian, small=te, well=dam, love=it, go=pai, come=hong
+**TEDIM VOCABULARY & GRAMMAR:**
+- Greetings: How are you?=Na dam hiam?, I am fine=Ka dam hi, Thank you=Lungdam/Ka lungdam hi, Hello=Chibai
+- Religious: God=Pasian/Pathian, Jesus=Zeisu, Jesus Christ=Zeisu Khazih, Lord=Topa, Holy Spirit=Lhangphong, Church=Biakinn, Prayer=Tawhna, Faith=Upna, Sin=Mawh, Salvation=Honkhiatna
+- Grammar: SOV word order. Adjectives after noun.
+- Negation: Add "kei" or "lo" AFTER the verb. (e.g., "I don't know" = "Ka theih kei")
 
-**EXAMPLES:**
-"God is good" → "Pasian hoih hi"
-"The Lord is good" → "Topa hoih hi"
-"Thank you" → "Lungdam" / "Ka lungdam hi"
-"diarrhea" → "Sungpai"
-"I don't know" → "Ka theih kei"
-"I love you" → "Ka it ci hi"
-"Good morning" → "Zingkal dam maw?"
-
-**GRAMMAR:** is/am/are="hi", question="hiam?/maw?", negation="kei/lo" after verb, past="zo", future="ding", progressive="lai"
-Adjectives after noun: "Good God" → "Pasian hoih"
-
-Output ONLY the Zomi translation, nothing else.
+**TASK:**
+Translate the following English text to Zomi. Output ONLY the Zomi translation, nothing else.
 
 English text: "${text.trim()}"
 

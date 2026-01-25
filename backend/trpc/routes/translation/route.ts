@@ -4,10 +4,11 @@ import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, dbProcedure, publicProcedure } from '../../create-context';
 
 const MODELS_TO_TRY = [
-  'gemini-2.5-flash-preview-05-20',
-  'gemini-2.5-pro-preview-05-06',
+  'gemini-3.0-pro',
+  'gemini-3.0-flash',
   'gemini-2.0-flash-exp',
   'gemini-2.0-flash',
+  'gemini-1.5-pro',
   'gemini-1.5-flash',
 ];
 
