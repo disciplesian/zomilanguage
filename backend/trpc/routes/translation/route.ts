@@ -5,8 +5,8 @@ import { createTRPCRouter, dbProcedure, publicProcedure } from '../../create-con
 
 const MODELS_TO_TRY = [
   'gemini-2.5-flash-preview-05-20',
-  'gemini-2.5-flash',
-  'gemini-2.0-flash-001',
+  'gemini-2.5-pro-preview-05-06',
+  'gemini-2.0-flash-exp',
   'gemini-2.0-flash',
   'gemini-1.5-flash',
 ];
@@ -566,10 +566,10 @@ Zomi translation:`;
             const result = await model.generateContent({
               contents: [{ role: 'user', parts: [{ text: prompt }] }],
               generationConfig: {
-                temperature: 0.2,
-                maxOutputTokens: 2048,
-                topK: 32,
-                topP: 0.9,
+                temperature: 0.1,
+                maxOutputTokens: 4096,
+                topK: 40,
+                topP: 0.95,
               },
             });
 
@@ -605,7 +605,7 @@ Zomi translation:`;
         const cleanedResult = translatedText.trim();
         const endTime = Date.now();
         const duration = ((endTime - startTime) / 1000).toFixed(2);
-        const quality = usedModel.includes('pro') ? 98 : 95;
+        const quality = usedModel.includes('pro') ? 99 : (usedModel.includes('2.5') ? 97 : 95);
 
         return {
           translatedText: cleanedResult,
