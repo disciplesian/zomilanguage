@@ -53,15 +53,8 @@ try {
 }
 
 function RootLayoutNav() {
-  let colors: typeof Colors = Colors;
-  try {
-    const theme = useTheme();
-    if (theme?.colors) {
-      colors = { ...Colors, ...theme.colors };
-    }
-  } catch {
-    // Use default colors
-  }
+  const theme = useTheme();
+  const colors = theme?.colors ? { ...Colors, ...theme.colors } : Colors;
 
   return (
     <>
@@ -162,20 +155,25 @@ export default function RootLayout() {
     }
   }, []);
 
-  const trpcClient = useMemo(() => {
-    return safeNativeCallSync(
-      () => {
-        try {
-          return getTrpcClient();
-        } catch (error) {
-          console.warn('RootLayout: tRPC client creation failed:', error);
-          setHasError(true);
-          return null;
+  const [trpcClient, setTrpcClient] = useState<ReturnType<typeof getTrpcClient> | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const initClient = () => {
+      try {
+        const client = getTrpcClient();
+        if (mounted) {
+          setTrpcClient(client);
         }
-      },
-      null,
-      'tRPC client creation'
-    );
+      } catch (error) {
+        console.warn('RootLayout: tRPC client creation failed:', error);
+        if (mounted) {
+          setHasError(true);
+        }
+      }
+    };
+    initClient();
+    return () => { mounted = false; };
   }, []);
 
   useEffect(() => {

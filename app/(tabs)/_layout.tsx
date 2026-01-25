@@ -7,15 +7,8 @@ import Colors from "@/constants/colors";
 import { useTheme } from "@/contexts/ThemeContext";
 
 export default function TabLayout() {
-  let colors: typeof Colors = Colors;
-  try {
-    const theme = useTheme();
-    if (theme?.colors) {
-      colors = { ...Colors, ...theme.colors };
-    }
-  } catch (error) {
-    console.warn('TabLayout: Theme context error, using fallback colors:', error);
-  }
+  const theme = useTheme();
+  const colors = theme?.colors ? { ...Colors, ...theme.colors } : Colors;
 
   return (
     <Tabs

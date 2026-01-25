@@ -146,16 +146,8 @@ export const [ThemeProvider, useTheme] = createContextHook(() => {
 }, defaultThemeValue);
 
 export const useThemeColors = (): ThemeColors => {
-  try {
-    const theme = useTheme();
-    if (theme?.colors) {
-      return theme.colors;
-    }
-    return safeColors;
-  } catch (error) {
-    console.warn('useThemeColors error:', error);
-    return safeColors;
-  }
+  const theme = useTheme();
+  return theme?.colors ?? safeColors;
 };
 
 export const getSafeColors = (): ThemeColors => safeColors;
