@@ -3,59 +3,40 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, publicProcedure } from '../../create-context';
 
-/**
- * PRODUCTION CONFIGURATION (2026)
- * Using Gemini 2.0 Flash - optimized for Zomi translation accuracy.
- */
-const LATEST_MODEL = 'gemini-2.0-flash';
+const LATEST_MODEL = 'gemini-2.0-flash'; // Optimized for speed and linguistic reasoning
 
-const ZOMI_SYSTEM_INSTRUCTION = `You are a Tedim Zomi language expert. Output ONLY the direct translation.
+const ZOMI_SYSTEM_INSTRUCTION = `### ROLE: UNIVERSAL TRANSLATION ENGINE (ZOMI SPECIALIST)
+You are a high-fidelity translation system. You specialize in the Tedim dialect of the Zomi language but are capable of translating to and from any language.
 
-**CRITICAL TEDIM ZOMI VOCABULARY:**
-- "Mai kum" = Next year (NOT age-related)
-- "Kum bangzah" = How old (age question)
-- "ciang" = yet/still/afterward
-- "bang" = what
-- "sep" = do/work
-- "sawm" = want/plan
-- "na" = you (subject marker)
-- "ka" = I (subject marker)
-- "hiam/maw" = question particle
-- "ding" = will/future marker
-- "lai" = progressive/still
-- "zo" = completed/past
-- "hi" = is/am/are (copula)
-- "kei/lo" = negation
+### CORE OPERATING PROTOCOLS:
+1. **Auto-Detection:** Automatically detect the source language. If the source is Zomi, use your deep knowledge of the Tedim dialect.
+2. **Target Grammar Enforcement:** - When the target is **Zomi**: Strictly follow Tedim syntax (SOV order). Ensure correct honorifics and terminal particles (hi, hiam, na, maw, e).
+   - When the target is **English/Other**: Follow the standard syntax of that language (e.g., SVO for English) while preserving the original intent.
+3. **Identity & Dialect:** Always use the Tedim dialect for Zomi. Publicly label the language only as "Zomi" or "Zomi Language." Do not use labels like "Tedim" or "Zolai" in the output.
+4. **Contextual Intelligence:** Analyze the cultural context (e.g., greetings like "Have you eaten?") to provide a natural equivalent rather than a robotic word-swap.
+5. **No Transliteration:** Use descriptive phrases for modern terms that lack a direct Zomi equivalent.
 
-**SENTENCE PATTERNS:**
-- "Mai kum ciang bang sep sawm na?" = What are you planning to do next year?
-- "Na kum bangzah hiam?" = How old are you?
-- "Bang sep sawm na?" = What do you want to do?
-- "Koi ah pai ding na?" = Where will you go?
-
-**GRAMMAR RULES:**
-- SOV word order (Subject-Object-Verb)
-- Question words: bang (what), koi (where), tua (who), bangzah (how many/old), banghang (why)
-- Time markers come before the verb phrase
-
-**OUTPUT:**
-Return ONLY the translation. No explanations. No alternatives. Just the direct translation.`;
+### OUTPUT PROTOCOL:
+- Return ONLY the translated text.
+- Preserve all original formatting (bolding, line breaks, punctuation).
+- NO conversational preamble or explanations.`;
 
 export default createTRPCRouter({
   translate: publicProcedure
     .input(z.object({
-      text: z.string().min(1).max(5000),
-      sourceLanguage: z.enum(['zomi', 'english']),
-      targetLanguage: z.enum(['zomi', 'english']),
+      text: z.string().min(1).max(10000),
+      // Optional hints, but model will rely on Auto-Detect
+      sourceLanguage: z.string().optional(), 
+      targetLanguage: z.string(),
     }))
     .mutation(async ({ input }) => {
-      const { text, sourceLanguage, targetLanguage } = input;
+      const { text, targetLanguage } = input;
       const API_KEY = process.env.GEMINI_API_KEY;
 
       if (!API_KEY) {
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
-          message: 'Gemini API key is missing.',
+          message: 'API key not configured.',
         });
       }
 
@@ -67,44 +48,34 @@ export default createTRPCRouter({
           systemInstruction: ZOMI_SYSTEM_INSTRUCTION,
         });
 
-        const prompt = sourceLanguage === 'zomi' 
-          ? `Translate this Tedim Zomi text to English. Direct translation only:\n"${text}"`
-          : `Translate this English text to Tedim Zomi. Direct translation only:\n"${text}"`;
+        // The prompt is structured to force the model into "Auto-Detect" mode
+        const prompt = `Translate the following text into ${targetLanguage}. 
+Ensure the grammar of ${targetLanguage} is perfect.
+
+Text: "${text}"`;
 
         const result = await model.generateContent({
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           generationConfig: {
-            temperature: 0.05,
-            maxOutputTokens: 4096,
-            topP: 0.7,
+            temperature: 0.1, // Maintains strict grammatical adherence
+            maxOutputTokens: 8192,
+            topP: 0.8,
           },
         });
 
         const translatedText = result.response.text().trim();
 
-        if (!translatedText) throw new Error('Model returned empty text.');
-
-        // Calculate quality score based on response characteristics
-        const inputLength = text.trim().length;
-        const outputLength = translatedText.length;
-        const hasReasonableLength = outputLength > 0 && outputLength < inputLength * 5;
-        const isNotErrorMessage = !translatedText.toLowerCase().includes('error') && 
-                                   !translatedText.toLowerCase().includes('cannot translate');
-        const quality = hasReasonableLength && isNotErrorMessage ? 95 : 75;
-
         return {
           translatedText,
+          detectedSource: "Auto", // Model handles detection internally
           model: LATEST_MODEL,
-          timestamp: new Date().toISOString(),
-          quality,
         };
 
       } catch (error) {
         console.error('Translation Engine Error:', error);
         throw new TRPCError({
           code: 'SERVICE_UNAVAILABLE',
-          message: 'Translation failed. Please check connectivity or API status.',
-          cause: error,
+          message: 'The translation engine is currently unavailable.',
         });
       }
     }),
