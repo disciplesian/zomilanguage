@@ -71,10 +71,19 @@ export default createTRPCRouter({
 
         if (!translatedText) throw new Error('Model returned empty text.');
 
+        // Calculate quality score based on response characteristics
+        const inputLength = text.trim().length;
+        const outputLength = translatedText.length;
+        const hasReasonableLength = outputLength > 0 && outputLength < inputLength * 5;
+        const isNotErrorMessage = !translatedText.toLowerCase().includes('error') && 
+                                   !translatedText.toLowerCase().includes('cannot translate');
+        const quality = hasReasonableLength && isNotErrorMessage ? 95 : 75;
+
         return {
           translatedText,
           model: LATEST_MODEL,
           timestamp: new Date().toISOString(),
+          quality,
         };
 
       } catch (error) {
