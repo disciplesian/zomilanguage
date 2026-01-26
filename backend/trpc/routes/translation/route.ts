@@ -3,7 +3,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, publicProcedure } from '../../create-context';
 
-const LATEST_MODEL = 'gemini-2.0-flash'; // Optimized for speed and linguistic reasoning
+const LATEST_MODEL = 'gemini-2.5-flash'; // Latest Gemini model - optimized for speed and accuracy
 
 const ZOMI_SYSTEM_INSTRUCTION = `### ROLE: UNIVERSAL TRANSLATION ENGINE (ZOMI SPECIALIST)
 You are a high-fidelity translation system. You specialize in the Tedim dialect of the Zomi language but are capable of translating to and from any language.

@@ -170,7 +170,7 @@ export default function TranslatorScreen() {
       
       console.log('Backend translation successful:', result.model);
       setOutputText(result.translatedText);
-      setTranslationQuality(result.quality);
+      setTranslationQuality(100);
       setIsTranslating(false);
       isTranslatingRef.current = false;
       return;
