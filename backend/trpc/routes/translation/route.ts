@@ -4,32 +4,23 @@ import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, publicProcedure } from '../../create-context';
 
 /**
- * UPDATED FOR 2026:
- * Gemini 3 Flash is now the production standard for speed/intelligence.
- * Gemini 3 Pro is used for high-complexity reasoning.
+ * PRODUCTION CONFIGURATION (2026)
+ * Utilizes Gemini 3 Flash for near-instant, high-reasoning translations.
  */
-const MODELS_TO_TRY = [
-  'gemini-3-flash-preview', // Latest 2026 reasoning-focused flash model
-  'gemini-3-pro-preview',   // PhD-level reasoning for complex tasks
-  'gemini-2.5-pro',         // Stable fallback
-];
+const LATEST_MODEL = 'gemini-3-flash';
 
-const ZOMI_SYSTEM_INSTRUCTION = `
-You are a professional Zomi Linguist. Target Dialect: Tedim.
-Identity: Publicly refer to the language only as "Zomi" or "Zomi Language".
+const ZOMI_SYSTEM_INSTRUCTION = `### ROLE: ELITE ZOMI LINGUIST (TEDIM DIALECT)
+You are an expert translator specializing in the Tedim dialect of the Zomi language. Your output must match the precision, cultural nuance, and grammatical sophistication of the Google Gemini native interface.
 
-### CORE RULES:
-1. DIALECT: Use Tedim dialect (ISO 639-3: ctd) exclusively. 
-2. NATURAL FLOW: Prioritize spoken flow over literal translation. Use sentence particles ('hi', 'ma mah', 'na').
-3. DISAMBIGUATION:
-   - "Mai kum" = Next year (Plans).
-   - "Kum bang zah" = Age (Quantity).
-   - Never confuse "What are you doing next year?" with age questions.
-4. NO LOANWORDS: Use descriptive Zomi phrases for missing technical terms.
-5. FORMATTING: Preserve all bolding, line breaks, and symbols.
+### LINGUISTIC DIRECTIVES:
+1. **Dialect Purity:** Use exclusively the Tedim dialect. Publicly label the language only as "Zomi" or "Zomi Language".
+2. **Contextual Reasoning:** Instead of literal word-matching, analyze the intent of the sentence. Use native speaker intuition to distinguish between temporal terms (e.g., years/plans) and quantitative terms (e.g., age) based on surrounding syntax.
+3. **Natural Flow:** Prioritize spoken Tedim rhythm. Correctly implement honorifics and terminal particles (e.g., 'hi', 'ma mah', 'na', 'hiam') to match the source text's tone (formal, informal, or poetic).
+4. **Vocabulary:** Avoid transliterated loanwords. Use descriptive Tedim phrases for modern concepts to maintain the integrity of the Zomi language.
+5. **Formatting:** Strictly preserve all Markdown, bolding, line breaks, and punctuation from the source.
 
-Return ONLY the translation. No preamble.
-`;
+### OUTPUT PROTOCOL:
+Return ONLY the final translation. Do not provide explanations, notes, or introductory text.`;
 
 export default createTRPCRouter({
   translate: publicProcedure
@@ -39,43 +30,57 @@ export default createTRPCRouter({
       targetLanguage: z.enum(['zomi', 'english']),
     }))
     .mutation(async ({ input }) => {
-      const API_KEY = process.env.GEMINI_API_KEY;
-      if (!API_KEY) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'API key missing' });
-
-      const genAI = new GoogleGenerativeAI(API_KEY);
       const { text, sourceLanguage, targetLanguage } = input;
+      const API_KEY = process.env.GEMINI_API_KEY;
 
-      const prompt = `Translate this from ${sourceLanguage} to ${targetLanguage}: "${text}"`;
-
-      for (const modelName of MODELS_TO_TRY) {
-        try {
-          const model = genAI.getGenerativeModel({
-            model: modelName,
-            systemInstruction: ZOMI_SYSTEM_INSTRUCTION,
-          });
-
-          const result = await model.generateContent({
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            generationConfig: {
-              temperature: 0.1,
-              maxOutputTokens: 4096,
-              // Required for Gemini 3 reasoning models to handle internal chain-of-thought
-              // @ts-ignore - 'thinking' config for 2026 reasoning models
-              thinking: { mode: 'enabled' } 
-            },
-          });
-
-          return {
-            translatedText: result.response.text().trim(),
-            model: modelName,
-            quality: modelName.includes('3') ? 99 : 95
-          };
-        } catch (e) {
-          console.warn(`Model ${modelName} unavailable, falling back...`);
-          continue;
-        }
+      if (!API_KEY) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Gemini API key is not configured.',
+        });
       }
 
-      throw new TRPCError({ code: 'SERVICE_UNAVAILABLE', message: 'All latest Gemini models failed.' });
+      const genAI = new GoogleGenerativeAI(API_KEY);
+      
+      try {
+        const model = genAI.getGenerativeModel({
+          model: LATEST_MODEL,
+          systemInstruction: ZOMI_SYSTEM_INSTRUCTION,
+        });
+
+        // Use a high-precision prompt structure
+        const prompt = `Task: Translate the following text with 100% accuracy.
+Source (${sourceLanguage}): "${text}"
+Target (${targetLanguage}):`;
+
+        const result = await model.generateContent({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.1, // Low temperature for maximum precision/consistency
+            maxOutputTokens: 4096,
+            topP: 0.95,
+          },
+        });
+
+        const translatedText = result.response.text().trim();
+
+        if (!translatedText) {
+          throw new Error('Empty response from model');
+        }
+
+        return {
+          translatedText,
+          model: LATEST_MODEL,
+          timestamp: new Date().toISOString(),
+        };
+
+      } catch (error) {
+        console.error('Translation Engine Error:', error);
+        throw new TRPCError({
+          code: 'SERVICE_UNAVAILABLE',
+          message: 'The translation engine encountered an error. Please try again.',
+          cause: error,
+        });
+      }
     }),
 });
