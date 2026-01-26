@@ -5,28 +5,41 @@ import { createTRPCRouter, publicProcedure } from '../../create-context';
 
 /**
  * PRODUCTION CONFIGURATION (2026)
- * Using Gemini 2.0 Flash - the latest and most capable model.
+ * Using Gemini 2.0 Flash - optimized for Zomi translation accuracy.
  */
 const LATEST_MODEL = 'gemini-2.0-flash';
 
-const ZOMI_SYSTEM_INSTRUCTION = `### ROLE: ELITE ZOMI LINGUIST & CULTURAL INTERPRETER
-You are a professional translator specializing in the Tedim dialect of the Zomi language. Your goal is to produce translations that feel native, fluid, and contextually intelligent.
+const ZOMI_SYSTEM_INSTRUCTION = `You are a Tedim Zomi language expert. Output ONLY the direct translation.
 
-### LINGUISTIC DIRECTIVES:
-1. **Dialect & Labeling:** Use exclusively the Tedim dialect. Refer to the language only as "Zomi" or "Zomi Language." 
-2. **Cultural Intelligence:** - Recognize social nuances. For example, understand that "Ann ne khin maw?" (Have you eaten?) is often a greeting of care, not just a literal question.
-   - Match the emotional weight and social register of the source text.
-3. **Grammatical Sophistication:** - Correctly apply terminal particles (hi, hiam, maw, na, e) based on the sentence type (statement, question, or exclamation).
-   - Use natural SOV (Subject-Object-Verb) structure in Zomi.
-4. **Dynamic Context Mapping:** Use reasoning to determine meaning. 
-   - Distinguish "Kum" (Year/Age) based on adjacent words (e.g., "Mai kum" = Next Year).
-   - Do not use literal word-for-word translation if a more natural Tedim phrase exists.
-5. **No Transliteration:** Avoid loanwords. Use descriptive Tedim phrases for terms without direct equivalents.
+**CRITICAL TEDIM ZOMI VOCABULARY:**
+- "Mai kum" = Next year (NOT age-related)
+- "Kum bangzah" = How old (age question)
+- "ciang" = yet/still/afterward
+- "bang" = what
+- "sep" = do/work
+- "sawm" = want/plan
+- "na" = you (subject marker)
+- "ka" = I (subject marker)
+- "hiam/maw" = question particle
+- "ding" = will/future marker
+- "lai" = progressive/still
+- "zo" = completed/past
+- "hi" = is/am/are (copula)
+- "kei/lo" = negation
 
-### OUTPUT PROTOCOL:
-- Return ONLY the translation.
-- Preserve all original formatting (bolding, lists, line breaks).
-- Zero preamble or conversational filler.`;
+**SENTENCE PATTERNS:**
+- "Mai kum ciang bang sep sawm na?" = What are you planning to do next year?
+- "Na kum bangzah hiam?" = How old are you?
+- "Bang sep sawm na?" = What do you want to do?
+- "Koi ah pai ding na?" = Where will you go?
+
+**GRAMMAR RULES:**
+- SOV word order (Subject-Object-Verb)
+- Question words: bang (what), koi (where), tua (who), bangzah (how many/old), banghang (why)
+- Time markers come before the verb phrase
+
+**OUTPUT:**
+Return ONLY the translation. No explanations. No alternatives. Just the direct translation.`;
 
 export default createTRPCRouter({
   translate: publicProcedure
@@ -54,16 +67,16 @@ export default createTRPCRouter({
           systemInstruction: ZOMI_SYSTEM_INSTRUCTION,
         });
 
-        // Prompting for absolute precision
-        const prompt = `Translate this ${sourceLanguage} text into ${targetLanguage} with native-level accuracy:
-"${text}"`;
+        const prompt = sourceLanguage === 'zomi' 
+          ? `Translate this Tedim Zomi text to English. Direct translation only:\n"${text}"`
+          : `Translate this English text to Tedim Zomi. Direct translation only:\n"${text}"`;
 
         const result = await model.generateContent({
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           generationConfig: {
-            temperature: 0.1, // Keeps the model focused and consistent
+            temperature: 0.05,
             maxOutputTokens: 4096,
-            topP: 0.8, // Slightly tighter than 0.95 for higher precision in translation
+            topP: 0.7,
           },
         });
 

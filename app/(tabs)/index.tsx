@@ -191,46 +191,48 @@ export default function TranslatorScreen() {
       
       let prompt = '';
       if (sourceLanguage === 'zomi' && targetLanguage === 'english') {
-        prompt = `You are an expert Tedim Zomi linguist and translator. You specialize EXCLUSIVELY in the Tedim dialect (ISO 639-3: ctd).
+        prompt = `Tedim Zomi to English. Direct translation only.
 
-**CRITICAL DIALECT PURITY:**
-- You are translating FROM Tedim Zomi TO English.
-- Recognize ONLY Tedim dialect vocabulary and grammar.
-- DO NOT interpret words as Paite, Mizo, Hakha, Falam, or any other Chin-Kuki-Mizo dialect.
-- If a word appears similar to another dialect but has different Tedim meaning, use the Tedim interpretation.
+KEY VOCABULARY:
+- "Mai kum" = Next year
+- "Kum bangzah" = How old
+- "ciang" = yet/still/afterward
+- "bang" = what
+- "sep" = do/work
+- "sawm" = want/plan
+- "na" = you
+- "hiam/maw" = question marker
+- "ding" = will/future
 
-**TEDIM VOCABULARY & GRAMMAR:**
-- Greetings: Na dam hiam?=How are you?, Ka dam hi=I am fine, Lungdam=Thank you, Chibai=Hello
-- Religious: Pasian/Pathian=God, Zeisu=Jesus, Zeisu Khazih=Jesus Christ, Topa=Lord, Lhangphong=Holy Spirit, Biakinn=Church, Tawhna=Prayer, Upna=Faith, Mawh=Sin, Honkhiatna=Salvation
-- Grammar: "hi"=is/am/are, "hiam?/maw?"=question, "kei/lo"=negation, "zo"=past, "ding"=future, "lai"=progressive
+EXAMPLES:
+- "Mai kum ciang bang sep sawm na?" = "What are you planning to do next year?"
+- "Na kum bangzah hiam?" = "How old are you?"
 
-**TASK:**
-Translate the following Zomi text to English. Output ONLY the English translation, nothing else.
+Translate: "${text.trim()}"
 
-Zomi text: "${text.trim()}"
-
-English translation:`;
+Output ONLY the English translation:`;
       } else {
-        prompt = `You are an expert Tedim Zomi linguist and translator. You specialize EXCLUSIVELY in the Tedim dialect (ISO 639-3: ctd).
+        prompt = `English to Tedim Zomi. Direct translation only.
 
-**CRITICAL DIALECT PURITY:**
-- You are translating FROM English TO Tedim Zomi.
-- Use EXCLUSIVELY Tedim dialect vocabulary and grammar.
-- DO NOT use words from Paite, Mizo, Hakha, Falam, Thado-Kuki, Vaiphei, Simte, Gangte, or any other Chin-Kuki-Mizo dialect.
-- Use orthography consistent with Tedim literature and Tedim Zomi Baptist Church publications.
+KEY VOCABULARY:
+- Next year = "Mai kum"
+- How old = "Kum bangzah"
+- What = "bang"
+- Do/work = "sep"
+- Want/plan = "sawm"
+- You = "na"
+- Question = "hiam/maw"
+- Will/future = "ding"
 
-**TEDIM VOCABULARY & GRAMMAR:**
-- Greetings: How are you?=Na dam hiam?, I am fine=Ka dam hi, Thank you=Lungdam/Ka lungdam hi, Hello=Chibai
-- Religious: God=Pasian/Pathian, Jesus=Zeisu, Jesus Christ=Zeisu Khazih, Lord=Topa, Holy Spirit=Lhangphong, Church=Biakinn, Prayer=Tawhna, Faith=Upna, Sin=Mawh, Salvation=Honkhiatna
-- Grammar: SOV word order. Adjectives after noun.
-- Negation: Add "kei" or "lo" AFTER the verb. (e.g., "I don't know" = "Ka theih kei")
+GRAMMAR: SOV word order (Subject-Object-Verb)
 
-**TASK:**
-Translate the following English text to Zomi. Output ONLY the Zomi translation, nothing else.
+EXAMPLES:
+- "What are you planning to do next year?" = "Mai kum ciang bang sep sawm na?"
+- "How old are you?" = "Na kum bangzah hiam?"
 
-English text: "${text.trim()}"
+Translate: "${text.trim()}"
 
-Zomi translation:`;
+Output ONLY the Zomi translation:`;
       }
 
       const fallbackResult = await generateText({ messages: [{ role: 'user', content: prompt }] });
