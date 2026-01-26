@@ -5,9 +5,9 @@ import { createTRPCRouter, publicProcedure } from '../../create-context';
 
 /**
  * PRODUCTION CONFIGURATION (2026)
- * Gemini 3 Flash is optimized for high-reasoning translation tasks.
+ * Using Gemini 2.0 Flash - the latest and most capable model.
  */
-const LATEST_MODEL = 'gemini-3-flash';
+const LATEST_MODEL = 'gemini-2.0-flash';
 
 const ZOMI_SYSTEM_INSTRUCTION = `### ROLE: ELITE ZOMI LINGUIST & CULTURAL INTERPRETER
 You are a professional translator specializing in the Tedim dialect of the Zomi language. Your goal is to produce translations that feel native, fluid, and contextually intelligent.
