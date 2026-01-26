@@ -1,4 +1,4 @@
-import { Platform, Dimensions, AppState } from 'react-native';
+import { Platform, Dimensions, AppState, AppStateStatus } from 'react-native';
 
 /**
  * Detects if the app is running on Mac Catalyst
@@ -186,18 +186,128 @@ export const isAppActive = (): boolean => {
 };
 
 /**
+ * Checks if an error is a network/connectivity error
+ */
+export const isNetworkError = (error: any): boolean => {
+  try {
+    const message = error?.message || '';
+    const name = error?.name || '';
+    const errorString = `${message} ${name}`.toLowerCase();
+    
+    return (
+      errorString.includes('network') ||
+      errorString.includes('fetch') ||
+      errorString.includes('connection') ||
+      errorString.includes('timeout') ||
+      errorString.includes('econnrefused') ||
+      errorString.includes('enotfound') ||
+      errorString.includes('cors') ||
+      errorString.includes('offline') ||
+      errorString.includes('internet')
+    );
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Checks if an error is recoverable
+ */
+export const isRecoverableError = (error: any): boolean => {
+  try {
+    if (isNativeModuleError(error)) return true;
+    if (isNetworkError(error)) return true;
+    
+    const message = error?.message || '';
+    const errorString = message.toLowerCase();
+    
+    return (
+      errorString.includes('timeout') ||
+      errorString.includes('temporary') ||
+      errorString.includes('retry') ||
+      errorString.includes('rate limit') ||
+      errorString.includes('quota')
+    );
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Gets user-friendly error message
+ */
+export const getUserFriendlyMessage = (error: any): string => {
+  try {
+    if (isNetworkError(error)) {
+      return 'Connection issue. Please check your internet and try again.';
+    }
+    
+    if (isNativeModuleError(error)) {
+      return 'A feature is not available on this device. Please try again.';
+    }
+    
+    const message = error?.message || '';
+    const lowerMessage = message.toLowerCase();
+    
+    if (lowerMessage.includes('permission')) {
+      return 'Permission required. Please grant the necessary permissions.';
+    }
+    
+    if (lowerMessage.includes('timeout')) {
+      return 'Request timed out. Please try again.';
+    }
+    
+    if (lowerMessage.includes('quota') || lowerMessage.includes('limit')) {
+      return 'Service temporarily unavailable. Please try again later.';
+    }
+    
+    return 'Something went wrong. Please try again.';
+  } catch {
+    return 'An unexpected error occurred.';
+  }
+};
+
+let appStateSubscription: ReturnType<typeof AppState.addEventListener> | null = null;
+let currentAppState: AppStateStatus = 'active';
+
+/**
  * Global error handler for unhandled errors
  */
 export const setupGlobalErrorHandlers = () => {
   try {
+    // Track app state for better error handling
+    try {
+      if (!appStateSubscription) {
+        currentAppState = AppState.currentState || 'active';
+        appStateSubscription = AppState.addEventListener('change', (nextState) => {
+          currentAppState = nextState;
+        });
+      }
+    } catch {
+      currentAppState = 'active';
+    }
+
     // Handle unhandled promise rejections
     const originalUnhandledRejection = (global as any).onunhandledrejection;
     (global as any).onunhandledrejection = (event: any) => {
       try {
         const error = event?.reason || event;
         
+        // Suppress errors when app is in background
+        if (currentAppState !== 'active') {
+          console.log('Global: Suppressing error while app in background');
+          event?.preventDefault?.();
+          return;
+        }
+        
         if (isNativeModuleError(error)) {
           console.warn('Global: Suppressed native module error in promise rejection:', error?.message || error);
+          event?.preventDefault?.();
+          return;
+        }
+        
+        if (isNetworkError(error)) {
+          console.warn('Global: Network error (non-fatal):', error?.message || error);
           event?.preventDefault?.();
           return;
         }
@@ -216,8 +326,18 @@ export const setupGlobalErrorHandlers = () => {
     const originalError = (global as any).onerror;
     (global as any).onerror = (message: any, source?: string, lineno?: number, colno?: number, error?: any) => {
       try {
+        // Suppress errors when app is in background
+        if (currentAppState !== 'active') {
+          return true;
+        }
+        
         if (isNativeModuleError(error)) {
           console.warn('Global: Suppressed native module error:', message || error?.message);
+          return true;
+        }
+        
+        if (isNetworkError(error)) {
+          console.warn('Global: Network error (non-fatal):', message || error?.message);
           return true;
         }
         
@@ -240,6 +360,12 @@ export const setupGlobalErrorHandlers = () => {
         const originalGlobalHandler = ErrorUtils.getGlobalHandler();
         ErrorUtils.setGlobalHandler((error: Error, isFatal?: boolean) => {
           try {
+            // Don't crash for non-fatal recoverable errors
+            if (!isFatal && isRecoverableError(error)) {
+              console.warn('Global: Recoverable error suppressed:', error?.message);
+              return;
+            }
+            
             if (isNativeModuleError(error)) {
               console.warn('Global: Suppressed native module error in React Native:', error?.message);
               return;
@@ -259,8 +385,43 @@ export const setupGlobalErrorHandlers = () => {
       }
     }
 
+    // Web-specific error handling
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      try {
+        window.addEventListener('error', (event) => {
+          if (isNativeModuleError(event.error) || isNetworkError(event.error)) {
+            event.preventDefault();
+            return;
+          }
+        });
+        
+        window.addEventListener('unhandledrejection', (event) => {
+          if (isNativeModuleError(event.reason) || isNetworkError(event.reason)) {
+            event.preventDefault();
+            return;
+          }
+        });
+      } catch {
+        // Ignore web handler setup errors
+      }
+    }
+
     console.log('Global error handlers set up successfully for platform:', Platform.OS);
   } catch (setupError) {
     console.warn('Global: Failed to set up error handlers:', setupError);
+  }
+};
+
+/**
+ * Cleanup global error handlers
+ */
+export const cleanupGlobalErrorHandlers = () => {
+  try {
+    if (appStateSubscription) {
+      appStateSubscription.remove();
+      appStateSubscription = null;
+    }
+  } catch {
+    // Ignore cleanup errors
   }
 };

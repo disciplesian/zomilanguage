@@ -1,7 +1,6 @@
 import * as Clipboard from 'expo-clipboard';
 import * as Sharing from 'expo-sharing';
-import { File, Paths } from 'expo-file-system';
-import { Platform } from 'react-native';
+import { Platform, Alert } from 'react-native';
 
 export type ExportFormat = 'text' | 'json' | 'clipboard' | 'txt' | 'pdf' | 'png' | 'word';
 
@@ -21,32 +20,70 @@ export async function exportTranslation(
     const formattedText = formatTranslation(data, format);
 
     if (format === 'clipboard') {
-      await Clipboard.setStringAsync(formattedText);
-      return true;
+      try {
+        await Clipboard.setStringAsync(formattedText);
+        return true;
+      } catch (clipboardError) {
+        console.warn('Clipboard error, trying fallback:', clipboardError);
+        if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard) {
+          try {
+            await navigator.clipboard.writeText(formattedText);
+            return true;
+          } catch {
+            // Final fallback
+          }
+        }
+        Alert.alert('Export', 'Could not copy to clipboard. Please try again.');
+        return false;
+      }
     }
 
     if (Platform.OS === 'web') {
-      downloadOnWeb(formattedText, format);
+      return downloadOnWeb(formattedText, format);
+    }
+
+    // Native file sharing
+    try {
+      const { File, Paths } = await import('expo-file-system');
+      const extension = format === 'json' ? 'json' : 'txt';
+      const fileName = `translation_${Date.now()}.${extension}`;
+      const file = new File(Paths.cache, fileName);
+      file.create({ overwrite: true });
+      file.write(formattedText);
+
+      let canShare = false;
+      try {
+        canShare = await Sharing.isAvailableAsync();
+      } catch {
+        canShare = false;
+      }
+      
+      if (canShare) {
+        await Sharing.shareAsync(file.uri, {
+          mimeType: format === 'json' ? 'application/json' : 'text/plain',
+          dialogTitle: 'Export Translation',
+        });
+      } else {
+        // Fallback to clipboard if sharing not available
+        await Clipboard.setStringAsync(formattedText);
+        Alert.alert('Copied!', 'Translation copied to clipboard.');
+      }
+
       return true;
+    } catch (fileError) {
+      console.warn('File export error, falling back to clipboard:', fileError);
+      try {
+        await Clipboard.setStringAsync(formattedText);
+        Alert.alert('Copied!', 'Translation copied to clipboard.');
+        return true;
+      } catch {
+        Alert.alert('Export Error', 'Could not export translation. Please try again.');
+        return false;
+      }
     }
-
-    const extension = format === 'json' ? 'json' : 'txt';
-    const fileName = `translation_${Date.now()}.${extension}`;
-    const file = new File(Paths.cache, fileName);
-    file.create({ overwrite: true });
-    file.write(formattedText);
-
-    const canShare = await Sharing.isAvailableAsync();
-    if (canShare) {
-      await Sharing.shareAsync(file.uri, {
-        mimeType: format === 'json' ? 'application/json' : 'text/plain',
-        dialogTitle: 'Export Translation',
-      });
-    }
-
-    return true;
   } catch (error) {
     console.error('Export error:', error);
+    Alert.alert('Export Error', 'An unexpected error occurred. Please try again.');
     return false;
   }
 }
@@ -69,16 +106,52 @@ function formatTranslation(data: TranslationData, format: ExportFormat): string 
   return `${data.sourceLanguage.toUpperCase()}:\n${data.sourceText}\n\n${data.targetLanguage.toUpperCase()}:\n${data.translatedText}`;
 }
 
-function downloadOnWeb(content: string, format: ExportFormat): void {
-  const blob = new Blob([content], { 
-    type: format === 'json' ? 'application/json' : 'text/plain' 
-  });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `translation_${Date.now()}.${format === 'json' ? 'json' : 'txt'}`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+function downloadOnWeb(content: string, format: ExportFormat): boolean {
+  try {
+    if (typeof document === 'undefined' || typeof Blob === 'undefined') {
+      console.warn('Web download not available in this environment');
+      return false;
+    }
+
+    const mimeType = format === 'json' ? 'application/json' : 'text/plain';
+    const extension = format === 'json' ? 'json' : 'txt';
+    
+    const blob = new Blob([content], { type: mimeType });
+    
+    // Try using the modern download API first
+    if (typeof URL !== 'undefined' && URL.createObjectURL) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `translation_${Date.now()}.${extension}`;
+      a.style.display = 'none';
+      
+      document.body.appendChild(a);
+      a.click();
+      
+      // Cleanup
+      setTimeout(() => {
+        try {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        } catch {
+          // Ignore cleanup errors
+        }
+      }, 100);
+      
+      return true;
+    }
+    
+    // Fallback for older browsers
+    if (typeof window !== 'undefined' && (window as any).navigator?.msSaveOrOpenBlob) {
+      (window as any).navigator.msSaveOrOpenBlob(blob, `translation_${Date.now()}.${extension}`);
+      return true;
+    }
+    
+    console.warn('No download method available');
+    return false;
+  } catch (error) {
+    console.error('Web download error:', error);
+    return false;
+  }
 }

@@ -1,8 +1,8 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Platform, Dimensions, SafeAreaView } from 'react-native';
-import { AlertTriangle, RefreshCw } from 'lucide-react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Platform, Dimensions, SafeAreaView, AppState, AppStateStatus } from 'react-native';
+import { AlertTriangle, RefreshCw, WifiOff } from 'lucide-react-native';
 import Colors from '@/constants/colors';
-import { isNativeModuleError } from '@/lib/errorHandler';
+import { isNativeModuleError, isNetworkError, isRecoverableError, getUserFriendlyMessage } from '@/lib/errorHandler';
 
 const getIsTablet = () => {
   try {
@@ -41,6 +41,8 @@ class ErrorBoundary extends Component<Props, State> {
   private maxRetries = 5;
   private lastErrorTime = 0;
   private errorCooldown = 1000;
+  private appStateSubscription: ReturnType<typeof AppState.addEventListener> | null = null;
+  private mounted = false;
   
   constructor(props: Props) {
     super(props);
@@ -51,18 +53,62 @@ class ErrorBoundary extends Component<Props, State> {
     };
   }
 
+  componentDidMount() {
+    this.mounted = true;
+    try {
+      this.appStateSubscription = AppState.addEventListener('change', this.handleAppStateChange);
+    } catch {
+      // Ignore AppState errors
+    }
+  }
+
+  componentWillUnmount() {
+    this.mounted = false;
+    try {
+      if (this.appStateSubscription) {
+        this.appStateSubscription.remove();
+        this.appStateSubscription = null;
+      }
+    } catch {
+      // Ignore cleanup errors
+    }
+  }
+
+  handleAppStateChange = (nextState: AppStateStatus) => {
+    if (nextState === 'active' && this.state.hasError && this.mounted) {
+      const error = this.state.error;
+      if (error && (isNetworkError(error) || isRecoverableError(error))) {
+        console.log('ErrorBoundary: Auto-recovering on app resume');
+        this.handleRetry();
+      }
+    }
+  };
+
   static getDerivedStateFromError(error: Error): Partial<State> {
     if (isNativeModuleError(error)) {
       console.warn('ErrorBoundary: Native module error detected, attempting recovery');
       return { hasError: false, error: null, errorInfo: null };
     }
+    
+    if (isNetworkError(error)) {
+      console.warn('ErrorBoundary: Network error detected, showing recoverable UI');
+      return { hasError: true, error };
+    }
+    
+    if (isRecoverableError(error)) {
+      console.warn('ErrorBoundary: Recoverable error detected');
+      return { hasError: true, error };
+    }
+    
     return { hasError: true, error };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     if (isNativeModuleError(error)) {
       console.warn('ErrorBoundary: Native module error caught, suppressing:', error?.message);
-      this.setState({ hasError: false, error: null, errorInfo: null });
+      if (this.mounted) {
+        this.setState({ hasError: false, error: null, errorInfo: null });
+      }
       return;
     }
     
@@ -76,10 +122,15 @@ class ErrorBoundary extends Component<Props, State> {
     } catch {
       console.error('Device info: Unable to retrieve');
     }
-    this.setState({ errorInfo });
+    
+    if (this.mounted) {
+      this.setState({ errorInfo });
+    }
   }
 
   handleRetry = () => {
+    if (!this.mounted) return;
+    
     const now = Date.now();
     if (now - this.lastErrorTime < this.errorCooldown) {
       console.log('ErrorBoundary: Retry cooldown active');
@@ -111,19 +162,31 @@ class ErrorBoundary extends Component<Props, State> {
 
       const isTablet = getIsTablet();
       const isWeb = getIsWeb();
+      const isNetwork = this.state.error && isNetworkError(this.state.error);
+      const friendlyMessage = this.state.error ? getUserFriendlyMessage(this.state.error) : 'The app encountered an unexpected error. Please try again.';
 
       return (
         <SafeAreaView style={[styles.container, isTablet && styles.containerTablet, isWeb && styles.containerWeb]}>
           <View style={[styles.content, isTablet && styles.contentTablet]}>
-            <View style={styles.iconContainer}>
-              <AlertTriangle size={48} color={Colors.error} />
+            <View style={[styles.iconContainer, isNetwork && styles.iconContainerNetwork]}>
+              {isNetwork ? (
+                <WifiOff size={48} color={Colors.warning} />
+              ) : (
+                <AlertTriangle size={48} color={Colors.error} />
+              )}
             </View>
-            <Text style={[styles.title, isTablet && styles.titleTablet]}>Something went wrong</Text>
+            <Text style={[styles.title, isTablet && styles.titleTablet]}>
+              {isNetwork ? 'Connection Issue' : 'Something went wrong'}
+            </Text>
             <Text style={[styles.message, isTablet && styles.messageTablet]}>
-              The app encountered an unexpected error. Please try again.
+              {friendlyMessage}
             </Text>
             
-            <TouchableOpacity style={styles.retryButton} onPress={this.handleRetry}>
+            <TouchableOpacity 
+              style={[styles.retryButton, isNetwork && styles.retryButtonNetwork]} 
+              onPress={this.handleRetry}
+              activeOpacity={0.7}
+            >
               <RefreshCw size={20} color="#FFFFFF" />
               <Text style={styles.retryButtonText}>Try Again</Text>
             </TouchableOpacity>
@@ -183,6 +246,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 24,
   },
+  iconContainerNetwork: {
+    backgroundColor: 'rgba(255, 200, 0, 0.1)',
+  },
   title: {
     fontSize: 24,
     fontWeight: '700' as const,
@@ -212,6 +278,9 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 12,
     gap: 8,
+  },
+  retryButtonNetwork: {
+    backgroundColor: Colors.warning,
   },
   retryButtonText: {
     color: '#FFFFFF',
