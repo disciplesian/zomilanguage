@@ -5,22 +5,28 @@ import { createTRPCRouter, publicProcedure } from '../../create-context';
 
 /**
  * PRODUCTION CONFIGURATION (2026)
- * Utilizes Gemini 3 Flash for near-instant, high-reasoning translations.
+ * Gemini 3 Flash is optimized for high-reasoning translation tasks.
  */
 const LATEST_MODEL = 'gemini-3-flash';
 
-const ZOMI_SYSTEM_INSTRUCTION = `### ROLE: ELITE ZOMI LINGUIST (TEDIM DIALECT)
-You are an expert translator specializing in the Tedim dialect of the Zomi language. Your output must match the precision, cultural nuance, and grammatical sophistication of the Google Gemini native interface.
+const ZOMI_SYSTEM_INSTRUCTION = `### ROLE: ELITE ZOMI LINGUIST & CULTURAL INTERPRETER
+You are a professional translator specializing in the Tedim dialect of the Zomi language. Your goal is to produce translations that feel native, fluid, and contextually intelligent.
 
 ### LINGUISTIC DIRECTIVES:
-1. **Dialect Purity:** Use exclusively the Tedim dialect. Publicly label the language only as "Zomi" or "Zomi Language".
-2. **Contextual Reasoning:** Instead of literal word-matching, analyze the intent of the sentence. Use native speaker intuition to distinguish between temporal terms (e.g., years/plans) and quantitative terms (e.g., age) based on surrounding syntax.
-3. **Natural Flow:** Prioritize spoken Tedim rhythm. Correctly implement honorifics and terminal particles (e.g., 'hi', 'ma mah', 'na', 'hiam') to match the source text's tone (formal, informal, or poetic).
-4. **Vocabulary:** Avoid transliterated loanwords. Use descriptive Tedim phrases for modern concepts to maintain the integrity of the Zomi language.
-5. **Formatting:** Strictly preserve all Markdown, bolding, line breaks, and punctuation from the source.
+1. **Dialect & Labeling:** Use exclusively the Tedim dialect. Refer to the language only as "Zomi" or "Zomi Language." 
+2. **Cultural Intelligence:** - Recognize social nuances. For example, understand that "Ann ne khin maw?" (Have you eaten?) is often a greeting of care, not just a literal question.
+   - Match the emotional weight and social register of the source text.
+3. **Grammatical Sophistication:** - Correctly apply terminal particles (hi, hiam, maw, na, e) based on the sentence type (statement, question, or exclamation).
+   - Use natural SOV (Subject-Object-Verb) structure in Zomi.
+4. **Dynamic Context Mapping:** Use reasoning to determine meaning. 
+   - Distinguish "Kum" (Year/Age) based on adjacent words (e.g., "Mai kum" = Next Year).
+   - Do not use literal word-for-word translation if a more natural Tedim phrase exists.
+5. **No Transliteration:** Avoid loanwords. Use descriptive Tedim phrases for terms without direct equivalents.
 
 ### OUTPUT PROTOCOL:
-Return ONLY the final translation. Do not provide explanations, notes, or introductory text.`;
+- Return ONLY the translation.
+- Preserve all original formatting (bolding, lists, line breaks).
+- Zero preamble or conversational filler.`;
 
 export default createTRPCRouter({
   translate: publicProcedure
@@ -36,7 +42,7 @@ export default createTRPCRouter({
       if (!API_KEY) {
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
-          message: 'Gemini API key is not configured.',
+          message: 'Gemini API key is missing.',
         });
       }
 
@@ -48,25 +54,22 @@ export default createTRPCRouter({
           systemInstruction: ZOMI_SYSTEM_INSTRUCTION,
         });
 
-        // Use a high-precision prompt structure
-        const prompt = `Task: Translate the following text with 100% accuracy.
-Source (${sourceLanguage}): "${text}"
-Target (${targetLanguage}):`;
+        // Prompting for absolute precision
+        const prompt = `Translate this ${sourceLanguage} text into ${targetLanguage} with native-level accuracy:
+"${text}"`;
 
         const result = await model.generateContent({
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           generationConfig: {
-            temperature: 0.1, // Low temperature for maximum precision/consistency
+            temperature: 0.1, // Keeps the model focused and consistent
             maxOutputTokens: 4096,
-            topP: 0.95,
+            topP: 0.8, // Slightly tighter than 0.95 for higher precision in translation
           },
         });
 
         const translatedText = result.response.text().trim();
 
-        if (!translatedText) {
-          throw new Error('Empty response from model');
-        }
+        if (!translatedText) throw new Error('Model returned empty text.');
 
         return {
           translatedText,
@@ -78,7 +81,7 @@ Target (${targetLanguage}):`;
         console.error('Translation Engine Error:', error);
         throw new TRPCError({
           code: 'SERVICE_UNAVAILABLE',
-          message: 'The translation engine encountered an error. Please try again.',
+          message: 'Translation failed. Please check connectivity or API status.',
           cause: error,
         });
       }
