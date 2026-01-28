@@ -123,7 +123,8 @@ export default function ImageTranslation() {
       
       if (!imageData) {
         setProcessingStep('Converting image...');
-        imageData = await getImageBase64(uri) ?? undefined;
+        const base64Result = await getImageBase64(uri);
+        imageData = base64Result !== null ? base64Result : undefined;
       }
 
       if (!imageData) {
