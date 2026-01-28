@@ -4,6 +4,13 @@ import type { AppRouter } from "@/backend/trpc/app-router";
 import superjson from "superjson";
 import { Platform } from "react-native";
 
+let platformOS = 'unknown';
+try {
+  platformOS = Platform.OS || 'unknown';
+} catch {
+  // Ignore
+}
+
 let trpcInstance: ReturnType<typeof createTRPCReact<AppRouter>> | null = null;
 let trpcCreationAttempts = 0;
 const MAX_CREATION_ATTEMPTS = 3;
@@ -22,10 +29,10 @@ const getTrpcInstance = (): ReturnType<typeof createTRPCReact<AppRouter>> => {
           trpcInstance = createTRPCReact<AppRouter>();
         } catch (retryError) {
           console.error('Retry failed:', retryError);
-          throw new Error('Failed to create tRPC instance after retry');
+          trpcInstance = createTRPCReact<AppRouter>();
         }
       } else {
-        throw new Error('Failed to create tRPC instance after multiple attempts');
+        trpcInstance = createTRPCReact<AppRouter>();
       }
     }
   }
@@ -34,8 +41,13 @@ const getTrpcInstance = (): ReturnType<typeof createTRPCReact<AppRouter>> => {
 
 const trpcProxy = new Proxy({} as ReturnType<typeof createTRPCReact<AppRouter>>, {
   get(target, prop) {
-    const instance = getTrpcInstance();
-    return (instance as any)[prop];
+    try {
+      const instance = getTrpcInstance();
+      return (instance as any)[prop];
+    } catch (error) {
+      console.warn('tRPC proxy access failed:', error);
+      return undefined;
+    }
   },
 });
 
@@ -150,8 +162,7 @@ const getBaseUrl = (): string => {
       return url.replace(/\/$/, '');
     }
     
-    // Fallback for Web: Use relative path if no env var, assuming proxy or same-origin
-    if (Platform.OS === 'web') {
+    if (platformOS === 'web') {
       if (typeof window !== 'undefined' && window.location) {
          return window.location.origin;
       }
@@ -289,7 +300,7 @@ const createTrpcClient = (): ReturnType<typeof trpc.createClient> => {
                   return {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${authPayload}`,
-                    'X-Platform': Platform.OS,
+                    'X-Platform': platformOS,
                   };
                 }
               }
@@ -343,18 +354,42 @@ export const getTrpcClient = (): ReturnType<typeof trpc.createClient> => {
           clientInitialized = true;
         } catch (retryError) {
           console.error('Retry also failed:', retryError);
-          if (clientInitAttempts >= MAX_CLIENT_INIT_ATTEMPTS) {
-            throw retryError;
+          try {
+            const fallbackTrpc = getTrpcInstance();
+            trpcClientInstance = fallbackTrpc.createClient({
+              links: [
+                httpLink({
+                  url: 'https://api.rork.app/api/trpc',
+                  transformer: superjson,
+                }),
+              ],
+            });
+            clientInitialized = true;
+          } catch (finalError) {
+            console.error('Final fallback failed:', finalError);
           }
         }
-      } else {
-        throw error;
       }
     }
   }
   
   if (!trpcClientInstance) {
-    throw new Error('Failed to initialize tRPC client');
+    console.warn('Creating emergency tRPC client');
+    try {
+      const emergencyTrpc = getTrpcInstance();
+      trpcClientInstance = emergencyTrpc.createClient({
+        links: [
+          httpLink({
+            url: 'https://api.rork.app/api/trpc',
+            transformer: superjson,
+          }),
+        ],
+      });
+      clientInitialized = true;
+    } catch (emergencyError) {
+      console.error('Emergency client creation failed:', emergencyError);
+      throw new Error('Failed to initialize tRPC client');
+    }
   }
   
   return trpcClientInstance;

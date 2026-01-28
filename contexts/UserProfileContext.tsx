@@ -9,6 +9,7 @@ const LOCAL_USER_KEY = '@zomi_local_user';
 
 const MAX_STORAGE_SIZE = 200000;
 const MAX_ACTIVITIES = 50;
+const STORAGE_TIMEOUT = 3000;
 
 function safeJSONParse<T>(data: string | null | undefined, fallback: T): T {
   if (!data || typeof data !== 'string' || data.length === 0) {
@@ -29,14 +30,31 @@ function safeJSONParse<T>(data: string | null | undefined, fallback: T): T {
 }
 
 let asyncStorageModule: typeof import('@react-native-async-storage/async-storage').default | null = null;
+let asyncStorageLoadAttempts = 0;
+const MAX_STORAGE_LOAD_ATTEMPTS = 2;
 
 const getAsyncStorage = async () => {
   if (asyncStorageModule) return asyncStorageModule;
+  if (asyncStorageLoadAttempts >= MAX_STORAGE_LOAD_ATTEMPTS) return null;
+  
+  asyncStorageLoadAttempts++;
   try {
-    const module = await import('@react-native-async-storage/async-storage');
-    asyncStorageModule = module.default;
+    const timeoutPromise = new Promise<null>((resolve) => {
+      setTimeout(() => resolve(null), STORAGE_TIMEOUT);
+    });
+    
+    const loadPromise = (async () => {
+      const module = await import('@react-native-async-storage/async-storage');
+      return module.default;
+    })();
+    
+    const result = await Promise.race([loadPromise, timeoutPromise]);
+    if (result) {
+      asyncStorageModule = result;
+    }
     return asyncStorageModule;
-  } catch {
+  } catch (error) {
+    console.warn('UserProfileContext: Failed to load AsyncStorage:', error);
     return null;
   }
 };
@@ -45,8 +63,15 @@ const safeStorageGet = async (key: string): Promise<string | null> => {
   try {
     const AsyncStorage = await getAsyncStorage();
     if (!AsyncStorage) return null;
-    return await AsyncStorage.getItem(key);
-  } catch {
+    
+    const timeoutPromise = new Promise<null>((resolve) => {
+      setTimeout(() => resolve(null), STORAGE_TIMEOUT);
+    });
+    
+    const getPromise = AsyncStorage.getItem(key);
+    return await Promise.race([getPromise, timeoutPromise]);
+  } catch (error) {
+    console.warn('UserProfileContext: Storage get failed for', key, error);
     return null;
   }
 };
@@ -55,9 +80,19 @@ const safeStorageSet = async (key: string, value: string): Promise<boolean> => {
   try {
     const AsyncStorage = await getAsyncStorage();
     if (!AsyncStorage) return false;
-    await AsyncStorage.setItem(key, value);
-    return true;
-  } catch {
+    
+    const timeoutPromise = new Promise<boolean>((resolve) => {
+      setTimeout(() => resolve(false), STORAGE_TIMEOUT);
+    });
+    
+    const setPromise = (async () => {
+      await AsyncStorage.setItem(key, value);
+      return true;
+    })();
+    
+    return await Promise.race([setPromise, timeoutPromise]);
+  } catch (error) {
+    console.warn('UserProfileContext: Storage set failed for', key, error);
     return false;
   }
 };
@@ -228,58 +263,71 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
   const [leaderboard, setLeaderboard] = useState<{ userId: string; name: string; avatar?: string; points: number; level: number; }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const initRef = useRef(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   useEffect(() => {
     if (initRef.current) return;
     initRef.current = true;
     
-    let mounted = true;
-    
     const loadData = async () => {
       try {
-        const storedUserData = await safeStorageGet(LOCAL_USER_KEY);
         let currentUser: LocalUser;
         
-        if (storedUserData) {
-          currentUser = safeJSONParse<LocalUser>(storedUserData, getDefaultLocalUser());
-        } else {
+        try {
+          const storedUserData = await safeStorageGet(LOCAL_USER_KEY);
+          if (storedUserData) {
+            currentUser = safeJSONParse<LocalUser>(storedUserData, getDefaultLocalUser());
+          } else {
+            currentUser = getDefaultLocalUser();
+            safeStorageSet(LOCAL_USER_KEY, JSON.stringify(currentUser)).catch(() => {});
+          }
+        } catch {
           currentUser = getDefaultLocalUser();
-          await safeStorageSet(LOCAL_USER_KEY, JSON.stringify(currentUser));
         }
         
-        if (!mounted) return;
+        if (!mountedRef.current) return;
         setLocalUser(currentUser);
 
-        const statsData = await safeStorageGet(`${USER_STATS_KEY}_${currentUser.id}`);
-        
-        if (!mounted) return;
+        try {
+          const statsData = await safeStorageGet(`${USER_STATS_KEY}_${currentUser.id}`);
+          
+          if (!mountedRef.current) return;
 
-        if (statsData) {
-          const parsed = safeJSONParse<Partial<UserStats>>(statsData, {});
-          setStats({ ...getDefaultStats(), ...parsed });
-        } else {
-          const newStats = { ...getDefaultStats(), joinedAt: new Date().toISOString() };
-          setStats(newStats);
-          safeStorageSet(`${USER_STATS_KEY}_${currentUser.id}`, JSON.stringify(newStats)).catch(() => {});
+          if (statsData) {
+            const parsed = safeJSONParse<Partial<UserStats>>(statsData, {});
+            setStats({ ...getDefaultStats(), ...parsed });
+          } else {
+            const newStats = { ...getDefaultStats(), joinedAt: new Date().toISOString() };
+            setStats(newStats);
+            safeStorageSet(`${USER_STATS_KEY}_${currentUser.id}`, JSON.stringify(newStats)).catch(() => {});
+          }
+        } catch {
+          if (mountedRef.current) {
+            setStats(getDefaultStats());
+          }
         }
 
-        setProfile(getDefaultProfile(currentUser));
-        
-        if (mounted) {
+        if (mountedRef.current) {
+          setProfile(getDefaultProfile(currentUser));
           setIsLoading(false);
         }
 
         setTimeout(async () => {
-          if (!mounted) return;
+          if (!mountedRef.current) return;
           
           try {
             const [activitiesData, friendsData, leaderboardData] = await Promise.all([
-              safeStorageGet(`${USER_ACTIVITIES_KEY}_${currentUser.id}`),
-              safeStorageGet(`${USER_FRIENDS_KEY}_${currentUser.id}`),
-              safeStorageGet(LEADERBOARD_KEY),
+              safeStorageGet(`${USER_ACTIVITIES_KEY}_${currentUser.id}`).catch(() => null),
+              safeStorageGet(`${USER_FRIENDS_KEY}_${currentUser.id}`).catch(() => null),
+              safeStorageGet(LEADERBOARD_KEY).catch(() => null),
             ]);
 
-            if (!mounted) return;
+            if (!mountedRef.current) return;
 
             if (activitiesData) {
               const parsed = safeJSONParse<UserActivity[]>(activitiesData, []);
@@ -298,21 +346,21 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
               const parsed = safeJSONParse<typeof leaderboard>(leaderboardData, []);
               setLeaderboard(Array.isArray(parsed) ? parsed : []);
             }
-          } catch {
-            console.log('Failed to load secondary data');
+          } catch (error) {
+            console.warn('UserProfileContext: Failed to load secondary data:', error);
           }
         }, 500);
-      } catch {
-        if (mounted) {
+      } catch (error) {
+        console.warn('UserProfileContext: Failed to load data:', error);
+        if (mountedRef.current) {
           setIsLoading(false);
         }
       }
     };
 
-    const timer = setTimeout(loadData, 100);
+    const timer = setTimeout(loadData, 150);
     
     return () => {
-      mounted = false;
       clearTimeout(timer);
     };
   }, []);

@@ -1,6 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
-import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useState, useRef, useMemo } from "react";
 import { StatusBar } from "expo-status-bar";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
@@ -9,48 +8,69 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
 import { UserProfileProvider } from "@/contexts/UserProfileContext";
 import { trpc, getTrpcClient } from "@/lib/trpc";
-import { setupGlobalErrorHandlers, safeNativeCall } from "@/lib/errorHandler";
 
-// Setup global error handlers as early as possible
-if (typeof global !== 'undefined') {
+let SplashScreen: typeof import('expo-splash-screen') | null = null;
+let setupGlobalErrorHandlers: (() => void) | null = null;
+let splashHidden = false;
+let errorHandlersInitialized = false;
+
+const initializeModules = async () => {
   try {
-    setupGlobalErrorHandlers();
+    if (!SplashScreen) {
+      SplashScreen = await import('expo-splash-screen');
+    }
+  } catch (e) {
+    console.warn('SplashScreen module not available:', e);
+  }
+  
+  try {
+    if (!setupGlobalErrorHandlers) {
+      const errorHandler = await import('@/lib/errorHandler');
+      setupGlobalErrorHandlers = errorHandler.setupGlobalErrorHandlers;
+    }
+  } catch (e) {
+    console.warn('Error handler module not available:', e);
+  }
+};
+
+const initErrorHandlers = () => {
+  if (errorHandlersInitialized) return;
+  errorHandlersInitialized = true;
+  
+  try {
+    if (setupGlobalErrorHandlers) {
+      setupGlobalErrorHandlers();
+    }
   } catch (error) {
     console.warn('Failed to setup global error handlers:', error);
   }
-}
-
-let splashHidden = false;
+};
 
 const hideSplashSafe = async () => {
   if (splashHidden) return;
   splashHidden = true;
+  
   try {
     if (SplashScreen && typeof SplashScreen.hideAsync === 'function') {
-      await safeNativeCall(
-        async () => SplashScreen.hideAsync(),
-        undefined,
-        'SplashScreen.hideAsync'
-      );
+      await SplashScreen.hideAsync();
     }
   } catch (error) {
-    // Ignore errors - splash screen hiding is not critical
     console.warn('Failed to hide splash screen:', error);
   }
 };
 
-// Safely prevent auto-hide splash screen
-try {
-  if (SplashScreen && typeof SplashScreen.preventAutoHideAsync === 'function') {
-    safeNativeCall(
-      async () => SplashScreen.preventAutoHideAsync(),
-      undefined,
-      'SplashScreen.preventAutoHideAsync'
-    ).catch(() => {});
+const preventSplashAutoHide = async () => {
+  try {
+    await initializeModules();
+    if (SplashScreen && typeof SplashScreen.preventAutoHideAsync === 'function') {
+      await SplashScreen.preventAutoHideAsync();
+    }
+  } catch {
+    // Ignore - not critical
   }
-} catch {
-  // Ignore - not critical
-}
+};
+
+preventSplashAutoHide().catch(() => {})
 
 function RootLayoutNav() {
   const theme = useTheme();
@@ -176,6 +196,8 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (!mountedRef.current) return;
+    
+    initErrorHandlers();
     
     const timer = setTimeout(() => {
       if (mountedRef.current) {

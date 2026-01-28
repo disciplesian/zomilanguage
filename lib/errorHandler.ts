@@ -1,5 +1,13 @@
 import { Platform, Dimensions, AppState, AppStateStatus } from 'react-native';
 
+let platformOS: string = 'unknown';
+
+try {
+  platformOS = Platform.OS || 'unknown';
+} catch {
+  // Ignore platform access errors
+}
+
 /**
  * Detects if the app is running on Mac Catalyst
  */
@@ -354,13 +362,15 @@ export const setupGlobalErrorHandlers = () => {
       }
     };
 
-    // React Native specific error handler
-    if (typeof ErrorUtils !== 'undefined') {
-      try {
-        const originalGlobalHandler = ErrorUtils.getGlobalHandler();
-        ErrorUtils.setGlobalHandler((error: Error, isFatal?: boolean) => {
+    // React Native specific error handler - safely check for ErrorUtils
+    try {
+      const errorUtils = typeof ErrorUtils !== 'undefined' ? ErrorUtils : 
+                         (typeof global !== 'undefined' && (global as any).ErrorUtils) ? (global as any).ErrorUtils : null;
+      
+      if (errorUtils && typeof errorUtils.getGlobalHandler === 'function' && typeof errorUtils.setGlobalHandler === 'function') {
+        const originalGlobalHandler = errorUtils.getGlobalHandler();
+        errorUtils.setGlobalHandler((error: Error, isFatal?: boolean) => {
           try {
-            // Don't crash for non-fatal recoverable errors
             if (!isFatal && isRecoverableError(error)) {
               console.warn('Global: Recoverable error suppressed:', error?.message);
               return;
@@ -380,13 +390,13 @@ export const setupGlobalErrorHandlers = () => {
             console.error('Global: Error in React Native error handler:', handlerError);
           }
         });
-      } catch (euError) {
-        console.warn('Global: Failed to set up ErrorUtils handler:', euError);
       }
+    } catch (euError) {
+      console.warn('Global: Failed to set up ErrorUtils handler:', euError);
     }
 
     // Web-specific error handling
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    if (platformOS === 'web' && typeof window !== 'undefined') {
       try {
         window.addEventListener('error', (event) => {
           if (isNativeModuleError(event.error) || isNetworkError(event.error)) {
@@ -406,7 +416,7 @@ export const setupGlobalErrorHandlers = () => {
       }
     }
 
-    console.log('Global error handlers set up successfully for platform:', Platform.OS);
+    console.log('Global error handlers set up successfully for platform:', platformOS);
   } catch (setupError) {
     console.warn('Global: Failed to set up error handlers:', setupError);
   }
