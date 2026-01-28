@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { Stack } from 'expo-router';
-import { Camera, ImageIcon, Sparkles, Languages, Copy } from 'lucide-react-native';
+import { Camera, ImageIcon, Sparkles, Languages, Copy, RefreshCw } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
@@ -28,9 +28,12 @@ export default function ImageTranslation() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [extractedText, setExtractedText] = useState<ExtractedText | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingStep, setProcessingStep] = useState<string>('');
+  const [error, setError] = useState<string | null>(null);
 
-  const pickImage = async (useCamera: boolean) => {
+  const pickImage = useCallback(async (useCamera: boolean) => {
     try {
+      setError(null);
       let result: ImagePicker.ImagePickerResult;
 
       if (useCamera) {
@@ -57,115 +60,192 @@ export default function ImageTranslation() {
         });
       }
 
-      if (!result.canceled && result.assets[0]) {
+      if (!result.canceled && result.assets && result.assets[0]) {
         const asset = result.assets[0];
         setSelectedImage(asset.uri);
         setExtractedText(null);
-        await processImage(asset.uri, asset.base64 ?? undefined);
+        setError(null);
+        await processImage(asset.uri, asset.base64 || undefined);
       }
-    } catch (error) {
-      console.error('Error picking image:', error);
+    } catch (err) {
+      console.error('Error picking image:', err);
+      setError('Failed to pick image. Please try again.');
       Alert.alert('Error', 'Failed to pick image. Please try again.');
     }
-  };
+  }, []);
 
-  const processImage = async (uri: string, base64?: string) => {
-    setIsProcessing(true);
+  const getImageBase64 = useCallback(async (uri: string): Promise<string | null> => {
     try {
-      let imageData = base64;
-      
-      if (!imageData && uri.startsWith('file://')) {
+      if (Platform.OS === 'web') {
         const response = await fetch(uri);
         const blob = await response.blob();
-        const reader = new FileReader();
-        const base64Result = await new Promise<string>((resolve) => {
+        return new Promise((resolve) => {
+          const reader = new FileReader();
           reader.onloadend = () => {
             const result = reader.result as string;
-            resolve(result.split(',')[1]);
+            const base64 = result.split(',')[1];
+            resolve(base64);
           };
+          reader.onerror = () => resolve(null);
           reader.readAsDataURL(blob);
         });
-        imageData = base64Result;
+      }
+      
+      if (uri.startsWith('file://') || uri.startsWith('content://')) {
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const result = reader.result as string;
+            const base64 = result.split(',')[1];
+            resolve(base64);
+          };
+          reader.onerror = () => resolve(null);
+          reader.readAsDataURL(blob);
+        });
+      }
+      
+      return null;
+    } catch (err) {
+      console.error('Error getting image base64:', err);
+      return null;
+    }
+  }, []);
+
+  const processImage = useCallback(async (uri: string, base64Data?: string) => {
+    setIsProcessing(true);
+    setError(null);
+    setProcessingStep('Preparing image...');
+    
+    try {
+      let imageData = base64Data;
+      
+      if (!imageData) {
+        setProcessingStep('Converting image...');
+        imageData = await getImageBase64(uri);
       }
 
       if (!imageData) {
-        throw new Error('Failed to get image data');
+        throw new Error('Failed to process image data. Please try a different image.');
       }
 
-      const extractPrompt = await generateText({
+      setProcessingStep('Extracting text from image...');
+      console.log('Starting OCR extraction...');
+      
+      const extractedResult = await generateText({
         messages: [
           {
             role: 'user',
             content: [
               {
                 type: 'text',
-                text: 'Extract all text from this image. Return ONLY the extracted text, nothing else. If there is no text, respond with "No text found".',
+                text: `You are an OCR expert. Extract ALL text visible in this image.
+
+INSTRUCTIONS:
+1. Look for ANY text in the image - handwritten, printed, typed, signs, labels, etc.
+2. Preserve the original formatting and line breaks where possible
+3. If text is in multiple languages, extract all of them
+4. If text is unclear, make your best attempt to read it
+5. Return ONLY the extracted text, nothing else
+6. If absolutely no text is found, respond with exactly: NO_TEXT_FOUND`,
               },
               {
                 type: 'image',
-                image: `data:image/jpeg;base64,${imageData}`,
+                image: 'data:image/jpeg;base64,' + imageData,
               },
             ],
           },
         ],
       });
 
-      const originalText = extractPrompt.trim();
+      const originalText = extractedResult.trim();
+      console.log('OCR result:', originalText.substring(0, 100) + '...');
 
-      if (!originalText || originalText === 'No text found') {
+      if (!originalText || originalText === 'NO_TEXT_FOUND') {
         setExtractedText({
-          original: 'No text found in the image.',
+          original: 'No text found in the image. Try uploading a clearer image with visible text.',
           translation: '',
         });
+        setProcessingStep('');
+        setIsProcessing(false);
         return;
       }
 
-      const translationPrompt = await generateText({
+      setProcessingStep('Translating to Zomi...');
+      console.log('Starting translation...');
+
+      const translationResult = await generateText({
         messages: [
           {
             role: 'user',
-            content: `You are an expert Tedim Zomi linguist.
-            
-Task: Translate the following text to Zomi (Tedim dialect).
-- If the text is already in Zomi, translate it to English.
-- If the text is in another language, translate it to Zomi (Tedim).
+            content: `You are an expert Tedim Zomi linguist and translator.
 
-**CRITICAL TEDIM DIALECT RULES:**
-- Use ONLY Tedim dialect vocabulary (e.g., "Lungdam" for Thank you, "Pasian" for God).
-- DO NOT use vocabulary from Paite, Mizo, Hakha, or Falam.
-- Use proper Tedim orthography and grammar (SOV order, "kei/lo" for negation after verb).
+TASK: Translate the following text to Zomi (Tedim dialect).
 
-Return ONLY the translation, nothing else.
+RULES:
+1. If text is already in Zomi, translate it to English
+2. If text is in English or another language, translate to Zomi (Tedim dialect)
+3. Use ONLY authentic Tedim dialect vocabulary:
+   - "Lungdam" for Thank you
+   - "Pasian" for God
+   - "Kham" for suffering
+   - "Nung" for heart/mind
+4. DO NOT use Paite, Mizo, Hakha, or Falam vocabulary
+5. Follow Tedim grammar: Subject-Object-Verb order
+6. Use proper negation: verb + "kei" or "lo"
+7. Return ONLY the translation, no explanations
 
-Text to translate:
+TEXT TO TRANSLATE:
 ${originalText}`,
           },
         ],
       });
 
+      const translation = translationResult.trim();
+      console.log('Translation result:', translation.substring(0, 100) + '...');
+
       setExtractedText({
         original: originalText,
-        translation: translationPrompt.trim(),
+        translation: translation,
       });
-    } catch (error) {
-      console.error('Error processing image:', error);
-      Alert.alert('Error', 'Failed to process image. Please try again.');
+      
+      setProcessingStep('');
+    } catch (err) {
+      console.error('Error processing image:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to process image';
+      setError(errorMessage);
+      Alert.alert('Processing Error', errorMessage + '\n\nPlease try again with a different image.');
     } finally {
       setIsProcessing(false);
+      setProcessingStep('');
     }
-  };
+  }, [getImageBase64]);
 
-  const copyToClipboard = async (text: string) => {
-    await Clipboard.setStringAsync(text);
-    if (Platform.OS !== 'web') {
-      Alert.alert('Copied!', 'Text copied to clipboard');
+  const retryProcessing = useCallback(async () => {
+    if (selectedImage) {
+      setError(null);
+      await processImage(selectedImage);
     }
-  };
+  }, [selectedImage, processImage]);
 
-  const reset = () => {
+  const copyToClipboard = useCallback(async (text: string) => {
+    try {
+      await Clipboard.setStringAsync(text);
+      if (Platform.OS !== 'web') {
+        Alert.alert('Copied!', 'Text copied to clipboard');
+      }
+    } catch (err) {
+      console.error('Error copying to clipboard:', err);
+    }
+  }, []);
+
+  const reset = useCallback(() => {
     setSelectedImage(null);
     setExtractedText(null);
-  };
+    setError(null);
+    setProcessingStep('');
+  }, []);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -173,9 +253,7 @@ ${originalText}`,
         options={{
           headerShown: true,
           headerTitle: 'Image Translation',
-          headerStyle: {
-            backgroundColor: Colors.background,
-          },
+          headerStyle: { backgroundColor: Colors.background },
           headerTintColor: Colors.text,
           headerShadowVisible: false,
         }}
@@ -189,13 +267,14 @@ ${originalText}`,
             </View>
             <Text style={styles.emptyTitle}>Translate Text from Images</Text>
             <Text style={styles.emptyDescription}>
-              Capture or upload an image with text to extract and translate it instantly.
+              Capture or upload an image with text to extract and translate it instantly. Works with handwritten text, printed documents, signs, and more.
             </Text>
 
             <View style={styles.buttonContainer}>
               <TouchableOpacity
                 style={styles.actionButton}
                 onPress={() => pickImage(true)}
+                testID="camera-button"
               >
                 <Camera size={24} color="#FFFFFF" />
                 <Text style={styles.actionButtonText}>Take Photo</Text>
@@ -204,6 +283,7 @@ ${originalText}`,
               <TouchableOpacity
                 style={[styles.actionButton, styles.secondaryButton]}
                 onPress={() => pickImage(false)}
+                testID="gallery-button"
               >
                 <ImageIcon size={24} color={Colors.primary} />
                 <Text style={[styles.actionButtonText, styles.secondaryButtonText]}>
@@ -220,12 +300,20 @@ ${originalText}`,
               </View>
               <View style={styles.featureItem}>
                 <Languages size={16} color={Colors.primary} />
-                <Text style={styles.featureText}>Auto-detect and translate</Text>
+                <Text style={styles.featureText}>Auto-detect and translate to Zomi</Text>
               </View>
               <View style={styles.featureItem}>
                 <Copy size={16} color={Colors.primary} />
                 <Text style={styles.featureText}>Easy copy to clipboard</Text>
               </View>
+            </View>
+
+            <View style={styles.tipsContainer}>
+              <Text style={styles.tipsTitle}>Tips for best results:</Text>
+              <Text style={styles.tipText}>• Use good lighting when taking photos</Text>
+              <Text style={styles.tipText}>• Keep the camera steady and focused</Text>
+              <Text style={styles.tipText}>• Ensure text is clearly visible</Text>
+              <Text style={styles.tipText}>• Works with handwritten and printed text</Text>
             </View>
           </View>
         ) : (
@@ -235,10 +323,22 @@ ${originalText}`,
               {isProcessing && (
                 <View style={styles.processingOverlay}>
                   <ActivityIndicator size="large" color={Colors.primary} />
-                  <Text style={styles.processingText}>Processing...</Text>
+                  <Text style={styles.processingText}>
+                    {processingStep || 'Processing...'}
+                  </Text>
                 </View>
               )}
             </View>
+
+            {error && !isProcessing && (
+              <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>{error}</Text>
+                <TouchableOpacity style={styles.retryButton} onPress={retryProcessing}>
+                  <RefreshCw size={18} color="#FFFFFF" />
+                  <Text style={styles.retryButtonText}>Try Again</Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
             {extractedText && !isProcessing && (
               <View style={styles.textResultsContainer}>
@@ -248,35 +348,52 @@ ${originalText}`,
                     <TouchableOpacity
                       onPress={() => copyToClipboard(extractedText.original)}
                       style={styles.copyButton}
+                      testID="copy-original-button"
                     >
                       <Copy size={18} color={Colors.primary} />
                     </TouchableOpacity>
                   </View>
-                  <Text style={styles.textContent}>{extractedText.original}</Text>
+                  <Text style={styles.textContent} selectable>{extractedText.original}</Text>
                 </View>
 
-                {extractedText.translation && (
+                {extractedText.translation && extractedText.translation.length > 0 && (
                   <View style={styles.textCard}>
                     <View style={styles.textCardHeader}>
-                      <Text style={styles.textCardTitle}>Translation</Text>
+                      <Text style={styles.textCardTitle}>Zomi Translation</Text>
                       <TouchableOpacity
                         onPress={() => copyToClipboard(extractedText.translation)}
                         style={styles.copyButton}
+                        testID="copy-translation-button"
                       >
                         <Copy size={18} color={Colors.primary} />
                       </TouchableOpacity>
                     </View>
-                    <Text style={styles.textContent}>{extractedText.translation}</Text>
+                    <Text style={styles.textContent} selectable>{extractedText.translation}</Text>
                   </View>
                 )}
               </View>
             )}
 
             <View style={styles.actionButtonsRow}>
-              <TouchableOpacity style={styles.newImageButton} onPress={reset}>
+              <TouchableOpacity 
+                style={styles.newImageButton} 
+                onPress={reset}
+                testID="new-image-button"
+              >
                 <ImageIcon size={20} color="#FFFFFF" />
                 <Text style={styles.newImageButtonText}>New Image</Text>
               </TouchableOpacity>
+
+              {extractedText && !isProcessing && (
+                <TouchableOpacity 
+                  style={styles.retranslateButton} 
+                  onPress={retryProcessing}
+                  testID="retranslate-button"
+                >
+                  <RefreshCw size={20} color={Colors.primary} />
+                  <Text style={styles.retranslateButtonText}>Re-process</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         )}
@@ -301,7 +418,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 40,
+    paddingVertical: 20,
   },
   iconContainer: {
     width: 96,
@@ -316,7 +433,7 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: 24,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: Colors.text,
     marginBottom: 12,
     textAlign: 'center',
@@ -332,7 +449,7 @@ const styles = StyleSheet.create({
   buttonContainer: {
     width: '100%',
     gap: 12,
-    marginBottom: 32,
+    marginBottom: 24,
   },
   actionButton: {
     flexDirection: 'row',
@@ -351,7 +468,7 @@ const styles = StyleSheet.create({
   },
   actionButtonText: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: '#FFFFFF',
   },
   secondaryButtonText: {
@@ -365,10 +482,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.glassBorder,
     gap: 12,
+    marginBottom: 16,
   },
   featuresTitle: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: Colors.text,
     marginBottom: 8,
   },
@@ -381,6 +499,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.textSecondary,
     flex: 1,
+  },
+  tipsContainer: {
+    width: '100%',
+    backgroundColor: Colors.backgroundSecondary,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.glassBorder,
+  },
+  tipsTitle: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.text,
+    marginBottom: 8,
+  },
+  tipText: {
+    fontSize: 13,
+    color: Colors.textMuted,
+    lineHeight: 20,
   },
   resultContainer: {
     gap: 20,
@@ -399,7 +536,11 @@ const styles = StyleSheet.create({
     resizeMode: 'contain',
   },
   processingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -407,8 +548,37 @@ const styles = StyleSheet.create({
   },
   processingText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.text,
+    textAlign: 'center',
+  },
+  errorContainer: {
+    backgroundColor: Colors.error + '20',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.error + '40',
+    alignItems: 'center',
+    gap: 12,
+  },
+  errorText: {
+    fontSize: 14,
+    color: Colors.error,
+    textAlign: 'center',
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.error,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    gap: 8,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#FFFFFF',
   },
   textResultsContainer: {
     gap: 16,
@@ -428,7 +598,7 @@ const styles = StyleSheet.create({
   },
   textCardTitle: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: Colors.primary,
   },
   copyButton: {
@@ -442,9 +612,11 @@ const styles = StyleSheet.create({
     color: Colors.text,
   },
   actionButtonsRow: {
+    flexDirection: 'row',
     gap: 12,
   },
   newImageButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -456,7 +628,25 @@ const styles = StyleSheet.create({
   },
   newImageButtonText: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: '#FFFFFF',
+  },
+  retranslateButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.surface,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    gap: 8,
+    borderWidth: 2,
+    borderColor: Colors.primary,
+  },
+  retranslateButtonText: {
+    fontSize: 15,
+    fontWeight: '700' as const,
+    color: Colors.primary,
   },
 });

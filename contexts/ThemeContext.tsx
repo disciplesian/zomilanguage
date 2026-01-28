@@ -1,5 +1,5 @@
 import createContextHook from '@nkzw/create-context-hook';
-import { useMemo, useRef } from 'react';
+import { useMemo } from 'react';
 
 export interface ThemeColors {
   primary: string;
@@ -106,48 +106,18 @@ const darkColors: ThemeColors = {
   tabBarBorder: "rgba(255, 255, 255, 0.15)",
 };
 
-
-
 const defaultThemeValue = {
   colors: darkColors,
 };
 
-const safeColors: ThemeColors = {
-  ...darkColors,
-};
-
 export const [ThemeProvider, useTheme] = createContextHook(() => {
-  const initializedRef = useRef(false);
-  
-  const colors = useMemo<ThemeColors>(() => {
-    try {
-      if (!initializedRef.current) {
-        initializedRef.current = true;
-        console.log('ThemeContext: Initializing theme colors');
-      }
-      
-      const themeColors = { ...darkColors };
-      
-      if (!themeColors.primary || !themeColors.background || !themeColors.text) {
-        console.warn('ThemeContext: Missing required colors, using fallback');
-        return safeColors;
-      }
-      
-      return themeColors;
-    } catch (error) {
-      console.warn('ThemeContext: Error loading theme colors, using fallback:', error);
-      return safeColors;
-    }
-  }, []);
-
-  return {
-    colors: colors ?? safeColors,
-  };
+  const colors = useMemo<ThemeColors>(() => darkColors, []);
+  return { colors };
 }, defaultThemeValue);
 
 export const useThemeColors = (): ThemeColors => {
   const theme = useTheme();
-  return theme?.colors ?? safeColors;
+  return theme?.colors || darkColors;
 };
 
-export const getSafeColors = (): ThemeColors => safeColors;
+export const getSafeColors = (): ThemeColors => darkColors;

@@ -2,67 +2,49 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import React, { useEffect, useState, useRef, useMemo } from "react";
 import { StatusBar } from "expo-status-bar";
-import { View, ActivityIndicator, StyleSheet } from "react-native";
+import { View, ActivityIndicator, StyleSheet, Platform } from "react-native";
 import Colors from "@/constants/colors";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
 import { UserProfileProvider } from "@/contexts/UserProfileContext";
 import { trpc, getTrpcClient } from "@/lib/trpc";
 
-let SplashScreen: typeof import('expo-splash-screen') | null = null;
 let splashHidden = false;
-let errorHandlersInitialized = false;
 
 const hideSplashSafe = async () => {
   if (splashHidden) return;
   splashHidden = true;
   
   try {
-    if (!SplashScreen) {
-      const module = await import('expo-splash-screen');
-      SplashScreen = module;
-    }
-    if (SplashScreen && typeof SplashScreen.hideAsync === 'function') {
+    if (Platform.OS === 'web') return;
+    const SplashScreen = await import('expo-splash-screen');
+    if (SplashScreen?.hideAsync) {
       await SplashScreen.hideAsync();
     }
   } catch {
-    // Ignore splash screen errors
+    console.log('Splash screen hide skipped');
   }
 };
 
 const preventSplashAutoHide = async () => {
   try {
-    if (!SplashScreen) {
-      const module = await import('expo-splash-screen');
-      SplashScreen = module;
-    }
-    if (SplashScreen && typeof SplashScreen.preventAutoHideAsync === 'function') {
+    if (Platform.OS === 'web') return;
+    const SplashScreen = await import('expo-splash-screen');
+    if (SplashScreen?.preventAutoHideAsync) {
       await SplashScreen.preventAutoHideAsync();
     }
   } catch {
-    // Ignore - not critical
+    console.log('Splash screen prevent auto hide skipped');
   }
 };
 
-const initErrorHandlers = async () => {
-  if (errorHandlersInitialized) return;
-  errorHandlersInitialized = true;
-  
-  try {
-    const errorHandler = await import('@/lib/errorHandler');
-    if (errorHandler && typeof errorHandler.setupGlobalErrorHandlers === 'function') {
-      errorHandler.setupGlobalErrorHandlers();
-    }
-  } catch {
-    // Ignore error handler setup failures
-  }
-};
-
-preventSplashAutoHide().catch(() => {});
+if (Platform.OS !== 'web') {
+  preventSplashAutoHide().catch(() => {});
+}
 
 function RootLayoutNav() {
   const theme = useTheme();
-  const colors = theme?.colors ? { ...Colors, ...theme.colors } : Colors;
+  const colors = theme?.colors || Colors;
 
   return (
     <>
@@ -132,7 +114,6 @@ function RootLayoutNav() {
             presentation: "card",
           }} 
         />
-
       </Stack>
     </>
   );
@@ -143,33 +124,25 @@ export default function RootLayout() {
   const mountedRef = useRef(true);
 
   const queryClient = useMemo(() => {
-    try {
-      return new QueryClient({
-        defaultOptions: {
-          queries: {
-            staleTime: 1000 * 60 * 5,
-            gcTime: 1000 * 60 * 30,
-            retry: 2,
-            retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
-            networkMode: 'offlineFirst',
-          },
-          mutations: {
-            retry: 1,
-            networkMode: 'offlineFirst',
-          },
+    return new QueryClient({
+      defaultOptions: {
+        queries: {
+          staleTime: 1000 * 60 * 5,
+          gcTime: 1000 * 60 * 30,
+          retry: 1,
+          retryDelay: 1000,
+          networkMode: 'offlineFirst',
         },
-      });
-    } catch {
-      return new QueryClient();
-    }
+        mutations: {
+          retry: 1,
+          networkMode: 'offlineFirst',
+        },
+      },
+    });
   }, []);
 
   const trpcClient = useMemo(() => {
-    try {
-      return getTrpcClient();
-    } catch {
-      return getTrpcClient();
-    }
+    return getTrpcClient();
   }, []);
 
   useEffect(() => {
@@ -182,22 +155,18 @@ export default function RootLayout() {
     
     const initialize = async () => {
       try {
-        await initErrorHandlers();
+        await new Promise(resolve => setTimeout(resolve, 100));
       } catch {
-        // Ignore initialization errors
+        console.log('Initialization delay skipped');
       }
       
       if (mountedRef.current) {
         setIsReady(true);
-        setTimeout(hideSplashSafe, 100);
+        setTimeout(hideSplashSafe, 50);
       }
     };
     
-    const timer = setTimeout(initialize, 50);
-
-    return () => {
-      clearTimeout(timer);
-    };
+    initialize();
   }, []);
 
   if (!isReady) {
