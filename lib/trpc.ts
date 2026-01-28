@@ -6,52 +6,26 @@ import { Platform } from "react-native";
 
 let platformOS = 'unknown';
 try {
-  platformOS = Platform.OS || 'unknown';
+  platformOS = Platform?.OS || 'unknown';
 } catch {
-  // Ignore
+  platformOS = 'unknown';
 }
 
 let trpcInstance: ReturnType<typeof createTRPCReact<AppRouter>> | null = null;
-let trpcCreationAttempts = 0;
-const MAX_CREATION_ATTEMPTS = 3;
 
-const getTrpcInstance = (): ReturnType<typeof createTRPCReact<AppRouter>> => {
+const createTrpcInstance = (): ReturnType<typeof createTRPCReact<AppRouter>> => {
   if (!trpcInstance) {
-    trpcCreationAttempts++;
     try {
       trpcInstance = createTRPCReact<AppRouter>();
-      console.log('tRPC instance created successfully');
     } catch (error) {
-      console.error('Failed to create tRPC instance:', error);
-      if (trpcCreationAttempts < MAX_CREATION_ATTEMPTS) {
-        console.log('Retrying tRPC instance creation...');
-        try {
-          trpcInstance = createTRPCReact<AppRouter>();
-        } catch (retryError) {
-          console.error('Retry failed:', retryError);
-          trpcInstance = createTRPCReact<AppRouter>();
-        }
-      } else {
-        trpcInstance = createTRPCReact<AppRouter>();
-      }
+      console.warn('Failed to create tRPC instance:', error);
+      trpcInstance = createTRPCReact<AppRouter>();
     }
   }
-  return trpcInstance!;
+  return trpcInstance;
 };
 
-const trpcProxy = new Proxy({} as ReturnType<typeof createTRPCReact<AppRouter>>, {
-  get(target, prop) {
-    try {
-      const instance = getTrpcInstance();
-      return (instance as any)[prop];
-    } catch (error) {
-      console.warn('tRPC proxy access failed:', error);
-      return undefined;
-    }
-  },
-});
-
-export const trpc = trpcProxy;
+export const trpc = createTrpcInstance();
 
 const AUTH_TOKEN_KEY = '@zomi_auth_token';
 const AUTH_USER_KEY = '@zomi_auth_user';
@@ -107,7 +81,6 @@ const getAuthData = async (): Promise<AuthUserData | null> => {
         const module = await import('@react-native-async-storage/async-storage');
         AsyncStorage = module.default;
       } catch {
-        console.warn('trpc: AsyncStorage not available');
         return null;
       }
       
@@ -187,7 +160,13 @@ const fetchWithRetry = async (
 ): Promise<Response> => {
   let lastError: Error | null = null;
   
-  const urlString = url instanceof Request ? url.url : url.toString();
+  let urlString = '';
+  try {
+    urlString = url instanceof Request ? url.url : url.toString();
+  } catch {
+    urlString = '';
+  }
+  
   const isMutation = urlString.includes('mutation') || 
                      (options?.method === 'POST' && options?.body);
 
@@ -202,7 +181,11 @@ const fetchWithRetry = async (
     const controller = new AbortController();
     
     const timeoutId = setTimeout(() => {
-      controller.abort();
+      try {
+        controller.abort();
+      } catch {
+        // Ignore abort errors
+      }
     }, effectiveTimeout);
     
     try {
@@ -211,16 +194,12 @@ const fetchWithRetry = async (
         signal: controller.signal,
       };
       
-      // Only add keepalive if explicitly supported and not on web (where it can cause issues with some proxies)
-      // and mostly relevant for background/page-unload requests which isn't the primary case here.
-      // Removed keepalive to prevent potential "Network request failed" on some Android/Web configs.
-      
       const response = await fetch(url, fetchOptions);
       clearTimeout(timeoutId);
       
       if (!response.ok) {
         if (response.status >= 500) {
-          throw new Error(`Server error: ${response.status}`);
+          throw new Error('Server error: ' + response.status);
         }
         if (response.status === 0) {
           throw new Error('Network error - connection blocked or CORS issue');
@@ -232,15 +211,17 @@ const fetchWithRetry = async (
       clearTimeout(timeoutId);
       lastError = error instanceof Error ? error : new Error(String(error));
       
-      const isAbortError = lastError.name === 'AbortError';
-      const isNetworkError = lastError.message === 'Failed to fetch' || 
-                              lastError.message.includes('Network request failed') ||
-                              lastError.message.includes('network') ||
-                              lastError.message.includes('NetworkError') ||
-                              lastError.message.includes('CORS') ||
-                              lastError.message.includes('ERR_CONNECTION') ||
-                              lastError.message.includes('ECONNREFUSED') ||
-                              lastError.name === 'TypeError';
+      const errorName = lastError?.name || '';
+      const errorMessage = lastError?.message || '';
+      const isAbortError = errorName === 'AbortError';
+      const isNetworkError = errorMessage === 'Failed to fetch' || 
+                              errorMessage.includes('Network request failed') ||
+                              errorMessage.includes('network') ||
+                              errorMessage.includes('NetworkError') ||
+                              errorMessage.includes('CORS') ||
+                              errorMessage.includes('ERR_CONNECTION') ||
+                              errorMessage.includes('ECONNREFUSED') ||
+                              errorName === 'TypeError';
       
       if (isAbortError) {
         lastError = new Error('Request timeout - the server took too long to respond');
@@ -256,14 +237,16 @@ const fetchWithRetry = async (
   }
   
   if (lastError) {
-    if (lastError.message === 'Failed to fetch' || 
-        lastError.message.includes('Network request failed') ||
-        lastError.message.includes('network') ||
-        lastError.message.includes('NetworkError') ||
-        lastError.message.includes('CORS') ||
-        lastError.message.includes('ERR_CONNECTION') ||
-        lastError.message.includes('ECONNREFUSED') ||
-        lastError.name === 'TypeError') {
+    const errorMessage = lastError?.message || '';
+    const errorName = lastError?.name || '';
+    if (errorMessage === 'Failed to fetch' || 
+        errorMessage.includes('Network request failed') ||
+        errorMessage.includes('network') ||
+        errorMessage.includes('NetworkError') ||
+        errorMessage.includes('CORS') ||
+        errorMessage.includes('ERR_CONNECTION') ||
+        errorMessage.includes('ECONNREFUSED') ||
+        errorName === 'TypeError') {
       throw new Error('Unable to connect to server. Please check your internet connection and try again.');
     }
     throw lastError;
@@ -275,13 +258,11 @@ const fetchWithRetry = async (
 const createTrpcClient = (): ReturnType<typeof trpc.createClient> => {
   try {
     const baseUrl = getBaseUrl();
-    console.log('Creating tRPC client with base URL:', baseUrl);
     
-    const currentTrpc = getTrpcInstance();
-    return currentTrpc.createClient({
+    return trpc.createClient({
       links: [
         httpLink({
-          url: `${baseUrl}/api/trpc`,
+          url: baseUrl + '/api/trpc',
           transformer: superjson,
           fetch: fetchWithRetry,
           async headers() {
@@ -292,103 +273,63 @@ const createTrpcClient = (): ReturnType<typeof trpc.createClient> => {
                 try {
                   const jsonStr = JSON.stringify(authData);
                   authPayload = safeBase64Encode(jsonStr);
-                } catch (encodeError) {
-                  console.warn('Error encoding auth payload:', encodeError);
+                } catch {
                   authPayload = '';
                 }
                 if (authPayload) {
                   return {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${authPayload}`,
+                    'Authorization': 'Bearer ' + authPayload,
                     'X-Platform': platformOS,
                   };
                 }
               }
-            } catch (headerError) {
-              console.warn('Error building headers:', headerError);
+            } catch {
+              // Ignore header errors
             }
             return {
               'Content-Type': 'application/json',
-              'X-Platform': Platform.OS,
+              'X-Platform': platformOS,
             };
           },
         }),
       ],
     });
   } catch (error) {
-    console.error('Error creating tRPC client:', error);
-    try {
-      const fallbackTrpc = getTrpcInstance();
-      return fallbackTrpc.createClient({
-        links: [
-          httpLink({
-            url: 'https://api.rork.app/api/trpc',
-            transformer: superjson,
-          }),
-        ],
-      });
-    } catch (fallbackError) {
-      console.error('Fallback tRPC client creation also failed:', fallbackError);
-      throw error;
-    }
+    console.warn('Error creating tRPC client:', error);
+    return trpc.createClient({
+      links: [
+        httpLink({
+          url: 'https://api.rork.app/api/trpc',
+          transformer: superjson,
+        }),
+      ],
+    });
   }
 };
 
 let clientInitialized = false;
-let clientInitAttempts = 0;
-const MAX_CLIENT_INIT_ATTEMPTS = 3;
 
 export const getTrpcClient = (): ReturnType<typeof trpc.createClient> => {
   if (!trpcClientInstance || !clientInitialized) {
-    clientInitAttempts++;
     try {
       trpcClientInstance = createTrpcClient();
       clientInitialized = true;
-      console.log('tRPC client initialized successfully on attempt', clientInitAttempts);
     } catch (error) {
-      console.error('Failed to create tRPC client on attempt', clientInitAttempts, ':', error);
-      if (clientInitAttempts < MAX_CLIENT_INIT_ATTEMPTS) {
-        console.log('Retrying tRPC client creation...');
-        try {
-          trpcClientInstance = createTrpcClient();
-          clientInitialized = true;
-        } catch (retryError) {
-          console.error('Retry also failed:', retryError);
-          try {
-            const fallbackTrpc = getTrpcInstance();
-            trpcClientInstance = fallbackTrpc.createClient({
-              links: [
-                httpLink({
-                  url: 'https://api.rork.app/api/trpc',
-                  transformer: superjson,
-                }),
-              ],
-            });
-            clientInitialized = true;
-          } catch (finalError) {
-            console.error('Final fallback failed:', finalError);
-          }
-        }
+      console.warn('Failed to create tRPC client:', error);
+      try {
+        trpcClientInstance = trpc.createClient({
+          links: [
+            httpLink({
+              url: 'https://api.rork.app/api/trpc',
+              transformer: superjson,
+            }),
+          ],
+        });
+        clientInitialized = true;
+      } catch {
+        throw new Error('Failed to initialize tRPC client');
       }
-    }
-  }
-  
-  if (!trpcClientInstance) {
-    console.warn('Creating emergency tRPC client');
-    try {
-      const emergencyTrpc = getTrpcInstance();
-      trpcClientInstance = emergencyTrpc.createClient({
-        links: [
-          httpLink({
-            url: 'https://api.rork.app/api/trpc',
-            transformer: superjson,
-          }),
-        ],
-      });
-      clientInitialized = true;
-    } catch (emergencyError) {
-      console.error('Emergency client creation failed:', emergencyError);
-      throw new Error('Failed to initialize tRPC client');
     }
   }
   
@@ -398,5 +339,4 @@ export const getTrpcClient = (): ReturnType<typeof trpc.createClient> => {
 export const resetTrpcClient = () => {
   trpcClientInstance = null;
   clientInitialized = false;
-  clientInitAttempts = 0;
 };

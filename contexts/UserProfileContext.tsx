@@ -12,13 +12,13 @@ const MAX_ACTIVITIES = 50;
 const STORAGE_TIMEOUT = 3000;
 
 function safeJSONParse<T>(data: string | null | undefined, fallback: T): T {
-  if (!data || typeof data !== 'string' || data.length === 0) {
-    return fallback;
-  }
-  if (data.length > MAX_STORAGE_SIZE) {
-    return fallback;
-  }
   try {
+    if (!data || typeof data !== 'string' || data.length === 0) {
+      return fallback;
+    }
+    if (data.length > MAX_STORAGE_SIZE) {
+      return fallback;
+    }
     const parsed = JSON.parse(data);
     if (parsed === null || parsed === undefined) {
       return fallback;
@@ -223,11 +223,19 @@ const getDefaultStats = (): UserStats => ({
   joinedAt: new Date().toISOString(),
 });
 
-const getDefaultLocalUser = (): LocalUser => ({
-  id: 'local_user_' + Date.now().toString(36),
-  name: 'Zomi Learner',
-  bio: 'Learning Zomi language',
-});
+const getDefaultLocalUser = (): LocalUser => {
+  let uniqueId = 'local_user_';
+  try {
+    uniqueId = uniqueId + Date.now().toString(36);
+  } catch {
+    uniqueId = uniqueId + Math.random().toString(36).substring(2, 9);
+  }
+  return {
+    id: uniqueId,
+    name: 'Zomi Learner',
+    bio: 'Learning Zomi language',
+  };
+};
 
 const getDefaultProfile = (localUser: LocalUser): UserProfile => ({
   userId: localUser.id,
@@ -391,9 +399,16 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
   }, [localUser, leaderboard]);
 
   const addActivity = useCallback(async (activity: Omit<UserActivity, 'id' | 'timestamp'>) => {
+    let activityId = 'activity_';
+    try {
+      activityId = 'activity_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+    } catch {
+      activityId = 'activity_' + Math.random().toString(36).substring(2, 15);
+    }
+    
     const newActivity: UserActivity = {
       ...activity,
-      id: `activity_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: activityId,
       timestamp: new Date().toISOString(),
     };
     

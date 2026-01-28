@@ -10,58 +10,32 @@ import { UserProfileProvider } from "@/contexts/UserProfileContext";
 import { trpc, getTrpcClient } from "@/lib/trpc";
 
 let SplashScreen: typeof import('expo-splash-screen') | null = null;
-let setupGlobalErrorHandlers: (() => void) | null = null;
 let splashHidden = false;
 let errorHandlersInitialized = false;
-
-const initializeModules = async () => {
-  try {
-    if (!SplashScreen) {
-      SplashScreen = await import('expo-splash-screen');
-    }
-  } catch (e) {
-    console.warn('SplashScreen module not available:', e);
-  }
-  
-  try {
-    if (!setupGlobalErrorHandlers) {
-      const errorHandler = await import('@/lib/errorHandler');
-      setupGlobalErrorHandlers = errorHandler.setupGlobalErrorHandlers;
-    }
-  } catch (e) {
-    console.warn('Error handler module not available:', e);
-  }
-};
-
-const initErrorHandlers = () => {
-  if (errorHandlersInitialized) return;
-  errorHandlersInitialized = true;
-  
-  try {
-    if (setupGlobalErrorHandlers) {
-      setupGlobalErrorHandlers();
-    }
-  } catch (error) {
-    console.warn('Failed to setup global error handlers:', error);
-  }
-};
 
 const hideSplashSafe = async () => {
   if (splashHidden) return;
   splashHidden = true;
   
   try {
+    if (!SplashScreen) {
+      const module = await import('expo-splash-screen');
+      SplashScreen = module;
+    }
     if (SplashScreen && typeof SplashScreen.hideAsync === 'function') {
       await SplashScreen.hideAsync();
     }
-  } catch (error) {
-    console.warn('Failed to hide splash screen:', error);
+  } catch {
+    // Ignore splash screen errors
   }
 };
 
 const preventSplashAutoHide = async () => {
   try {
-    await initializeModules();
+    if (!SplashScreen) {
+      const module = await import('expo-splash-screen');
+      SplashScreen = module;
+    }
     if (SplashScreen && typeof SplashScreen.preventAutoHideAsync === 'function') {
       await SplashScreen.preventAutoHideAsync();
     }
@@ -70,7 +44,21 @@ const preventSplashAutoHide = async () => {
   }
 };
 
-preventSplashAutoHide().catch(() => {})
+const initErrorHandlers = async () => {
+  if (errorHandlersInitialized) return;
+  errorHandlersInitialized = true;
+  
+  try {
+    const errorHandler = await import('@/lib/errorHandler');
+    if (errorHandler && typeof errorHandler.setupGlobalErrorHandlers === 'function') {
+      errorHandler.setupGlobalErrorHandlers();
+    }
+  } catch {
+    // Ignore error handler setup failures
+  }
+};
+
+preventSplashAutoHide().catch(() => {});
 
 function RootLayoutNav() {
   const theme = useTheme();
@@ -171,20 +159,15 @@ export default function RootLayout() {
           },
         },
       });
-    } catch (error) {
-      console.warn('RootLayout: QueryClient creation failed:', error);
+    } catch {
       return new QueryClient();
     }
   }, []);
 
   const trpcClient = useMemo(() => {
     try {
-      console.log('RootLayout: Creating tRPC client...');
-      const client = getTrpcClient();
-      console.log('RootLayout: tRPC client created successfully');
-      return client;
-    } catch (error) {
-      console.warn('RootLayout: tRPC client creation failed, using fallback:', error);
+      return getTrpcClient();
+    } catch {
       return getTrpcClient();
     }
   }, []);
@@ -197,14 +180,20 @@ export default function RootLayout() {
   useEffect(() => {
     if (!mountedRef.current) return;
     
-    initErrorHandlers();
-    
-    const timer = setTimeout(() => {
+    const initialize = async () => {
+      try {
+        await initErrorHandlers();
+      } catch {
+        // Ignore initialization errors
+      }
+      
       if (mountedRef.current) {
         setIsReady(true);
         setTimeout(hideSplashSafe, 100);
       }
-    }, 100);
+    };
+    
+    const timer = setTimeout(initialize, 50);
 
     return () => {
       clearTimeout(timer);
@@ -220,7 +209,7 @@ export default function RootLayout() {
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={fallbackStyles.flex}>
       <ErrorBoundary>
         <trpc.Provider client={trpcClient} queryClient={queryClient}>
           <QueryClientProvider client={queryClient}>
@@ -243,5 +232,8 @@ const fallbackStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
+  },
+  flex: {
+    flex: 1,
   },
 });
