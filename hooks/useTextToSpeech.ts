@@ -1,15 +1,16 @@
 import { Audio } from 'expo-av';
-import { useState, useCallback, useRef, useEffect } from 'react';
-import { Platform } from 'react-native';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { isMacCatalyst as detectMacCatalyst } from '@/lib/errorHandler';
 
-let isMacCatalystDetected = false;
-try {
-  isMacCatalystDetected = detectMacCatalyst();
-} catch {
-  isMacCatalystDetected = false;
-}
-const useWebTTS = Platform.OS === 'web' || isMacCatalystDetected;
+const getUseWebTTS = (): boolean => {
+  try {
+    const { Platform } = require('react-native');
+    const isMacCatalystDetected = detectMacCatalyst();
+    return Platform?.OS === 'web' || isMacCatalystDetected;
+  } catch {
+    return false;
+  }
+};
 
 export interface TTSOptions {
   language: 'en' | 'zomi';
@@ -27,6 +28,9 @@ export function useTextToSpeech() {
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const isStoppingRef = useRef(false);
   const mountedRef = useRef(true);
+  
+  // Web TTS detection is computed dynamically in callbacks
+  void useMemo(() => getUseWebTTS(), []);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -36,7 +40,8 @@ export function useTextToSpeech() {
         soundRef.current.unloadAsync().catch(() => {});
         soundRef.current = null;
       }
-      if (useWebTTS && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      const webTTSCleanup = getUseWebTTS();
+      if (webTTSCleanup && typeof window !== 'undefined' && 'speechSynthesis' in window) {
         try {
           window.speechSynthesis.cancel();
         } catch (e) {
@@ -53,11 +58,12 @@ export function useTextToSpeech() {
     }
 
     isStoppingRef.current = true;
+    const webTTS = getUseWebTTS();
 
     try {
       console.log('TTS: Stopping speech');
       
-      if (useWebTTS) {
+      if (webTTS) {
         if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
           try {
             window.speechSynthesis.cancel();
@@ -110,7 +116,8 @@ export function useTextToSpeech() {
       }
       console.log(`TTS: Speaking "${text.substring(0, 50)}..." at speed ${options.rate || currentSpeed}`);
 
-      if (useWebTTS) {
+      const webTTS = getUseWebTTS();
+      if (webTTS) {
         if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
           try {
             window.speechSynthesis.cancel();
@@ -205,10 +212,10 @@ export function useTextToSpeech() {
               shouldDuckAndroid: true,
             });
           } catch (audioModeError: any) {
-            const errorMessage = audioModeError?.message || '';
-            if (errorMessage.includes('TurboModule') || 
-                errorMessage.includes('NSException') ||
-                errorMessage.includes('Native module')) {
+            const errorMessage = String(audioModeError?.message || '');
+            if (errorMessage.indexOf('TurboModule') !== -1 || 
+                errorMessage.indexOf('NSException') !== -1 ||
+                errorMessage.indexOf('Native module') !== -1) {
               console.warn('TTS: Native audio not available on this platform');
               if (mountedRef.current) {
                 setError('Audio playback is not available on this platform.');
@@ -238,10 +245,10 @@ export function useTextToSpeech() {
             );
             newSound = result.sound;
           } catch (createError: any) {
-            const errorMessage = createError?.message || '';
-            if (errorMessage.includes('TurboModule') || 
-                errorMessage.includes('NSException') ||
-                errorMessage.includes('Native module')) {
+            const errorMessage = String(createError?.message || '');
+            if (errorMessage.indexOf('TurboModule') !== -1 || 
+                errorMessage.indexOf('NSException') !== -1 ||
+                errorMessage.indexOf('Native module') !== -1) {
               console.warn('TTS: Native audio not available on this platform');
               if (mountedRef.current) {
                 setError('Audio playback is not available on this platform.');
@@ -283,11 +290,11 @@ export function useTextToSpeech() {
           });
         } catch (audioError: any) {
           console.error('TTS: Audio setup error', audioError);
-          const errorMessage = audioError?.message || '';
+          const errorMessage = String(audioError?.message || '');
           if (mountedRef.current) {
-            if (errorMessage.includes('TurboModule') || 
-                errorMessage.includes('NSException') ||
-                errorMessage.includes('Native module')) {
+            if (errorMessage.indexOf('TurboModule') !== -1 || 
+                errorMessage.indexOf('NSException') !== -1 ||
+                errorMessage.indexOf('Native module') !== -1) {
               setError('Audio playback is not available on this platform.');
             } else {
               setError('Failed to play audio. Please check your connection.');

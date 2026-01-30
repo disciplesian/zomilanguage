@@ -1,11 +1,11 @@
-import { Platform } from 'react-native';
-
-let platformOS = 'unknown';
-try {
-  platformOS = Platform?.OS || 'unknown';
-} catch {
-  platformOS = 'unknown';
-}
+const getPlatformOS = (): string => {
+  try {
+    const { Platform } = require('react-native');
+    return Platform?.OS || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+};
 
 export const isNativeModuleError = (error: any): boolean => {
   if (!error) return false;
@@ -81,7 +81,7 @@ export const safeNativeCallSync = <T>(
 };
 
 export const setupGlobalErrorHandlers = () => {
-  console.log('Error handlers initialized for platform:', platformOS);
+  console.log('Error handlers initialized for platform:', getPlatformOS());
 };
 
 export const cleanupGlobalErrorHandlers = () => {
@@ -89,8 +89,8 @@ export const cleanupGlobalErrorHandlers = () => {
 };
 
 export const isMacCatalyst = (): boolean => false;
-export const isAndroid = (): boolean => platformOS === 'android';
-export const isWeb = (): boolean => platformOS === 'web';
+export const isAndroid = (): boolean => getPlatformOS() === 'android';
+export const isWeb = (): boolean => getPlatformOS() === 'web';
 
 export const getSafeDimensions = (): { width: number; height: number } => {
   try {

@@ -2,21 +2,32 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import React, { useEffect, useState, useRef, useMemo } from "react";
 import { StatusBar } from "expo-status-bar";
-import { View, ActivityIndicator, StyleSheet, Platform } from "react-native";
+import { View, ActivityIndicator, StyleSheet } from "react-native";
 import Colors from "@/constants/colors";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
 import { UserProfileProvider } from "@/contexts/UserProfileContext";
 import { trpc, getTrpcClient } from "@/lib/trpc";
 
+const getPlatformOS = (): string => {
+  try {
+    const { Platform } = require('react-native');
+    return Platform?.OS || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+};
+
 let splashHidden = false;
+let splashPrevented = false;
 
 const hideSplashSafe = async () => {
   if (splashHidden) return;
   splashHidden = true;
   
   try {
-    if (Platform.OS === 'web') return;
+    const platformOS = getPlatformOS();
+    if (platformOS === 'web') return;
     const SplashScreen = await import('expo-splash-screen');
     if (SplashScreen?.hideAsync) {
       await SplashScreen.hideAsync();
@@ -27,8 +38,12 @@ const hideSplashSafe = async () => {
 };
 
 const preventSplashAutoHide = async () => {
+  if (splashPrevented) return;
+  splashPrevented = true;
+  
   try {
-    if (Platform.OS === 'web') return;
+    const platformOS = getPlatformOS();
+    if (platformOS === 'web') return;
     const SplashScreen = await import('expo-splash-screen');
     if (SplashScreen?.preventAutoHideAsync) {
       await SplashScreen.preventAutoHideAsync();
@@ -37,10 +52,6 @@ const preventSplashAutoHide = async () => {
     console.log('Splash screen prevent auto hide skipped');
   }
 };
-
-if (Platform.OS !== 'web') {
-  preventSplashAutoHide().catch(() => {});
-}
 
 function RootLayoutNav() {
   const theme = useTheme();
@@ -121,28 +132,40 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
   const [isReady, setIsReady] = useState(false);
+  const [initError, setInitError] = useState<Error | null>(null);
   const mountedRef = useRef(true);
+  const initStartedRef = useRef(false);
 
   const queryClient = useMemo(() => {
-    return new QueryClient({
-      defaultOptions: {
-        queries: {
-          staleTime: 1000 * 60 * 5,
-          gcTime: 1000 * 60 * 30,
-          retry: 1,
-          retryDelay: 1000,
-          networkMode: 'offlineFirst',
+    try {
+      return new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 1000 * 60 * 5,
+            gcTime: 1000 * 60 * 30,
+            retry: 1,
+            retryDelay: 1000,
+            networkMode: 'offlineFirst',
+          },
+          mutations: {
+            retry: 1,
+            networkMode: 'offlineFirst',
+          },
         },
-        mutations: {
-          retry: 1,
-          networkMode: 'offlineFirst',
-        },
-      },
-    });
+      });
+    } catch (err) {
+      console.error('Failed to create QueryClient:', err);
+      return new QueryClient();
+    }
   }, []);
 
   const trpcClient = useMemo(() => {
-    return getTrpcClient();
+    try {
+      return getTrpcClient();
+    } catch (err) {
+      console.error('Failed to create tRPC client:', err);
+      return getTrpcClient();
+    }
   }, []);
 
   useEffect(() => {
@@ -151,22 +174,31 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    if (!mountedRef.current) return;
+    if (!mountedRef.current || initStartedRef.current) return;
+    initStartedRef.current = true;
     
     const initialize = async () => {
       try {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      } catch {
-        console.log('Initialization delay skipped');
+        await preventSplashAutoHide();
+        await new Promise(resolve => setTimeout(resolve, 50));
+      } catch (err) {
+        console.log('Initialization setup skipped:', err);
       }
       
       if (mountedRef.current) {
         setIsReady(true);
-        setTimeout(hideSplashSafe, 50);
+        setTimeout(hideSplashSafe, 100);
       }
     };
     
-    initialize();
+    initialize().catch((err) => {
+      console.error('Initialization error:', err);
+      if (mountedRef.current) {
+        setInitError(err);
+        setIsReady(true);
+        hideSplashSafe();
+      }
+    });
   }, []);
 
   if (!isReady) {
@@ -175,6 +207,10 @@ export default function RootLayout() {
         <ActivityIndicator size="large" color={Colors.primary} />
       </View>
     );
+  }
+
+  if (initError) {
+    console.warn('App started with initialization error:', initError.message);
   }
 
   return (

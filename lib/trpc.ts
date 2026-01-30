@@ -2,14 +2,15 @@ import { createTRPCReact } from "@trpc/react-query";
 import { httpLink } from "@trpc/client";
 import type { AppRouter } from "@/backend/trpc/app-router";
 import superjson from "superjson";
-import { Platform } from "react-native";
 
-let platformOS = 'unknown';
-try {
-  platformOS = Platform?.OS || 'unknown';
-} catch {
-  platformOS = 'unknown';
-}
+const getPlatformOS = (): string => {
+  try {
+    const { Platform } = require('react-native');
+    return Platform?.OS || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+};
 
 export const trpc = createTRPCReact<AppRouter>();
 
@@ -20,6 +21,7 @@ const getBaseUrl = (): string => {
       return url.replace(/\/$/, '');
     }
     
+    const platformOS = getPlatformOS();
     if (platformOS === 'web' && typeof window !== 'undefined' && window.location) {
       return window.location.origin;
     }
@@ -57,6 +59,7 @@ let trpcClientInstance: ReturnType<typeof trpc.createClient> | null = null;
 
 const createTrpcClient = (): ReturnType<typeof trpc.createClient> => {
   const baseUrl = getBaseUrl();
+  const platformOS = getPlatformOS();
   
   return trpc.createClient({
     links: [

@@ -1,17 +1,19 @@
 import { Audio } from 'expo-av';
-import { useState, useCallback, useRef, useEffect } from 'react';
-import { Platform, Alert } from 'react-native';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { Alert } from 'react-native';
 import { isMacCatalyst as detectMacCatalyst } from '@/lib/errorHandler';
 
 const STT_API_URL = 'https://toolkit.rork.com/stt/transcribe/';
 
-let isMacCatalystDetected = false;
-try {
-  isMacCatalystDetected = detectMacCatalyst();
-} catch {
-  isMacCatalystDetected = false;
-}
-const useWebRecording = Platform.OS === 'web' || isMacCatalystDetected;
+const getUseWebRecording = (): boolean => {
+  try {
+    const { Platform } = require('react-native');
+    const isMacCatalystDetected = detectMacCatalyst();
+    return Platform?.OS === 'web' || isMacCatalystDetected;
+  } catch {
+    return false;
+  }
+};
 
 export function useSpeechToText() {
   const [isRecording, setIsRecording] = useState(false);
@@ -23,6 +25,10 @@ export function useSpeechToText() {
   const audioChunksRef = useRef<Blob[]>([]);
   const durationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mountedRef = useRef(true);
+  
+  // useWebRecording is computed dynamically in callbacks to avoid stale closures
+  const _webRecordingRef = useMemo(() => getUseWebRecording(), []);
+  void _webRecordingRef;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -57,11 +63,12 @@ export function useSpeechToText() {
 
   const startRecording = useCallback(async () => {
     setError(null);
+    const webRecording = getUseWebRecording();
     
     try {
       console.log('STT: Requesting audio permissions...');
       
-      if (useWebRecording) {
+      if (webRecording) {
         try {
           if (typeof navigator === 'undefined' || !navigator.mediaDevices) {
             setError('Audio recording is not supported on this platform.');
@@ -110,10 +117,10 @@ export function useSpeechToText() {
           try {
             permission = await Audio.requestPermissionsAsync();
           } catch (permError: any) {
-            const errorMessage = permError?.message || '';
-            if (errorMessage.includes('TurboModule') || 
-                errorMessage.includes('NSException') ||
-                errorMessage.includes('Native module')) {
+            const errorMessage = String(permError?.message || '');
+            if (errorMessage.indexOf('TurboModule') !== -1 || 
+                errorMessage.indexOf('NSException') !== -1 ||
+                errorMessage.indexOf('Native module') !== -1) {
               console.warn('STT: Native audio not available on this platform');
               setError('Audio recording is not available on this platform.');
               return;
@@ -133,10 +140,10 @@ export function useSpeechToText() {
               playsInSilentModeIOS: true,
             });
           } catch (audioModeError: any) {
-            const errorMessage = audioModeError?.message || '';
-            if (errorMessage.includes('TurboModule') || 
-                errorMessage.includes('NSException') ||
-                errorMessage.includes('Native module')) {
+            const errorMessage = String(audioModeError?.message || '');
+            if (errorMessage.indexOf('TurboModule') !== -1 || 
+                errorMessage.indexOf('NSException') !== -1 ||
+                errorMessage.indexOf('Native module') !== -1) {
               console.warn('STT: Native audio not available on this platform');
               setError('Audio recording is not available on this platform.');
               return;
@@ -152,10 +159,10 @@ export function useSpeechToText() {
             );
             recording = result.recording;
           } catch (recordError: any) {
-            const errorMessage = recordError?.message || '';
-            if (errorMessage.includes('TurboModule') || 
-                errorMessage.includes('NSException') ||
-                errorMessage.includes('Native module')) {
+            const errorMessage = String(recordError?.message || '');
+            if (errorMessage.indexOf('TurboModule') !== -1 || 
+                errorMessage.indexOf('NSException') !== -1 ||
+                errorMessage.indexOf('Native module') !== -1) {
               console.warn('STT: Native audio not available on this platform');
               setError('Audio recording is not available on this platform.');
               return;
@@ -169,10 +176,10 @@ export function useSpeechToText() {
           console.log('STT: Native recording started');
         } catch (nativeError: any) {
           console.error('STT: Native recording error:', nativeError);
-          const errorMessage = nativeError?.message || '';
-          if (errorMessage.includes('TurboModule') || 
-              errorMessage.includes('NSException') ||
-              errorMessage.includes('Native module')) {
+          const errorMessage = String(nativeError?.message || '');
+          if (errorMessage.indexOf('TurboModule') !== -1 || 
+              errorMessage.indexOf('NSException') !== -1 ||
+              errorMessage.indexOf('Native module') !== -1) {
             setError('Audio recording is not available on this platform.');
           } else {
             setError('Failed to start recording. Audio may not be supported on this device.');
@@ -189,8 +196,9 @@ export function useSpeechToText() {
 
   const stopRecording = useCallback(async (): Promise<string | null> => {
     stopDurationTimer();
+    const webRecording = getUseWebRecording();
     
-    if (useWebRecording) {
+    if (webRecording) {
       if (!mediaRecorderRef.current) {
         console.log('STT: No web recording to stop');
         return null;
@@ -329,8 +337,9 @@ export function useSpeechToText() {
 
   const cancelRecording = useCallback(async () => {
     stopDurationTimer();
+    const webRecording = getUseWebRecording();
     
-    if (useWebRecording) {
+    if (webRecording) {
       if (mediaRecorderRef.current) {
         try {
           mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
