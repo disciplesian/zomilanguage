@@ -31,49 +31,6 @@ export default function ImageTranslation() {
   const [processingStep, setProcessingStep] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
 
-  const pickImage = useCallback(async (useCamera: boolean) => {
-    try {
-      setError(null);
-      let result: ImagePicker.ImagePickerResult;
-
-      if (useCamera) {
-        const permission = await ImagePicker.requestCameraPermissionsAsync();
-        if (!permission.granted) {
-          Alert.alert('Permission Required', 'Camera permission is required to take photos.');
-          return;
-        }
-        result = await ImagePicker.launchCameraAsync({
-          mediaTypes: ['images'],
-          quality: 0.8,
-          base64: true,
-        });
-      } else {
-        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!permission.granted) {
-          Alert.alert('Permission Required', 'Photo library permission is required.');
-          return;
-        }
-        result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ['images'],
-          quality: 0.8,
-          base64: true,
-        });
-      }
-
-      if (!result.canceled && result.assets && result.assets[0]) {
-        const asset = result.assets[0];
-        setSelectedImage(asset.uri);
-        setExtractedText(null);
-        setError(null);
-        await processImage(asset.uri, asset.base64 || undefined);
-      }
-    } catch (err) {
-      console.error('Error picking image:', err);
-      setError('Failed to pick image. Please try again.');
-      Alert.alert('Error', 'Failed to pick image. Please try again.');
-    }
-  }, []);
-
   const getImageBase64 = useCallback(async (uri: string): Promise<string | null> => {
     try {
       if (Platform.OS === 'web') {
@@ -222,6 +179,49 @@ ${originalText}`,
       setProcessingStep('');
     }
   }, [getImageBase64]);
+
+  const pickImage = useCallback(async (useCamera: boolean) => {
+    try {
+      setError(null);
+      let result: ImagePicker.ImagePickerResult;
+
+      if (useCamera) {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) {
+          Alert.alert('Permission Required', 'Camera permission is required to take photos.');
+          return;
+        }
+        result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ['images'],
+          quality: 0.8,
+          base64: true,
+        });
+      } else {
+        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!permission.granted) {
+          Alert.alert('Permission Required', 'Photo library permission is required.');
+          return;
+        }
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          quality: 0.8,
+          base64: true,
+        });
+      }
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const asset = result.assets[0];
+        setSelectedImage(asset.uri);
+        setExtractedText(null);
+        setError(null);
+        await processImage(asset.uri, asset.base64 || undefined);
+      }
+    } catch (err) {
+      console.error('Error picking image:', err);
+      setError('Failed to pick image. Please try again.');
+      Alert.alert('Error', 'Failed to pick image. Please try again.');
+    }
+  }, [processImage]);
 
   const retryProcessing = useCallback(async () => {
     if (selectedImage) {
