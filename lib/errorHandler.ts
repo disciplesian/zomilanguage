@@ -1,6 +1,7 @@
+import { Platform, Dimensions } from 'react-native';
+
 const getPlatformOS = (): string => {
   try {
-    const { Platform } = require('react-native');
     return Platform?.OS || 'unknown';
   } catch {
     return 'unknown';
@@ -94,7 +95,6 @@ export const isWeb = (): boolean => getPlatformOS() === 'web';
 
 export const getSafeDimensions = (): { width: number; height: number } => {
   try {
-    const { Dimensions } = require('react-native');
     const { width, height } = Dimensions.get('window');
     return { width: width || 375, height: height || 812 };
   } catch {

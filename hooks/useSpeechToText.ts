@@ -1,13 +1,12 @@
 import { Audio } from 'expo-av';
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { Alert } from 'react-native';
+import { Alert, Platform } from 'react-native';
 import { isMacCatalyst as detectMacCatalyst } from '@/lib/errorHandler';
 
 const STT_API_URL = 'https://toolkit.rork.com/stt/transcribe/';
 
 const getUseWebRecording = (): boolean => {
   try {
-    const { Platform } = require('react-native');
     const isMacCatalystDetected = detectMacCatalyst();
     return Platform?.OS === 'web' || isMacCatalystDetected;
   } catch {

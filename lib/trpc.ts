@@ -2,10 +2,10 @@ import { createTRPCReact } from "@trpc/react-query";
 import { httpLink } from "@trpc/client";
 import type { AppRouter } from "@/backend/trpc/app-router";
 import superjson from "superjson";
+import { Platform } from "react-native";
 
 const getPlatformOS = (): string => {
   try {
-    const { Platform } = require('react-native');
     return Platform?.OS || 'unknown';
   } catch {
     return 'unknown';

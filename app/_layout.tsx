@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import React, { useEffect, useState, useRef, useMemo } from "react";
 import { StatusBar } from "expo-status-bar";
-import { View, ActivityIndicator, StyleSheet } from "react-native";
+import { View, ActivityIndicator, StyleSheet, Platform } from "react-native";
 import Colors from "@/constants/colors";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
@@ -11,7 +11,6 @@ import { trpc, getTrpcClient } from "@/lib/trpc";
 
 const getPlatformOS = (): string => {
   try {
-    const { Platform } = require('react-native');
     return Platform?.OS || 'unknown';
   } catch {
     return 'unknown';

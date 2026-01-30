@@ -1,10 +1,10 @@
 import { Audio } from 'expo-av';
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { Platform } from 'react-native';
 import { isMacCatalyst as detectMacCatalyst } from '@/lib/errorHandler';
 
 const getUseWebTTS = (): boolean => {
   try {
-    const { Platform } = require('react-native');
     const isMacCatalystDetected = detectMacCatalyst();
     return Platform?.OS === 'web' || isMacCatalystDetected;
   } catch {
