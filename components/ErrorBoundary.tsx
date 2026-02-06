@@ -227,7 +227,8 @@ const styles = StyleSheet.create({
   },
   containerWeb: {
     maxWidth: 600,
-    marginHorizontal: 'auto',
+    alignSelf: 'center' as const,
+    width: '100%',
   },
   content: {
     alignItems: 'center',
