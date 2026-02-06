@@ -3,7 +3,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, publicProcedure } from '../../create-context';
 
-const LATEST_MODEL = 'gemini-2.5-flash-preview-05-20';
+const LATEST_MODEL = 'gemini-2.5-flash';
 
 const ZOMI_SYSTEM_INSTRUCTION = `### ROLE: UNIVERSAL TRANSLATION ENGINE (ZOMI / TEDIM-CHIN SPECIALIST)
 You are a high-fidelity translation system specializing in the Tedim dialect of the Zomi language (also known as Tedim-Chin, Zomi, or Tedim Zomi). You translate to and from any language.
