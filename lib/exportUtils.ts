@@ -42,33 +42,43 @@ export async function exportTranslation(
       return downloadOnWeb(formattedText, format);
     }
 
-    // Native file sharing
+    // Native: try file sharing, with safe fallback
     try {
-      const { File, Paths } = await import('expo-file-system');
+      let fileUri: string | null = null;
       const extension = format === 'json' ? 'json' : 'txt';
       const fileName = `translation_${Date.now()}.${extension}`;
-      const file = new File(Paths.cache, fileName);
-      file.create({ overwrite: true });
-      file.write(formattedText);
 
-      let canShare = false;
       try {
-        canShare = await Sharing.isAvailableAsync();
-      } catch {
-        canShare = false;
-      }
-      
-      if (canShare) {
-        await Sharing.shareAsync(file.uri, {
-          mimeType: format === 'json' ? 'application/json' : 'text/plain',
-          dialogTitle: 'Export Translation',
-        });
-      } else {
-        // Fallback to clipboard if sharing not available
-        await Clipboard.setStringAsync(formattedText);
-        Alert.alert('Copied!', 'Translation copied to clipboard.');
+        const fsModule = await import('expo-file-system');
+        if (fsModule?.File && fsModule?.Paths?.cache) {
+          const file = new fsModule.File(fsModule.Paths.cache, fileName);
+          file.create({ overwrite: true });
+          file.write(formattedText);
+          fileUri = file.uri;
+        }
+      } catch (fsError) {
+        console.warn('expo-file-system not available, falling back:', fsError);
       }
 
+      if (fileUri) {
+        let canShare = false;
+        try {
+          canShare = await Sharing.isAvailableAsync();
+        } catch {
+          canShare = false;
+        }
+
+        if (canShare) {
+          await Sharing.shareAsync(fileUri, {
+            mimeType: format === 'json' ? 'application/json' : 'text/plain',
+            dialogTitle: 'Export Translation',
+          });
+          return true;
+        }
+      }
+
+      await Clipboard.setStringAsync(formattedText);
+      Alert.alert('Copied!', 'Translation copied to clipboard.');
       return true;
     } catch (fileError) {
       console.warn('File export error, falling back to clipboard:', fileError);
