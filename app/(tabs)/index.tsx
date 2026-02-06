@@ -191,44 +191,68 @@ export default function TranslatorScreen() {
       
       let prompt = '';
       if (sourceLanguage === 'zomi' && targetLanguage === 'english') {
-        prompt = `Tedim Zomi to English. Direct translation only.
+        prompt = `Tedim Zomi to English. Direct translation only. Use Tedim dialect knowledge.
 
 KEY VOCABULARY:
+- "Lungdam" = Thank you (happy heart)
+- "Pasian" = God
+- "Innkuan" = Family
+- "Nasep" = Work
+- "Hoih" = Good/Beautiful
+- "Hat" = Strong
 - "Mai kum" = Next year
 - "Kum bangzah" = How old
 - "ciang" = yet/still/afterward
 - "bang" = what
 - "sep" = do/work
 - "sawm" = want/plan
-- "na" = you
+- "na" = you, "ka" = I/my, "a" = he/she
 - "hiam/maw" = question marker
-- "ding" = will/future
+- "ding" = will/future, "zo" = past, "lai" = progressive
+- "kei/lo" = negation
 
 EXAMPLES:
+- "An kidah?" = "How are you?"
+- "Ka dam e" = "I am fine"
+- "Lungdam mahmah" = "Thank you very much"
 - "Mai kum ciang bang sep sawm na?" = "What are you planning to do next year?"
 - "Na kum bangzah hiam?" = "How old are you?"
+- "Ka dam kei" = "I am not well"
 
 Translate: "${text.trim()}"
 
 Output ONLY the English translation:`;
       } else {
-        prompt = `English to Tedim Zomi. Direct translation only.
+        prompt = `English to Tedim Zomi (Tedim dialect ONLY). Direct translation only.
+Do NOT use Paite, Mizo, Hakha Chin, or Falam vocabulary.
 
 KEY VOCABULARY:
+- Thank you = "Lungdam"
+- God = "Pasian"
+- Family = "Innkuan"
+- Work = "Nasep"
+- Good/Beautiful = "Hoih"
+- Strong = "Hat"
 - Next year = "Mai kum"
 - How old = "Kum bangzah"
 - What = "bang"
 - Do/work = "sep"
 - Want/plan = "sawm"
-- You = "na"
-- Question = "hiam/maw"
-- Will/future = "ding"
+- I/my = "ka", You/your = "na", He/she = "a"
+- Question markers = "hiam", "maw", "ze", "ve"
+- Will/future = "ding", Past = "zo", Progressive = "lai"
+- Negation = verb + "kei" or "lo"
+- Polite request = "ve aw"
 
 GRAMMAR: SOV word order (Subject-Object-Verb)
 
 EXAMPLES:
+- "How are you?" = "An kidah?"
+- "I am fine" = "Ka dam e"
+- "Thank you very much" = "Lungdam mahmah"
 - "What are you planning to do next year?" = "Mai kum ciang bang sep sawm na?"
 - "How old are you?" = "Na kum bangzah hiam?"
+- "I am not well" = "Ka dam kei"
 
 Translate: "${text.trim()}"
 
@@ -519,7 +543,7 @@ Output ONLY the Zomi translation:`;
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: false,
         quality: 0.8,
         base64: true,
@@ -549,7 +573,7 @@ Output ONLY the Zomi translation:`;
       }
 
       const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: false,
         quality: 0.8,
         base64: true,
