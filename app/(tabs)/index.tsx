@@ -31,6 +31,7 @@ import {
   Download,
   Share as ShareIcon,
   FileDown,
+  BookOpen,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
@@ -41,6 +42,7 @@ import { trpc } from '@/lib/trpc';
 
 
 import GlassCard from '@/components/GlassCard';
+import { useDictionary } from '@/contexts/DictionaryContext';
 
 import Colors from '@/constants/colors';
 
@@ -49,6 +51,7 @@ import { useSpeechToText } from '@/hooks/useSpeechToText';
 import { exportTranslation, ExportFormat, TranslationData } from '@/lib/exportUtils';
 
 export default function TranslatorScreen() {
+  const { triggerSearch } = useDictionary();
   const [inputText, setInputText] = useState('');
   const [outputText, setOutputText] = useState('');
   const [isZomiToEnglish, setIsZomiToEnglish] = useState(true);
@@ -981,6 +984,24 @@ Output ONLY the Tedim Zomi (CTD) translation:`;
             )}
           </GlassCard>
 
+          {outputText && !isTranslating && !outputText.startsWith('Translation') && !outputText.startsWith('Service') && !outputText.startsWith('Error:') && !outputText.startsWith('Network') && !outputText.startsWith('API') && (
+            <TouchableOpacity
+              style={styles.lookupDictBtn}
+              onPress={() => {
+                const lookupText = isZomiToEnglish ? outputText.trim() : inputText.trim();
+                if (lookupText) {
+                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  triggerSearch(lookupText);
+                  router.push('/(tabs)/dictionary' as any);
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <BookOpen size={16} color="#00D9FF" />
+              <Text style={styles.lookupDictText}>Look up in Dictionary</Text>
+            </TouchableOpacity>
+          )}
+
           
         </Animated.View>
       </ScrollView>
@@ -1326,5 +1347,22 @@ const styles = StyleSheet.create({
     color: Colors.warning,
     fontWeight: '500',
     flex: 1,
+  },
+  lookupDictBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    backgroundColor: 'rgba(0, 217, 255, 0.1)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 217, 255, 0.25)',
+    marginBottom: 16,
+  },
+  lookupDictText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#00D9FF',
   },
 });

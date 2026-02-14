@@ -146,7 +146,11 @@ export interface DictionaryEntry {
   [key: string]: unknown;
   id: string;
   english: string;
+  englishNormalized: string;
   zomi: string;
+  pos?: string;
+  explanation?: string;
+  usageExample?: string;
   synonyms?: string[];
   antonyms?: string[];
   usageExamples?: string[];
@@ -155,8 +159,57 @@ export interface DictionaryEntry {
   example?: string;
   category?: string;
   relatedWords?: string[];
+  status: 'draft' | 'published' | 'archived';
+  sourceType: 'imported' | 'admin' | 'community';
   createdAt: string;
   updatedAt: string;
   createdBy?: string;
   isApproved: boolean;
+}
+
+export interface DictionaryVariant {
+  [key: string]: unknown;
+  id: string;
+  entryId: string;
+  zomiVariant: string;
+  explanationVariant?: string;
+  usageExampleVariant?: string;
+  sortOrder: number;
+}
+
+export interface DictionarySuggestion {
+  [key: string]: unknown;
+  id: string;
+  entryId?: string;
+  suggestionType: 'edit_entry' | 'add_entry' | 'add_variant' | 'report_issue';
+  proposedChanges: {
+    english?: string;
+    pos?: string;
+    zomi?: string;
+    explanation?: string;
+    usageExample?: string;
+    reportReason?: string;
+  };
+  status: 'submitted' | 'under_review' | 'approved' | 'rejected';
+  submittedBy: string;
+  reviewedBy?: string;
+  reviewNote?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DictionaryImportJob {
+  [key: string]: unknown;
+  id: string;
+  fileName: string;
+  fileType: 'csv' | 'xlsx';
+  mode: 'add_only' | 'update_only' | 'upsert';
+  totalRows: number;
+  insertedCount: number;
+  updatedCount: number;
+  skippedCount: number;
+  errorCount: number;
+  status: 'queued' | 'processing' | 'completed' | 'failed';
+  createdBy: string;
+  createdAt: string;
 }
