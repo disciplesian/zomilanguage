@@ -275,20 +275,20 @@ Generate 5-10 useful flashcards based on the input.`,
 
     setIsTranslatingDocument(true);
     try {
-      const sourceLanguage = translationDirection === 'en-zomi' ? 'English' : 'Zomi';
-      const targetLanguage = translationDirection === 'en-zomi' ? 'Zomi' : 'English';
+      const sourceLanguage = translationDirection === 'en-zomi' ? 'English' : 'Tedim Zomi (CTD)';
+      const targetLanguage = translationDirection === 'en-zomi' ? 'Tedim Zomi (CTD)' : 'English';
       
       const result = await generateText({
         messages: [
           {
             role: 'user',
-            content: `You are an expert Tedim Zomi linguist and translator.
+            content: `You are an expert Tedim Zomi (ISO 639-3: ctd) linguist and translator.
 
 Task: Translate the following text from ${sourceLanguage} to ${targetLanguage}.
 
-**CRITICAL RULES:**
-- Use ONLY Tedim dialect (ISO 639-3: ctd) vocabulary and grammar.
-- DO NOT use words from Paite, Mizo, Hakha, or Falam.
+**ABSOLUTE DIALECT RULE:**
+- Use EXCLUSIVELY the Tedim (CTD) dialect vocabulary and grammar.
+- NEVER use words from Paite, Mizo (Lushai), Hakha Chin, Falam Chin, or any other Kuki-Chin dialect.
 - Preserve the original formatting, paragraphs, and structure as much as possible.
 - Return ONLY the translation, nothing else.
 

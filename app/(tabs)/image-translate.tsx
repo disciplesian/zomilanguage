@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { Stack } from 'expo-router';
 import { Camera, ImageIcon, Sparkles, Languages, Copy, RefreshCw } from 'lucide-react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+
 import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
 import { generateText } from '@rork-ai/toolkit-sdk';
@@ -137,21 +137,33 @@ INSTRUCTIONS:
         messages: [
           {
             role: 'user',
-            content: `You are an expert Tedim Zomi linguist and translator.
+            content: `You are an expert Tedim Zomi (ISO 639-3: ctd) linguist and translator.
 
-TASK: Translate the following text to Zomi (Tedim dialect).
+TASK: Translate the following text using EXCLUSIVELY the Tedim (CTD) dialect.
+
+CRITICAL DIALECT RULE:
+- Use ONLY Tedim (CTD) vocabulary, grammar, and phonology.
+- NEVER use words from Paite, Mizo (Lushai), Hakha Chin, Falam Chin, or any other Kuki-Chin language.
 
 RULES:
-1. If text is already in Zomi, translate it to English
-2. If text is in English or another language, translate to Zomi (Tedim dialect)
-3. Use ONLY authentic Tedim dialect vocabulary:
-   - "Lungdam" for Thank you
-   - "Pasian" for God
-   - "Kham" for suffering
-   - "Nung" for heart/mind
-4. DO NOT use Paite, Mizo, Hakha, or Falam vocabulary
-5. Follow Tedim grammar: Subject-Object-Verb order
-6. Use proper negation: verb + "kei" or "lo"
+1. If text is already in Tedim Zomi (CTD), translate it to English
+2. If text is in English or another language, translate to Tedim Zomi (CTD)
+3. Use ONLY authentic Tedim CTD vocabulary:
+   - "Lungdam" = Thank you
+   - "Pasian" = God
+   - "Kham" = suffering
+   - "Nung" = heart/mind
+   - "Innkuan" = family
+   - "Nasep" = work
+   - "Hoih" = good/beautiful
+   - "Hat" = strong
+   - "Dam" = well/healthy
+   - "Pai" = go, "Hong" = come
+   - "Ne" = eat, "Thei" = know
+   - "It" = love, "Lau" = fear
+4. Follow Tedim grammar: SOV (Subject-Object-Verb) order
+5. Use proper negation: verb + "kei" or "lo"
+6. Pronouns: ka (I/my), na (you/your), a (he/she), kan (we), nan (you all), an (they)
 7. Return ONLY the translation, no explanations
 
 TEXT TO TRANSLATE:
@@ -249,7 +261,7 @@ ${originalText}`,
   }, []);
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={styles.container}>
       <Stack.Screen
         options={{
           headerShown: true,
@@ -260,7 +272,7 @@ ${originalText}`,
         }}
       />
 
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {!selectedImage ? (
           <View style={styles.emptyState}>
             <View style={styles.iconContainer}>
@@ -399,7 +411,7 @@ ${originalText}`,
           </View>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 

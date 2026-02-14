@@ -191,21 +191,36 @@ export default function TranslatorScreen() {
       
       let prompt = '';
       if (sourceLanguage === 'zomi' && targetLanguage === 'english') {
-        prompt = `Tedim Zomi to English. Direct translation only. Use Tedim dialect knowledge.
+        prompt = `You are a Tedim Zomi (ISO 639-3: ctd) to English translator.
+Use EXCLUSIVELY the Tedim (CTD) dialect. No other Zomi dialect.
+Direct translation only.
 
-KEY VOCABULARY:
+TEDIM CTD VOCABULARY:
 - "Lungdam" = Thank you (happy heart)
 - "Pasian" = God
 - "Innkuan" = Family
 - "Nasep" = Work
 - "Hoih" = Good/Beautiful
 - "Hat" = Strong
+- "Dam" = Well/Healthy
+- "Pai" = Go
+- "Hong" = Come
+- "Ne" = Eat
+- "Thei" = Know
+- "Gen" = Say/Tell
+- "Mu" = See
+- "Za" = Hear
+- "It" = Love
+- "Om" = Exist/Stay
+- "Nei" = Have/Possess
+- "Pia" = Give
+- "Sem/Sep" = Do/Work
+- "Zil" = Learn
+- "Hilh" = Teach
 - "Mai kum" = Next year
 - "Kum bangzah" = How old
 - "ciang" = yet/still/afterward
 - "bang" = what
-- "sep" = do/work
-- "sawm" = want/plan
 - "na" = you, "ka" = I/my, "a" = he/she
 - "hiam/maw" = question marker
 - "ding" = will/future, "zo" = past, "lai" = progressive
@@ -218,31 +233,48 @@ EXAMPLES:
 - "Mai kum ciang bang sep sawm na?" = "What are you planning to do next year?"
 - "Na kum bangzah hiam?" = "How old are you?"
 - "Ka dam kei" = "I am not well"
+- "Pasian in nang hong it hi" = "God loves you"
+- "Ka innkuan dam uh" = "My family is well"
 
 Translate: "${text.trim()}"
 
 Output ONLY the English translation:`;
       } else {
-        prompt = `English to Tedim Zomi (Tedim dialect ONLY). Direct translation only.
-Do NOT use Paite, Mizo, Hakha Chin, or Falam vocabulary.
+        prompt = `You are an English to Tedim Zomi (ISO 639-3: ctd) translator.
+Use EXCLUSIVELY the Tedim (CTD) dialect. NEVER use Paite, Mizo, Hakha Chin, Falam, or any other dialect.
 
-KEY VOCABULARY:
+TEDIM CTD VOCABULARY:
 - Thank you = "Lungdam"
 - God = "Pasian"
 - Family = "Innkuan"
 - Work = "Nasep"
 - Good/Beautiful = "Hoih"
 - Strong = "Hat"
+- Well/Healthy = "Dam"
+- Go = "Pai"
+- Come = "Hong"
+- Eat = "Ne"
+- Know = "Thei"
+- Say/Tell = "Gen"
+- See = "Mu"
+- Hear = "Za"
+- Love = "It"
+- Exist/Stay = "Om"
+- Have/Possess = "Nei"
+- Give = "Pia"
+- Do/Work = "Sem/Sep"
+- Learn = "Zil"
+- Teach = "Hilh"
 - Next year = "Mai kum"
 - How old = "Kum bangzah"
 - What = "bang"
-- Do/work = "sep"
-- Want/plan = "sawm"
 - I/my = "ka", You/your = "na", He/she = "a"
+- We/our = "kan", You all = "nan", They = "an"
 - Question markers = "hiam", "maw", "ze", "ve"
 - Will/future = "ding", Past = "zo", Progressive = "lai"
 - Negation = verb + "kei" or "lo"
 - Polite request = "ve aw"
+- This = "hi", That = "tua"
 
 GRAMMAR: SOV word order (Subject-Object-Verb)
 
@@ -253,10 +285,12 @@ EXAMPLES:
 - "What are you planning to do next year?" = "Mai kum ciang bang sep sawm na?"
 - "How old are you?" = "Na kum bangzah hiam?"
 - "I am not well" = "Ka dam kei"
+- "God loves you" = "Pasian in nang hong it hi"
+- "My family is well" = "Ka innkuan dam uh"
 
 Translate: "${text.trim()}"
 
-Output ONLY the Zomi translation:`;
+Output ONLY the Tedim Zomi (CTD) translation:`;
       }
 
       const fallbackResult = await generateText({ messages: [{ role: 'user', content: prompt }] });
