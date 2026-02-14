@@ -847,7 +847,6 @@ ${processedDocument.extractedText}`,
               <Text style={styles.tipsTitle}>Pro Tips</Text>
             </View>
             <View style={styles.tipsList}>
-
               <Text style={styles.tipItem}>• Compare translations to find the most accurate version</Text>
               <Text style={styles.tipItem}>• Generate flashcards to improve vocabulary retention</Text>
               <Text style={styles.tipItem}>• Text statistics help analyze writing complexity</Text>

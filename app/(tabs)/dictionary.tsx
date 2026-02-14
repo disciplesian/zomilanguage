@@ -25,6 +25,7 @@ import {
   Sparkles,
   Heart,
   TrendingUp,
+  Upload,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -110,6 +111,14 @@ export default function DictionaryScreen() {
     return [];
   }, [debouncedQuery, suggestionsQuery.data, searchResultsQuery.data]);
 
+  const autoSuggestions = useMemo(() => {
+    if (searchQuery.length < 1 || !isSearchFocused) return [];
+    if (debouncedQuery.length >= 1 && suggestionsQuery.data) {
+      return (suggestionsQuery.data as SuggestionItem[]).slice(0, 5);
+    }
+    return [];
+  }, [searchQuery, isSearchFocused, debouncedQuery, suggestionsQuery.data]);
+
   const isSearching = suggestionsQuery.isFetching || searchResultsQuery.isFetching;
 
   const handleSelectEntry = useCallback((entry: SuggestionItem) => {
@@ -170,6 +179,7 @@ export default function DictionaryScreen() {
   ), [handleSelectEntry]);
 
   const showResults = debouncedQuery.length >= 1 && isSearchFocused;
+  const showAutoSuggest = searchQuery.length >= 1 && isSearchFocused && autoSuggestions.length > 0 && !showResults;
 
   return (
     <View style={styles.container}>
@@ -213,6 +223,13 @@ export default function DictionaryScreen() {
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.headerBtn}
+                  onPress={() => router.push('/dictionary-import' as any)}
+                  testID="dict-import-btn"
+                >
+                  <Upload size={18} color={Colors.accent} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.headerBtn}
                   onPress={() => router.push('/dictionary-suggest?type=add_entry' as any)}
                   testID="dict-add-btn"
                 >
@@ -250,6 +267,30 @@ export default function DictionaryScreen() {
             )}
           </View>
         </View>
+
+        {searchQuery.length >= 1 && isSearchFocused && autoSuggestions.length > 0 && debouncedQuery.length < 1 ? (
+          <View style={styles.autoSuggestContainer}>
+            {autoSuggestions.map((item) => (
+              <TouchableOpacity
+                key={item.id}
+                style={styles.autoSuggestItem}
+                onPress={() => handleSelectEntry(item)}
+                activeOpacity={0.7}
+              >
+                <Search size={14} color={Colors.textMuted} />
+                <View style={styles.autoSuggestText}>
+                  <Text style={styles.autoSuggestEnglish} numberOfLines={1}>{item.english}</Text>
+                  <Text style={styles.autoSuggestZomi} numberOfLines={1}>{item.zomi}</Text>
+                </View>
+                {item.pos ? (
+                  <View style={[styles.autoSuggestPos, { backgroundColor: getPosBadgeColor(item.pos) + '20' }]}>
+                    <Text style={[styles.autoSuggestPosText, { color: getPosBadgeColor(item.pos) }]}>{item.pos}</Text>
+                  </View>
+                ) : null}
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : null}
 
         {showResults ? (
           <View style={styles.resultsContainer}>
@@ -738,5 +779,43 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600' as const,
     color: Colors.textSecondary,
+  },
+  autoSuggestContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+  },
+  autoSuggestItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 10,
+    marginBottom: 4,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
+  autoSuggestText: {
+    flex: 1,
+  },
+  autoSuggestEnglish: {
+    fontSize: 14,
+    fontWeight: '500' as const,
+    color: Colors.text,
+  },
+  autoSuggestZomi: {
+    fontSize: 12,
+    color: '#00D9FF',
+    marginTop: 1,
+  },
+  autoSuggestPos: {
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 3,
+  },
+  autoSuggestPosText: {
+    fontSize: 9,
+    fontWeight: '600' as const,
   },
 });

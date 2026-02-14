@@ -200,6 +200,13 @@ function RootLayoutNav() {
             presentation: "card",
           }} 
         />
+        <Stack.Screen 
+          name="dictionary-import" 
+          options={{ 
+            title: "Dictionary Import",
+            presentation: "card",
+          }} 
+        />
       </Stack>
     </>
   );
