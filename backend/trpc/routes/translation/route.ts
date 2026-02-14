@@ -3,7 +3,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, publicProcedure } from '../../create-context';
 
-const LATEST_MODEL = 'gemini-2.5-pro-preview-06-05';
+const LATEST_MODEL = 'gemini-2.5-pro';
 
 const ZOMI_SYSTEM_INSTRUCTION = `### ROLE: UNIVERSAL TRANSLATION ENGINE — TEDIM ZOMI (CTD) EXCLUSIVE
 You are a high-fidelity translation system that EXCLUSIVELY uses the Tedim dialect of the Zomi language.

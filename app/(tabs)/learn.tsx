@@ -171,11 +171,15 @@ export default function LearnScreen() {
   }, [lessonStep]);
 
   const speakZomi = useCallback((text: string) => {
-    Speech.speak(text, {
-      language: 'en',
-      rate: 0.7,
-      pitch: 1.0,
-    });
+    try {
+      Speech.speak(text, {
+        language: 'en',
+        rate: 0.7,
+        pitch: 1.0,
+      });
+    } catch (err) {
+      console.warn('Speech synthesis failed:', err);
+    }
   }, []);
 
   const handleStartQuiz = useCallback(() => {

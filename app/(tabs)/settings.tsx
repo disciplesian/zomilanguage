@@ -173,7 +173,7 @@ export default function SettingsScreen() {
           </View>
 
           <View style={styles.footer}>
-            <Text style={[styles.footerText, { color: colors.textSecondary }]}>Zomi Translator v2.3.0</Text>
+            <Text style={[styles.footerText, { color: colors.textSecondary }]}>Zomi Translator v2.4.0</Text>
             <Text style={[styles.footerSubtext, { color: colors.textMuted }]}>© 2026 Zomi Language & Literature Resource Center</Text>
           </View>
         </Animated.View>
