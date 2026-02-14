@@ -1,13 +1,25 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
-import React, { useEffect, useState, useRef, useMemo } from "react";
+import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { StatusBar } from "expo-status-bar";
-import { View, ActivityIndicator, StyleSheet, Platform } from "react-native";
+import { View, ActivityIndicator, StyleSheet, Platform, LogBox, Text } from "react-native";
 import Colors from "@/constants/colors";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
 import { UserProfileProvider } from "@/contexts/UserProfileContext";
 import { trpc, getTrpcClient } from "@/lib/trpc";
+
+if (Platform.OS !== 'web') {
+  try {
+    LogBox.ignoreLogs([
+      'Non-serializable values were found in the navigation state',
+      'ViewPropTypes will be removed',
+      'ColorPropType will be removed',
+    ]);
+  } catch {
+    // LogBox not available
+  }
+}
 
 const getPlatformOS = (): string => {
   try {
@@ -52,6 +64,47 @@ const preventSplashAutoHide = async () => {
   }
 };
 
+const setupGlobalErrorHandlers = () => {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    const originalOnError = window.onerror;
+    window.onerror = (message, source, lineno, colno, error) => {
+      console.error('[Global] Uncaught error:', { message, source, lineno, colno });
+      if (originalOnError) {
+        return originalOnError(message, source, lineno, colno, error);
+      }
+      return false;
+    };
+
+    const originalOnUnhandled = window.onunhandledrejection;
+    window.onunhandledrejection = (event) => {
+      console.error('[Global] Unhandled promise rejection:', event?.reason);
+      if (originalOnUnhandled) {
+        return (originalOnUnhandled as any).call(window, event);
+      }
+    };
+  }
+
+  const originalConsoleError = console.error;
+  console.error = (...args: any[]) => {
+    const message = args[0]?.toString?.() || '';
+    if (
+      message.includes('TurboModule') ||
+      message.includes('NativeModule') ||
+      message.includes('Require cycle')
+    ) {
+      console.warn('[Suppressed]', ...args);
+      return;
+    }
+    originalConsoleError(...args);
+  };
+};
+
+try {
+  setupGlobalErrorHandlers();
+} catch {
+  // Silent fail for error handler setup
+}
+
 function RootLayoutNav() {
   const theme = useTheme();
   const colors = theme?.colors || Colors;
@@ -65,6 +118,7 @@ function RootLayoutNav() {
           headerStyle: { backgroundColor: colors.background },
           headerTintColor: colors.text,
           headerTitleStyle: { fontWeight: '600' as const },
+          animation: Platform.OS === 'android' ? 'fade_from_bottom' : 'default',
         }}
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -142,9 +196,14 @@ export default function RootLayout() {
           queries: {
             staleTime: 1000 * 60 * 5,
             gcTime: 1000 * 60 * 30,
-            retry: 1,
-            retryDelay: 1000,
+            retry: (failureCount, error) => {
+              if ((error as any)?.status === 404) return false;
+              if ((error as any)?.status === 401) return false;
+              return failureCount < 2;
+            },
+            retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
             networkMode: 'offlineFirst',
+            refetchOnWindowFocus: Platform.OS === 'web',
           },
           mutations: {
             retry: 1,
@@ -200,10 +259,15 @@ export default function RootLayout() {
     });
   }, []);
 
+  const handleBoundaryError = useCallback((error: Error) => {
+    console.error('[RootLayout] ErrorBoundary caught:', error?.message);
+  }, []);
+
   if (!isReady) {
     return (
-      <View style={fallbackStyles.container}>
+      <View style={fallbackStyles.container} accessibilityLabel="Loading application">
         <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={fallbackStyles.loadingText}>Loading...</Text>
       </View>
     );
   }
@@ -214,7 +278,7 @@ export default function RootLayout() {
 
   return (
     <View style={fallbackStyles.flex}>
-      <ErrorBoundary>
+      <ErrorBoundary level="root" onError={handleBoundaryError}>
         <trpc.Provider client={trpcClient} queryClient={queryClient}>
           <QueryClientProvider client={queryClient}>
             <ThemeProvider>
@@ -236,6 +300,11 @@ const fallbackStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
+  },
+  loadingText: {
+    color: Colors.textMuted,
+    fontSize: 14,
+    marginTop: 12,
   },
   flex: {
     flex: 1,

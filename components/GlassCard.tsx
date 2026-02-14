@@ -9,6 +9,8 @@ interface GlassCardProps {
   variant?: 'default' | 'cyan' | 'pink' | 'yellow' | 'purple' | 'green';
   glow?: boolean;
   elevated?: boolean;
+  testID?: string;
+  accessibilityLabel?: string;
 }
 
 export default function GlassCard({ 
@@ -17,6 +19,8 @@ export default function GlassCard({
   variant = 'default',
   glow = false,
   elevated = false,
+  testID,
+  accessibilityLabel,
 }: GlassCardProps) {
   const getGradientColors = (): [string, string] => {
     switch (variant) {
@@ -70,6 +74,25 @@ export default function GlassCard({
   };
 
   const getShadowStyle = (): ViewStyle => {
+    if (Platform.OS === 'web') {
+      if (elevated) {
+        return {
+          shadowColor: getGlowColor(),
+          shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: 0.4,
+          shadowRadius: 20,
+        } as ViewStyle;
+      }
+      if (glow) {
+        return {
+          shadowColor: getGlowColor(),
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.3,
+          shadowRadius: 12,
+        } as ViewStyle;
+      }
+      return {};
+    }
     if (Platform.OS === 'ios') {
       if (elevated) {
         return {
@@ -100,7 +123,11 @@ export default function GlassCard({
   };
 
   return (
-    <View style={[styles.container, getShadowStyle(), style]}>
+    <View 
+      style={[styles.container, getShadowStyle(), style]}
+      testID={testID}
+      accessibilityLabel={accessibilityLabel}
+    >
       <LinearGradient
         colors={getGradientColors()}
         start={{ x: 0, y: 0 }}

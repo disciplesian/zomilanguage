@@ -23,6 +23,9 @@ interface GlassButtonProps {
   icon?: React.ReactNode;
   size?: 'small' | 'medium' | 'large';
   fullWidth?: boolean;
+  testID?: string;
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
 }
 
 export default function GlassButton({ 
@@ -36,6 +39,9 @@ export default function GlassButton({
   icon,
   size = 'medium',
   fullWidth = false,
+  testID,
+  accessibilityLabel,
+  accessibilityHint,
 }: GlassButtonProps) {
   const getGradientColors = (): [string, string] => {
     switch (variant) {
@@ -123,6 +129,14 @@ export default function GlassButton({
   };
 
   const getShadowStyle = (): ViewStyle => {
+    if (Platform.OS === 'web') {
+      return {
+        shadowColor: getGlowColor(),
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.35,
+        shadowRadius: 10,
+      } as ViewStyle;
+    }
     if (Platform.OS === 'ios') {
       return {
         shadowColor: getGlowColor(),
@@ -144,6 +158,11 @@ export default function GlassButton({
       onPress={onPress}
       disabled={disabled || loading}
       activeOpacity={0.8}
+      testID={testID}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel || title}
+      accessibilityHint={accessibilityHint}
+      accessibilityState={{ disabled: disabled || loading }}
       style={[
         styles.container,
         getShadowStyle(),
