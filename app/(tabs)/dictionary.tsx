@@ -550,7 +550,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     color: Colors.text,
-    height: '100%',
+    paddingVertical: 0,
   },
   clearBtn: {
     padding: 4,
