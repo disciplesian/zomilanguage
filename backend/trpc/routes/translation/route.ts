@@ -3,7 +3,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, publicProcedure } from '../../create-context';
 
-const LATEST_MODEL = 'gemini-3-pro-preview';
+const LATEST_MODEL = 'gemini-2.5-pro-preview-05-06';
+const FALLBACK_MODEL = 'gemini-2.5-flash-preview-04-17';
 
 const ZOMI_SYSTEM_INSTRUCTION = `### ROLE: UNIVERSAL TRANSLATION ENGINE — TEDIM ZOMI (CTD) EXCLUSIVE
 You are a high-fidelity translation system that EXCLUSIVELY uses the Tedim dialect of the Zomi language.
@@ -86,42 +87,53 @@ export default createTRPCRouter({
 
       const genAI = new GoogleGenerativeAI(API_KEY);
       
-      try {
-        const model = genAI.getGenerativeModel({
-          model: LATEST_MODEL,
-          systemInstruction: ZOMI_SYSTEM_INSTRUCTION,
-        });
-
-        const targetLang = targetLanguage === 'zomi' ? 'Tedim Zomi (CTD, ISO 639-3: ctd)' : targetLanguage;
-        const prompt = `Translate the following text into ${targetLang}.
+      const targetLang = targetLanguage === 'zomi' ? 'Tedim Zomi (CTD, ISO 639-3: ctd)' : targetLanguage;
+      const prompt = `Translate the following text into ${targetLang}.
 Use EXCLUSIVELY the Tedim dialect (CTD). No other Zomi dialect is acceptable.
 Ensure the grammar of ${targetLang} is perfect.
 
 Text: "${text}"`;
 
-        const result = await model.generateContent({
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.1, // Maintains strict grammatical adherence
-            maxOutputTokens: 8192,
-            topP: 0.8,
-          },
-        });
+      const generationConfig = {
+        temperature: 0.1,
+        maxOutputTokens: 8192,
+        topP: 0.8,
+      };
 
-        const translatedText = result.response.text().trim();
+      const modelsToTry = [LATEST_MODEL, FALLBACK_MODEL];
+      let lastError: unknown = null;
 
-        return {
-          translatedText,
-          detectedSource: "Auto", // Model handles detection internally
-          model: LATEST_MODEL,
-        };
+      for (const modelName of modelsToTry) {
+        try {
+          console.log(`Translation: Trying model ${modelName}...`);
+          const model = genAI.getGenerativeModel({
+            model: modelName,
+            systemInstruction: ZOMI_SYSTEM_INSTRUCTION,
+          });
 
-      } catch (error) {
-        console.error('Translation Engine Error:', error);
-        throw new TRPCError({
-          code: 'SERVICE_UNAVAILABLE',
-          message: 'The translation engine is currently unavailable.',
-        });
+          const result = await model.generateContent({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig,
+          });
+
+          const translatedText = result.response.text().trim();
+          console.log(`Translation: Success with model ${modelName}`);
+
+          return {
+            translatedText,
+            detectedSource: "Auto",
+            model: modelName,
+          };
+        } catch (error) {
+          console.error(`Translation: Model ${modelName} failed:`, error);
+          lastError = error;
+        }
       }
+
+      console.error('Translation: All models failed. Last error:', lastError);
+      throw new TRPCError({
+        code: 'SERVICE_UNAVAILABLE',
+        message: 'The translation engine is currently unavailable. Please try again.',
+      });
     }),
 });

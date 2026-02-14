@@ -1040,7 +1040,7 @@ const styles = StyleSheet.create({
     color: '#00D9FF',
   },
   headerSubtitle: {
-    fontSize: 7,
+    fontSize: 13,
     color: Colors.textSecondary,
     marginTop: 2,
   },
