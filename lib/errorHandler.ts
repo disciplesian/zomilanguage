@@ -8,6 +8,21 @@ const getPlatformOS = (): string => {
   }
 };
 
+export const isTextNodeError = (error: any): boolean => {
+  if (!error) return false;
+  try {
+    const message = String(error?.message || '').toLowerCase();
+    return (
+      message.indexOf('unexpected text node') !== -1 ||
+      message.indexOf('text node cannot be a child') !== -1 ||
+      message.indexOf('text strings must be rendered') !== -1 ||
+      message.indexOf('rawtext') !== -1
+    );
+  } catch {
+    return false;
+  }
+};
+
 export const isNativeModuleError = (error: any): boolean => {
   if (!error) return false;
   try {

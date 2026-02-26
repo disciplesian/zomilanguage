@@ -111,24 +111,10 @@ export default function LearnScreen() {
         }),
       ]).start();
 
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.05,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-        ])
-      ).start();
     }, 50);
 
     return () => clearTimeout(timer);
-  }, [fadeAnim, progress, progressAnim, pulseAnim]);
+  }, [fadeAnim, progress, progressAnim]);
 
   const handleStartLesson = useCallback((lessonId: string) => {
     if (Platform.OS !== 'web') {

@@ -2,7 +2,7 @@ import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Platform, Dimensions, SafeAreaView, AppState, AppStateStatus } from 'react-native';
 import { AlertTriangle, RefreshCw, WifiOff, Home } from 'lucide-react-native';
 import Colors from '@/constants/colors';
-import { isNativeModuleError, isNetworkError, isRecoverableError, getUserFriendlyMessage } from '@/lib/errorHandler';
+import { isNativeModuleError, isNetworkError, isRecoverableError, isTextNodeError, getUserFriendlyMessage } from '@/lib/errorHandler';
 
 const getIsTablet = () => {
   try {
@@ -106,13 +106,17 @@ class ErrorBoundary extends Component<Props, State> {
       console.warn('ErrorBoundary: Native module error detected, attempting recovery');
       return { hasError: false, error: null, errorInfo: null };
     }
+    if (isTextNodeError(error)) {
+      console.warn('ErrorBoundary: Text node error suppressed:', error?.message);
+      return { hasError: false, error: null, errorInfo: null };
+    }
     
     return { hasError: true, error };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    if (isNativeModuleError(error)) {
-      console.warn('ErrorBoundary: Native module error caught, suppressing:', error?.message);
+    if (isNativeModuleError(error) || isTextNodeError(error)) {
+      console.warn('ErrorBoundary: Suppressed error:', error?.message);
       if (this.mounted) {
         this.setState({ hasError: false, error: null, errorInfo: null });
       }
@@ -185,7 +189,7 @@ class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
-      if (this.state.error && isNativeModuleError(this.state.error)) {
+      if (this.state.error && (isNativeModuleError(this.state.error) || isTextNodeError(this.state.error))) {
         return this.props.children;
       }
       
