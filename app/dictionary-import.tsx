@@ -94,10 +94,30 @@ export default function DictionaryImportScreen() {
     let startIndex = 0;
 
     const headerLower = headerLine.toLowerCase();
-    const hasHeader = headerLower.includes('english') || headerLower.includes('zomi') || headerLower.includes('pos');
+    const headerParts = headerLower.split(/[,\t]/).map(p => p.trim().replace(/^["']|["']$/g, ''));
+    const hasHeader = headerParts.some(h => 
+      h === 'english' || h === 'zomi' || h === 'pos' || 
+      h === 'explanation' || h.includes('usage') || h.includes('example')
+    );
+
+    let colMap = { english: 0, zomi: 1, pos: 2, explanation: 3, usageExample: 4 };
 
     if (hasHeader) {
       startIndex = 1;
+      const englishIdx = headerParts.findIndex(h => h === 'english' || h.includes('english'));
+      const zomiIdx = headerParts.findIndex(h => h === 'zomi' || h.includes('zomi') || h.includes('tedim'));
+      const posIdx = headerParts.findIndex(h => h === 'pos' || h.includes('part of speech') || h.includes('pos'));
+      const explanationIdx = headerParts.findIndex(h => h === 'explanation' || h.includes('definition') || h.includes('meaning'));
+      const usageIdx = headerParts.findIndex(h => h.includes('usage') || h.includes('example') || h.includes('sentence'));
+
+      colMap = {
+        english: englishIdx >= 0 ? englishIdx : 0,
+        zomi: zomiIdx >= 0 ? zomiIdx : (englishIdx === 0 ? 1 : 0),
+        pos: posIdx >= 0 ? posIdx : -1,
+        explanation: explanationIdx >= 0 ? explanationIdx : -1,
+        usageExample: usageIdx >= 0 ? usageIdx : -1,
+      };
+      console.log('[Import] Detected column mapping:', colMap, 'from headers:', headerParts);
     }
 
     for (let i = startIndex; i < lines.length; i++) {
@@ -111,16 +131,16 @@ export default function DictionaryImportScreen() {
           english: parts[0] || '',
           zomi: '',
           valid: false,
-          error: 'Missing Zomi translation (need at least 2 columns)',
+          error: 'Not enough columns (need at least 2)',
         });
         continue;
       }
 
-      const english = parts[0].trim();
-      const zomi = parts[1].trim();
-      const pos = parts[2]?.trim() || undefined;
-      const explanation = parts[3]?.trim() || undefined;
-      const usageExample = parts[4]?.trim() || undefined;
+      const english = (parts[colMap.english] || '').trim();
+      const zomi = (parts[colMap.zomi] || '').trim();
+      const pos = colMap.pos >= 0 ? (parts[colMap.pos] || '').trim() || undefined : undefined;
+      const explanation = colMap.explanation >= 0 ? (parts[colMap.explanation] || '').trim() || undefined : undefined;
+      const usageExample = colMap.usageExample >= 0 ? (parts[colMap.usageExample] || '').trim() || undefined : undefined;
 
       if (!english) {
         entries.push({ english, zomi, pos, explanation, usageExample, valid: false, error: 'English word is empty' });
@@ -335,14 +355,18 @@ export default function DictionaryImportScreen() {
 
         {showHelp ? (
           <GlassCard variant="default" style={styles.helpCard}>
-            <Text style={styles.helpTitle}>Expected CSV Format</Text>
-            <Text style={styles.helpText}>Each line should have columns separated by comma or tab:</Text>
+            <Text style={styles.helpTitle}>Supported CSV Formats</Text>
+            <Text style={styles.helpText}>Headers are auto-detected — columns can be in any order:</Text>
             <View style={styles.helpCodeBlock}>
-              <Text style={styles.helpCode}>English, Zomi, POS, Explanation, Usage Example</Text>
-              <Text style={styles.helpCode}>hello, Ngaih dam, Greeting, A common greeting, Hello my friend</Text>
-              <Text style={styles.helpCode}>water, Tui, Noun, Liquid for drinking, Tui ka dawn</Text>
+              <Text style={styles.helpCodeHeader}>Format 1: English, POS, Zomi, Usage Example</Text>
+              <Text style={styles.helpCode}>hello, Greeting, Ngaih dam, Hello my friend</Text>
+              <Text style={styles.helpCode}>water, Noun, Tui, Tui ka dawn</Text>
             </View>
-            <Text style={styles.helpNote}>Only English and Zomi columns are required. Headers are auto-detected and skipped.</Text>
+            <View style={[styles.helpCodeBlock, { marginTop: 6 }]}>
+              <Text style={styles.helpCodeHeader}>Format 2: English, Zomi, POS, Explanation, Usage Example</Text>
+              <Text style={styles.helpCode}>hello, Ngaih dam, Greeting, A common greeting, Hello my friend</Text>
+            </View>
+            <Text style={styles.helpNote}>Include a header row (English, POS, Zomi, Usage Example) so columns are mapped correctly. Only English and Zomi are required.</Text>
           </GlassCard>
         ) : null}
 
@@ -645,6 +669,14 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     color: '#00D9FF',
     lineHeight: 18,
+  },
+  helpCodeHeader: {
+    fontSize: 11,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    color: '#FFD700',
+    lineHeight: 18,
+    marginBottom: 4,
+    fontWeight: '600' as const,
   },
   helpNote: {
     fontSize: 11,
