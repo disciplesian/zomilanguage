@@ -139,7 +139,7 @@ export default function PronunciationGuideScreen() {
                   )}
                 </TouchableOpacity>
               </View>
-              <Text style={styles.ruleSound}>Sound: &quot;{rule.sound}&quot;</Text>
+              <Text style={styles.ruleSound}>Sound: "{rule.sound}"</Text>
               <Text style={styles.ruleExample}>Like: {rule.example}</Text>
               <View style={styles.ruleZomi}>
                 <Text style={styles.ruleZomiLabel}>Example:</Text>
@@ -206,11 +206,11 @@ export default function PronunciationGuideScreen() {
           </View>
           <Text style={styles.tipText}>
             • Listen to native speakers as much as possible{'\n'}
-            • Practice vowel sounds - they&apos;re longer than in English{'\n'}
+            • Practice vowel sounds - they're longer than in English{'\n'}
             • Pay attention to tones - they can change word meanings{'\n'}
             • Record yourself and compare with native pronunciation{'\n'}
             • Use the audio feature in the dictionary regularly{'\n'}
-            • Don&apos;t be afraid to ask native speakers for feedback{'\n'}
+            • Don't be afraid to ask native speakers for feedback{'\n'}
             • Practice common phrases until they feel natural
           </Text>
         </GlassCard>

@@ -377,7 +377,7 @@ export default function LearnCommunityScreen() {
         {word.example && (
           <View style={styles.exampleBox}>
             <Text style={styles.exampleLabel}>Example:</Text>
-            <Text style={styles.exampleText}>&quot;{word.example}&quot;</Text>
+            <Text style={styles.exampleText}>{`"${word.example}"`}</Text>
           </View>
         )}
         

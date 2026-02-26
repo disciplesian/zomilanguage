@@ -167,7 +167,7 @@ export default function SettingsScreen() {
 
           <View style={styles.scriptureFooter}>
             <Text style={[styles.scriptureVerse, { color: colors.textSecondary }]}>
-              &ldquo;Trust in the Lord with all your heart and lean not on your own understanding.&rdquo;
+              {"\u201CTrust in the Lord with all your heart and lean not on your own understanding.\u201D"}
             </Text>
             <Text style={[styles.scriptureRef, { color: colors.textMuted }]}>— Proverbs 3:5 (NIV)</Text>
           </View>

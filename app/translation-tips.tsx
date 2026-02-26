@@ -356,10 +356,10 @@ export default function TranslationTipsScreen() {
             </View>
 
             <View style={styles.technicalExplanation}>
-              <Text style={styles.technicalTitle}>Why Single Words Don&apos;t Work Well in AI Translator</Text>
+              <Text style={styles.technicalTitle}>Why Single Words Don't Work Well in AI Translator</Text>
               <Text style={styles.technicalText}>
                 <Text style={styles.technicalBold}>Linguistic Reality:</Text> Most words have multiple meanings depending on context. 
-                The word &ldquo;run&rdquo; in English has over 600 different meanings! Without context, the AI must guess which meaning you intend.
+                The word {"\u201C"}run{"\u201D"} in English has over 600 different meanings! Without context, the AI must guess which meaning you intend.
               </Text>
               <Text style={styles.technicalText}>
                 <Text style={styles.technicalBold}>Technical Architecture:</Text> AI translators are trained on full sentences and paragraphs, 
@@ -367,14 +367,14 @@ export default function TranslationTipsScreen() {
                 When given just one word, the model lacks the surrounding linguistic cues it was designed to process.
               </Text>
               <Text style={styles.technicalText}>
-                <Text style={styles.technicalBold}>Example:</Text> The English word &ldquo;book&rdquo; could be:
-                {"\n"}• A noun (&ldquo;I read a book&rdquo;) → Zomi noun
-                {"\n"}• A verb (&ldquo;Book a flight&rdquo;) → Zomi verb
-                {"\n"}• An adjective (&ldquo;book club&rdquo;) → Different translation
+                <Text style={styles.technicalBold}>Example:</Text> The English word {"\u201C"}book{"\u201D"} could be:
+                {"\n"}{"\u2022"} A noun ({"\u201C"}I read a book{"\u201D"}) {"\u2192"} Zomi noun
+                {"\n"}{"\u2022"} A verb ({"\u201C"}Book a flight{"\u201D"}) {"\u2192"} Zomi verb
+                {"\n"}{"\u2022"} An adjective ({"\u201C"}book club{"\u201D"}) {"\u2192"} Different translation
               </Text>
               <Text style={styles.technicalHighlight}>
-                This is not a flaw—it&apos;s how language actually works! No human translator would translate a single word 
-                without asking &ldquo;in what context?&rdquo; The AI translator simply needs the same information.
+                This is not a flaw—it's how language actually works! No human translator would translate a single word 
+                without asking {"\u201C"}in what context?{"\u201D"} The AI translator simply needs the same information.
               </Text>
             </View>
 
@@ -434,11 +434,11 @@ export default function TranslationTipsScreen() {
                 <View style={styles.exampleRow}>
                   <View style={styles.exampleBad}>
                     <Text style={styles.exampleLabel}>✗ Avoid</Text>
-                    <Text style={styles.exampleBadText}>&ldquo;{example.bad}&rdquo;</Text>
+                    <Text style={styles.exampleBadText}>{`\u201C${example.bad}\u201D`}</Text>
                   </View>
                   <View style={styles.exampleGood}>
                     <Text style={styles.exampleLabel}>✓ Better</Text>
-                    <Text style={styles.exampleGoodText}>&ldquo;{example.good}&rdquo;</Text>
+                    <Text style={styles.exampleGoodText}>{`\u201C${example.good}\u201D`}</Text>
                   </View>
                 </View>
                 <Text style={styles.exampleExplanation}>{example.explanation}</Text>

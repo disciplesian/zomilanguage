@@ -74,7 +74,7 @@ export default function AboutScreen() {
             <Text style={styles.scriptureLabel}>Guiding Scripture</Text>
           </View>
           <Text style={styles.scriptureVerse}>
-            &ldquo;Go therefore and make disciples of all nations, baptizing them in the name of the Father and of the Son and of the Holy Spirit, teaching them to observe all that I have commanded you.&rdquo;
+            {"\u201CGo therefore and make disciples of all nations, baptizing them in the name of the Father and of the Son and of the Holy Spirit, teaching them to observe all that I have commanded you.\u201D"}
           </Text>
           <Text style={styles.scriptureReference}>— Matthew 28:19-20 (ESV)</Text>
         </GlassCard>
@@ -127,7 +127,7 @@ export default function AboutScreen() {
         <GlassCard variant="yellow" style={styles.disclaimerCard}>
           <Text style={styles.disclaimerTitle}>AI-Generated Content Notice</Text>
           <Text style={styles.disclaimerText}>
-            This application utilizes AI-powered translation and language processing technologies. While we strive for accuracy, AI technology is continuously evolving. Due to the nature of AI development, the app&apos;s performance and accuracy will gradually improve over time, but no guarantee of perfection is provided. We recommend verifying critical translations with native speakers.
+            This application utilizes AI-powered translation and language processing technologies. While we strive for accuracy, AI technology is continuously evolving. Due to the nature of AI development, the app's performance and accuracy will gradually improve over time, but no guarantee of perfection is provided. We recommend verifying critical translations with native speakers.
           </Text>
         </GlassCard>
 

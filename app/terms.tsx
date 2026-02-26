@@ -49,7 +49,7 @@ export default function TermsScreen() {
             <Text style={styles.sectionTitle}>1. Acceptance of Terms</Text>
           </View>
           <Text style={styles.paragraph}>
-            By accessing and using Zomi Translator (&quot;the App&quot;), you accept and agree to be bound by these Terms of Service. If you do not agree, please do not use the App.
+            By accessing and using Zomi Translator ("the App"), you accept and agree to be bound by these Terms of Service. If you do not agree, please do not use the App.
           </Text>
         </GlassCard>
 
@@ -125,7 +125,7 @@ export default function TermsScreen() {
             • No guarantee of perfection or absolute accuracy is provided{'\n'}
             • Do not rely on translations for legal, medical, or critical use{'\n'}
             • We are not responsible for translation accuracy or misinterpretations{'\n'}
-            • User contributions improve but don&apos;t guarantee accuracy{'\n'}
+            • User contributions improve but don't guarantee accuracy{'\n'}
             • Always verify important translations with native speakers
           </Text>
         </GlassCard>
@@ -183,7 +183,7 @@ export default function TermsScreen() {
             <Text style={styles.sectionTitle}>11. Disclaimers & Warranties</Text>
           </View>
           <Text style={styles.paragraph}>
-            THE APP IS PROVIDED &quot;AS IS&quot; WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED. WE DO NOT GUARANTEE UNINTERRUPTED OR ERROR-FREE SERVICE. WE ARE NOT RESPONSIBLE FOR DATA LOSS, TRANSLATION ERRORS, OR SERVICE INTERRUPTIONS.
+            THE APP IS PROVIDED "AS IS" WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED. WE DO NOT GUARANTEE UNINTERRUPTED OR ERROR-FREE SERVICE. WE ARE NOT RESPONSIBLE FOR DATA LOSS, TRANSLATION ERRORS, OR SERVICE INTERRUPTIONS.
           </Text>
         </GlassCard>
 
@@ -203,7 +203,7 @@ export default function TermsScreen() {
             <Text style={styles.sectionTitle}>13. Changes to Terms</Text>
           </View>
           <Text style={styles.paragraph}>
-            We reserve the right to update these Terms at any time. Material changes will be announced through the App or via email. Continued use after changes constitutes acceptance of the new terms. The &quot;Last Updated&quot; date will reflect any modifications.
+            We reserve the right to update these Terms at any time. Material changes will be announced through the App or via email. Continued use after changes constitutes acceptance of the new terms. The "Last Updated" date will reflect any modifications.
           </Text>
         </GlassCard>
 

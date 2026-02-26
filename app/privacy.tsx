@@ -160,7 +160,7 @@ export default function PrivacyScreen() {
         </GlassCard>
 
         <GlassCard style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>7. Children&apos;s Privacy</Text>
+          <Text style={styles.sectionTitle}>7. Children's Privacy</Text>
           <Text style={styles.sectionText}>
             Zomi Translator is designed for users of all ages, including children who want to 
             learn the Zomi language. We do not knowingly collect personal information from 
@@ -194,8 +194,8 @@ export default function PrivacyScreen() {
           <Text style={styles.sectionTitle}>10. Changes to This Policy</Text>
           <Text style={styles.sectionText}>
             We may update this Privacy Policy from time to time. We will notify you of any 
-            changes by posting the new Privacy Policy on this page and updating the &quot;Last 
-            Updated&quot; date. You are advised to review this Privacy Policy periodically for 
+            changes by posting the new Privacy Policy on this page and updating the "Last 
+            Updated" date. You are advised to review this Privacy Policy periodically for 
             any changes.
           </Text>
         </GlassCard>

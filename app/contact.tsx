@@ -103,7 +103,7 @@ export default function ContactScreen() {
             <Mail size={32} color={Colors.text} />
           </LinearGradient>
           <Text style={styles.title}>Contact Support</Text>
-          <Text style={styles.subtitle}>We&apos;re here to help you</Text>
+          <Text style={styles.subtitle}>We're here to help you</Text>
         </View>
 
         {submitted && (
@@ -113,7 +113,7 @@ export default function ContactScreen() {
               <View style={styles.successText}>
                 <Text style={styles.successTitle}>Message Sent!</Text>
                 <Text style={styles.successSubtitle}>
-                  Thank you for contacting us. We&apos;ll respond within 24-48 hours.
+                  Thank you for contacting us. We'll respond within 24-48 hours.
                 </Text>
               </View>
             </View>

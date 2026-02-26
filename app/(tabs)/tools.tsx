@@ -467,7 +467,7 @@ ${processedDocument.extractedText}`,
                 <Text style={styles.refreshText}>Refresh</Text>
               </TouchableOpacity>
             </View>
-            <Text style={styles.scriptureText}>&ldquo;{dailyScripture.verse}&rdquo;</Text>
+            <Text style={styles.scriptureText}>{`\u201C${dailyScripture.verse}\u201D`}</Text>
             <Text style={styles.scriptureReference}>— {dailyScripture.reference}</Text>
           </GlassCard>
 
