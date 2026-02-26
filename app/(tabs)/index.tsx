@@ -815,7 +815,6 @@ Output ONLY the Tedim Zomi (CTD) translation:`;
             </View>
           </GlassCard>
 
-
           <GlassCard variant="green" glow style={styles.outputCard}>
             <View style={styles.outputHeader}>
               <Text style={styles.inputLabel}>
@@ -1001,8 +1000,6 @@ Output ONLY the Tedim Zomi (CTD) translation:`;
               <Text style={styles.lookupDictText}>Look up in Dictionary</Text>
             </TouchableOpacity>
           )}
-
-          
         </Animated.View>
       </ScrollView>
     </View>

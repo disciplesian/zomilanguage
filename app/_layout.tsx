@@ -67,23 +67,6 @@ const preventSplashAutoHide = async () => {
 
 const setupGlobalErrorHandlers = () => {
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    const originalOnError = window.onerror;
-    window.onerror = (message, source, lineno, colno, error) => {
-      const msgStr = String(message || '');
-      if (
-        msgStr.includes('Unexpected text node') ||
-        msgStr.includes('text node cannot be a child') ||
-        msgStr.includes('Text strings must be rendered')
-      ) {
-        return true;
-      }
-      console.error('[Global] Uncaught error:', { message, source, lineno, colno });
-      if (originalOnError) {
-        return originalOnError(message, source, lineno, colno, error);
-      }
-      return false;
-    };
-
     const originalOnUnhandled = window.onunhandledrejection;
     window.onunhandledrejection = (event) => {
       console.error('[Global] Unhandled promise rejection:', event?.reason);
@@ -99,12 +82,8 @@ const setupGlobalErrorHandlers = () => {
     if (
       message.includes('TurboModule') ||
       message.includes('NativeModule') ||
-      message.includes('Require cycle') ||
-      message.includes('Unexpected text node') ||
-      message.includes('text node cannot be a child') ||
-      message.includes('Text strings must be rendered')
+      message.includes('Require cycle')
     ) {
-      console.warn('[Suppressed]', ...args);
       return;
     }
     originalConsoleError(...args);

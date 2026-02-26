@@ -346,7 +346,7 @@ export default function ProfileScreen() {
                       <Text style={styles.badgeDesc} numberOfLines={2}>
                         {badge.description}
                       </Text>
-                      {!isUnlocked && badge.maxProgress && (
+                      {!isUnlocked && badge.maxProgress != null && badge.maxProgress > 0 && (
                         <View style={styles.badgeProgress}>
                           <View style={styles.badgeProgressBar}>
                             <View
@@ -412,7 +412,7 @@ export default function ProfileScreen() {
                       
                       <View style={styles.leaderboardInfo}>
                         <Text style={[styles.leaderboardName, isCurrentUser && styles.leaderboardNameHighlight]}>
-                          {entry.name} {isCurrentUser && '(You)'}
+                          {entry.name}{isCurrentUser ? ' (You)' : ''}
                         </Text>
                         <Text style={styles.leaderboardLevel}>Level {entry.level}</Text>
                       </View>
