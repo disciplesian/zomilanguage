@@ -196,7 +196,7 @@ export default function LearnCommunityScreen() {
     if (!isAuthenticated) {
       Alert.alert(
         'Login Required',
-        'Please login to contribute words to the dictionary.',
+        'Please login to contribute to the community.',
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Login', onPress: () => console.log('Action requires user') },
@@ -396,7 +396,7 @@ export default function LearnCommunityScreen() {
         <View style={styles.loginPromptText}>
           <Text style={styles.loginPromptTitle}>Join the Community</Text>
           <Text style={styles.loginPromptDesc}>
-            Login or create an account to post, comment, and contribute words to the dictionary.
+            Login or create an account to post and comment in the community.
           </Text>
         </View>
       </View>
@@ -745,7 +745,7 @@ export default function LearnCommunityScreen() {
                       <View style={styles.contributeIcon}>
                         <Award size={32} color={Colors.success} />
                       </View>
-                      <Text style={styles.contributeTitle}>Help Grow the Dictionary</Text>
+                      <Text style={styles.contributeTitle}>Help Grow the Community</Text>
                       <Text style={styles.contributeSubtitle}>
                         {isAuthenticated 
                           ? 'Share words, phrases, and expressions from your dialect.'

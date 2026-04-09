@@ -74,7 +74,7 @@ export interface UserStats {
   xp: number;
   level: number;
   translationsCount: number;
-  dictionaryContributions: number;
+
   forumPosts: number;
   forumReplies: number;
   quizzesTaken: number;
@@ -146,7 +146,7 @@ const getDefaultStats = (): UserStats => ({
   xp: 0,
   level: 1,
   translationsCount: 0,
-  dictionaryContributions: 0,
+
   forumPosts: 0,
   forumReplies: 0,
   quizzesTaken: 0,
@@ -297,11 +297,9 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
   }, [stats, saveStats, addActivity]);
 
   const recordContribution = useCallback(async (wordZomi: string, wordEnglish: string) => {
-    const newStats = { ...stats, dictionaryContributions: stats.dictionaryContributions + 1 };
-    await saveStats(newStats);
     await addActivity({
       type: 'contribution',
-      title: 'Dictionary Contribution',
+      title: 'Community Contribution',
       description: 'Contributed "' + wordZomi + '" (' + wordEnglish + ')',
       points: 25,
       xp: 50,
@@ -413,8 +411,8 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
         progress = Math.min(stats.translationsCount, 100);
         unlocked = stats.translationsCount >= 100;
       } else if (def.id === 'contributor_1') {
-        progress = Math.min(stats.dictionaryContributions, 1);
-        unlocked = stats.dictionaryContributions >= 1;
+        progress = 0;
+        unlocked = false;
       } else if (def.id === 'streak_7') {
         progress = Math.min(stats.longestStreak, 7);
         unlocked = stats.longestStreak >= 7;

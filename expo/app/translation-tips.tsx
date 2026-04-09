@@ -182,8 +182,8 @@ export default function TranslationTipsScreen() {
     },
     {
       icon: <Sparkles size={18} color={Colors.accent} />,
-      title: 'Use the Dictionary',
-      description: 'Look up individual words in the dictionary first, then construct your sentence.',
+      title: 'Start Simple',
+      description: 'Begin with common words and phrases, then gradually build more complex sentences.',
     },
     {
       icon: <FileText size={18} color={Colors.secondary} />,
@@ -297,103 +297,6 @@ export default function TranslationTipsScreen() {
             </Text>
           </GlassCard>
 
-          {/* Dictionary vs AI Translator Section */}
-          <GlassCard variant="cyan" style={styles.dictionaryVsSection}>
-            <View style={styles.dictionaryVsHeader}>
-              <View style={styles.dictionaryVsIconRow}>
-                <View style={styles.toolIconBox}>
-                  <BookOpen size={20} color={Colors.primary} />
-                </View>
-                <Text style={styles.vsText}>vs</Text>
-                <View style={styles.toolIconBox}>
-                  <Brain size={20} color={Colors.tertiary} />
-                </View>
-              </View>
-              <Text style={styles.dictionaryVsTitle}>Dictionary vs AI Translator</Text>
-              <Text style={styles.dictionaryVsSubtitle}>Understanding the Right Tool for the Job</Text>
-            </View>
-
-            <View style={styles.comparisonContainer}>
-              <View style={styles.comparisonColumn}>
-                <View style={styles.comparisonHeader}>
-                  <BookOpen size={18} color={Colors.primary} />
-                  <Text style={styles.comparisonHeaderText}>Dictionary</Text>
-                </View>
-                <View style={styles.comparisonContent}>
-                  <Text style={styles.comparisonPoint}>• Individual word definitions</Text>
-                  <Text style={styles.comparisonPoint}>• Multiple meanings listed</Text>
-                  <Text style={styles.comparisonPoint}>• Part of speech (noun, verb, etc.)</Text>
-                  <Text style={styles.comparisonPoint}>• Fixed, curated entries</Text>
-                  <Text style={styles.comparisonPoint}>• Word-level accuracy</Text>
-                  <Text style={styles.comparisonPoint}>• Best for vocabulary learning</Text>
-                </View>
-                <View style={styles.useCaseBox}>
-                  <Text style={styles.useCaseTitle}>Use When:</Text>
-                  <Text style={styles.useCaseText}>• Looking up a single word{"\n"}• Learning new vocabulary{"\n"}• Checking word meanings{"\n"}• Building your lexicon</Text>
-                </View>
-              </View>
-
-              <View style={styles.comparisonDivider} />
-
-              <View style={styles.comparisonColumn}>
-                <View style={styles.comparisonHeader}>
-                  <Brain size={18} color={Colors.tertiary} />
-                  <Text style={styles.comparisonHeaderText}>AI Translator</Text>
-                </View>
-                <View style={styles.comparisonContent}>
-                  <Text style={styles.comparisonPoint}>• Context-aware translation</Text>
-                  <Text style={styles.comparisonPoint}>• Sentence structure & grammar</Text>
-                  <Text style={styles.comparisonPoint}>• Natural language flow</Text>
-                  <Text style={styles.comparisonPoint}>• Dynamic, AI-generated</Text>
-                  <Text style={styles.comparisonPoint}>• Contextual accuracy</Text>
-                  <Text style={styles.comparisonPoint}>• Best for communication</Text>
-                </View>
-                <View style={styles.useCaseBox}>
-                  <Text style={styles.useCaseTitle}>Use When:</Text>
-                  <Text style={styles.useCaseText}>• Translating sentences{"\n"}• Writing messages/emails{"\n"}• Converting documents{"\n"}• Natural communication</Text>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.technicalExplanation}>
-              <Text style={styles.technicalTitle}>Why Single Words Don't Work Well in AI Translator</Text>
-              <Text style={styles.technicalText}>
-                <Text style={styles.technicalBold}>Linguistic Reality:</Text> Most words have multiple meanings depending on context. 
-                The word {"\u201C"}run{"\u201D"} in English has over 600 different meanings! Without context, the AI must guess which meaning you intend.
-              </Text>
-              <Text style={styles.technicalText}>
-                <Text style={styles.technicalBold}>Technical Architecture:</Text> AI translators are trained on full sentences and paragraphs, 
-                not isolated words. They learn patterns of how words interact with each other in natural speech. 
-                When given just one word, the model lacks the surrounding linguistic cues it was designed to process.
-              </Text>
-              <Text style={styles.technicalText}>
-                <Text style={styles.technicalBold}>Example:</Text> The English word {"\u201C"}book{"\u201D"} could be:
-                {"\n"}{"\u2022"} A noun ({"\u201C"}I read a book{"\u201D"}) {"\u2192"} Zomi noun
-                {"\n"}{"\u2022"} A verb ({"\u201C"}Book a flight{"\u201D"}) {"\u2192"} Zomi verb
-                {"\n"}{"\u2022"} An adjective ({"\u201C"}book club{"\u201D"}) {"\u2192"} Different translation
-              </Text>
-              <Text style={styles.technicalHighlight}>
-                This is not a flaw—it's how language actually works! No human translator would translate a single word 
-                without asking {"\u201C"}in what context?{"\u201D"} The AI translator simply needs the same information.
-              </Text>
-            </View>
-
-            <View style={styles.bestPracticeBox}>
-              <View style={styles.bestPracticeHeader}>
-                <CheckCircle size={18} color={Colors.success} />
-                <Text style={styles.bestPracticeTitle}>Smart Translation Strategy</Text>
-              </View>
-              <Text style={styles.bestPracticeText}>
-                <Text style={styles.bestPracticeBold}>Step 1:</Text> Use the <Text style={styles.bestPracticeHighlight}>Dictionary</Text> to look up individual words and learn their meanings.
-              </Text>
-              <Text style={styles.bestPracticeText}>
-                <Text style={styles.bestPracticeBold}>Step 2:</Text> Use the <Text style={styles.bestPracticeHighlight}>AI Translator</Text> to translate complete sentences where those words appear in context.
-              </Text>
-              <Text style={styles.bestPracticeText}>
-                <Text style={styles.bestPracticeBold}>Step 3:</Text> Compare results to understand how word meanings shift based on usage.
-              </Text>
-            </View>
-          </GlassCard>
 
           {/* Key Insight Box */}
           <View style={styles.insightBox}>
@@ -556,7 +459,6 @@ export default function TranslationTipsScreen() {
               <Text style={styles.checklistItem}>☑ Use active voice over passive voice</Text>
               <Text style={styles.checklistItem}>☑ Check spelling before translating</Text>
               <Text style={styles.checklistItem}>☑ Review results with native speakers</Text>
-              <Text style={styles.checklistItem}>☑ Use the dictionary for individual words</Text>
               <Text style={styles.checklistItem}>☑ Save successful translations for reference</Text>
               <Text style={styles.checklistItem}>☑ Report errors to help improve the system</Text>
             </View>
@@ -984,20 +886,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
-  dictionaryVsSection: {
-    marginBottom: 24,
-    padding: 20,
-  },
-  dictionaryVsHeader: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  dictionaryVsIconRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    marginBottom: 12,
-  },
+
   toolIconBox: {
     width: 48,
     height: 48,
@@ -1013,16 +902,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.textMuted,
   },
-  dictionaryVsTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: Colors.text,
-    marginBottom: 6,
-  },
-  dictionaryVsSubtitle: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-  },
+
   comparisonContainer: {
     flexDirection: 'row',
     gap: 16,

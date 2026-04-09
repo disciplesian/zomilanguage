@@ -7,7 +7,6 @@ import Colors from "@/constants/colors";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
 import { UserProfileProvider } from "@/contexts/UserProfileContext";
-import { DictionaryProvider } from "@/contexts/DictionaryContext";
 import { trpc, getTrpcClient } from "@/lib/trpc";
 
 if (Platform.OS !== 'web') {
@@ -198,34 +197,7 @@ function RootLayoutNav() {
             presentation: "card",
           }} 
         />
-        <Stack.Screen 
-          name="dictionary-detail" 
-          options={{ 
-            title: "Word Detail",
-            presentation: "card",
-          }} 
-        />
-        <Stack.Screen 
-          name="dictionary-favorites" 
-          options={{ 
-            title: "Favorites",
-            presentation: "card",
-          }} 
-        />
-        <Stack.Screen 
-          name="dictionary-suggest" 
-          options={{ 
-            title: "Contribute",
-            presentation: "card",
-          }} 
-        />
-        <Stack.Screen 
-          name="dictionary-import" 
-          options={{ 
-            title: "Dictionary Import",
-            presentation: "card",
-          }} 
-        />
+
       </Stack>
     </>
   );
@@ -331,9 +303,7 @@ export default function RootLayout() {
           <QueryClientProvider client={queryClient}>
             <ThemeProvider>
               <UserProfileProvider>
-                <DictionaryProvider>
-                  <RootLayoutNav />
-                </DictionaryProvider>
+                <RootLayoutNav />
               </UserProfileProvider>
             </ThemeProvider>
           </QueryClientProvider>
