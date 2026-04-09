@@ -288,8 +288,7 @@ class ErrorBoundary extends Component<Props, State> {
             )}
             
             <Text style={styles.platformInfo}>
-              {Platform.OS} {typeof Platform.Version === 'number' ? `v${Platform.Version}` : Platform.Version}
-              {isWeb ? ` • ${typeof navigator !== 'undefined' ? navigator.userAgent.split(' ').pop()?.split('/')[0] || 'browser' : 'web'}` : ''}
+              {`${Platform.OS} ${typeof Platform.Version === 'number' ? 'v' + Platform.Version : Platform.Version}${isWeb ? ' • ' + (typeof navigator !== 'undefined' ? (navigator.userAgent.split(' ').pop()?.split('/')[0] || 'browser') : 'web') : ''}`}
             </Text>
           </View>
         </SafeAreaView>

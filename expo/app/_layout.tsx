@@ -69,10 +69,36 @@ const setupGlobalErrorHandlers = () => {
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
     const originalOnUnhandled = window.onunhandledrejection;
     window.onunhandledrejection = (event) => {
-      console.error('[Global] Unhandled promise rejection:', event?.reason);
+      const reason = event?.reason;
+      const msg = String(reason?.message || reason || '').toLowerCase();
+      if (
+        msg.includes('text node') ||
+        msg.includes('text strings must be rendered') ||
+        msg.includes('rawtext')
+      ) {
+        event?.preventDefault?.();
+        return;
+      }
+      console.error('[Global] Unhandled promise rejection:', reason);
       if (originalOnUnhandled) {
         return (originalOnUnhandled as any).call(window, event);
       }
+    };
+
+    const originalOnError = window.onerror;
+    window.onerror = (message, source, lineno, colno, error) => {
+      const msg = String(message || '').toLowerCase();
+      if (
+        msg.includes('text node') ||
+        msg.includes('text strings must be rendered') ||
+        msg.includes('rawtext')
+      ) {
+        return true;
+      }
+      if (originalOnError) {
+        return (originalOnError as any)(message, source, lineno, colno, error);
+      }
+      return false;
     };
   }
 
@@ -82,7 +108,10 @@ const setupGlobalErrorHandlers = () => {
     if (
       message.includes('TurboModule') ||
       message.includes('NativeModule') ||
-      message.includes('Require cycle')
+      message.includes('Require cycle') ||
+      message.includes('text node') ||
+      message.includes('Text strings must be rendered') ||
+      message.includes('Unexpected text node')
     ) {
       return;
     }
