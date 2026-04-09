@@ -335,8 +335,20 @@ Output ONLY the Tedim Zomi (CTD) translation:`;
 
   const translateRef = useRef(translate);
   translateRef.current = translate;
+  const hasMountedRef = useRef(false);
 
   useEffect(() => {
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      return;
+    }
+    if (!inputText.trim()) {
+      setOutputText('');
+      setTranslationQuality(0);
+      setIsTranslating(false);
+      lastTranslatedText.current = '';
+      return;
+    }
     const timeoutId = setTimeout(() => {
       translateRef.current(inputText, isZomiToEnglish);
     }, 600); 

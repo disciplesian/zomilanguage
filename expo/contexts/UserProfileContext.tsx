@@ -240,7 +240,7 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
       }
     };
 
-    setTimeout(loadData, 100);
+    loadData();
   }, []);
 
   const saveStats = useCallback(async (newStats: UserStats) => {

@@ -17,28 +17,16 @@ if (Platform.OS !== 'web') {
       'ColorPropType will be removed',
     ]);
   } catch {
-    // LogBox not available
   }
 }
 
-const getPlatformOS = (): string => {
-  try {
-    return Platform?.OS || 'unknown';
-  } catch {
-    return 'unknown';
-  }
-};
-
 let splashHidden = false;
-let splashPrevented = false;
 
 const hideSplashSafe = async () => {
   if (splashHidden) return;
   splashHidden = true;
-  
   try {
-    const platformOS = getPlatformOS();
-    if (platformOS === 'web') return;
+    if (Platform.OS === 'web') return;
     const SplashScreen = await import('expo-splash-screen');
     if (SplashScreen?.hideAsync) {
       await SplashScreen.hideAsync();
@@ -48,59 +36,18 @@ const hideSplashSafe = async () => {
   }
 };
 
-const preventSplashAutoHide = async () => {
-  if (splashPrevented) return;
-  splashPrevented = true;
-  
+const initSplash = () => {
   try {
-    const platformOS = getPlatformOS();
-    if (platformOS === 'web') return;
-    const SplashScreen = await import('expo-splash-screen');
-    if (SplashScreen?.preventAutoHideAsync) {
-      await SplashScreen.preventAutoHideAsync();
-    }
+    if (Platform.OS === 'web') return;
+    import('expo-splash-screen').then(SplashScreen => {
+      SplashScreen?.preventAutoHideAsync?.();
+    }).catch(() => {});
   } catch {
-    console.log('Splash screen prevent auto hide skipped');
   }
 };
+initSplash();
 
-const setupGlobalErrorHandlers = () => {
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    const originalOnUnhandled = window.onunhandledrejection;
-    window.onunhandledrejection = (event) => {
-      const reason = event?.reason;
-      const msg = String(reason?.message || reason || '').toLowerCase();
-      if (
-        msg.includes('text node') ||
-        msg.includes('text strings must be rendered') ||
-        msg.includes('rawtext')
-      ) {
-        event?.preventDefault?.();
-        return;
-      }
-      console.error('[Global] Unhandled promise rejection:', reason);
-      if (originalOnUnhandled) {
-        return (originalOnUnhandled as any).call(window, event);
-      }
-    };
-
-    const originalOnError = window.onerror;
-    window.onerror = (message, source, lineno, colno, error) => {
-      const msg = String(message || '').toLowerCase();
-      if (
-        msg.includes('text node') ||
-        msg.includes('text strings must be rendered') ||
-        msg.includes('rawtext')
-      ) {
-        return true;
-      }
-      if (originalOnError) {
-        return (originalOnError as any)(message, source, lineno, colno, error);
-      }
-      return false;
-    };
-  }
-
+if (Platform.OS === 'web' && typeof window !== 'undefined') {
   const originalConsoleError = console.error;
   console.error = (...args: any[]) => {
     const message = args[0]?.toString?.() || '';
@@ -116,12 +63,6 @@ const setupGlobalErrorHandlers = () => {
     }
     originalConsoleError(...args);
   };
-};
-
-try {
-  setupGlobalErrorHandlers();
-} catch {
-  // Silent fail for error handler setup
 }
 
 function RootLayoutNav() {
@@ -205,46 +146,34 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
   const [isReady, setIsReady] = useState(false);
-  const [initError, setInitError] = useState<Error | null>(null);
   const mountedRef = useRef(true);
   const initStartedRef = useRef(false);
 
   const queryClient = useMemo(() => {
-    try {
-      return new QueryClient({
-        defaultOptions: {
-          queries: {
-            staleTime: 1000 * 60 * 5,
-            gcTime: 1000 * 60 * 30,
-            retry: (failureCount, error) => {
-              if ((error as any)?.status === 404) return false;
-              if ((error as any)?.status === 401) return false;
-              return failureCount < 2;
-            },
-            retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
-            networkMode: 'offlineFirst',
-            refetchOnWindowFocus: Platform.OS === 'web',
+    return new QueryClient({
+      defaultOptions: {
+        queries: {
+          staleTime: 1000 * 60 * 5,
+          gcTime: 1000 * 60 * 30,
+          retry: (failureCount, error) => {
+            if ((error as any)?.status === 404) return false;
+            if ((error as any)?.status === 401) return false;
+            return failureCount < 2;
           },
-          mutations: {
-            retry: 1,
-            networkMode: 'offlineFirst',
-          },
+          retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
+          networkMode: 'offlineFirst',
+          refetchOnWindowFocus: false,
+          refetchOnReconnect: false,
         },
-      });
-    } catch (err) {
-      console.error('Failed to create QueryClient:', err);
-      return new QueryClient();
-    }
+        mutations: {
+          retry: 1,
+          networkMode: 'offlineFirst',
+        },
+      },
+    });
   }, []);
 
-  const trpcClient = useMemo(() => {
-    try {
-      return getTrpcClient();
-    } catch (err) {
-      console.error('Failed to create tRPC client:', err);
-      return getTrpcClient();
-    }
-  }, []);
+  const trpcClient = useMemo(() => getTrpcClient(), []);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -252,31 +181,10 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    if (!mountedRef.current || initStartedRef.current) return;
+    if (initStartedRef.current) return;
     initStartedRef.current = true;
-    
-    const initialize = async () => {
-      try {
-        await preventSplashAutoHide();
-        await new Promise(resolve => setTimeout(resolve, 50));
-      } catch (err) {
-        console.log('Initialization setup skipped:', err);
-      }
-      
-      if (mountedRef.current) {
-        setIsReady(true);
-        setTimeout(hideSplashSafe, 100);
-      }
-    };
-    
-    initialize().catch((err) => {
-      console.error('Initialization error:', err);
-      if (mountedRef.current) {
-        setInitError(err);
-        setIsReady(true);
-        hideSplashSafe();
-      }
-    });
+    setIsReady(true);
+    hideSplashSafe();
   }, []);
 
   const handleBoundaryError = useCallback((error: Error) => {
@@ -290,10 +198,6 @@ export default function RootLayout() {
         <Text style={fallbackStyles.loadingText}>Loading...</Text>
       </View>
     );
-  }
-
-  if (initError) {
-    console.warn('App started with initialization error:', initError.message);
   }
 
   return (
