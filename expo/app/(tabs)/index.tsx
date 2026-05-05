@@ -38,6 +38,7 @@ import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import { generateText } from '@rork-ai/toolkit-sdk';
 import { trpc } from '@/lib/trpc';
+import { buildFallbackPrompt } from '@/constants/zomiPrompt';
 
 
 import GlassCard from '@/components/GlassCard';
@@ -168,16 +169,24 @@ export default function TranslatorScreen() {
         return;
       }
       
-      console.log('Backend translation successful:', result.model);
+      console.log('Backend translation successful:', result.model, 'cached=', (result as any).cached);
       setOutputText(result.translatedText);
-      setTranslationQuality(100);
+      const conf = (result as any).confidence;
+      setTranslationQuality(typeof conf === 'number' && conf > 0 ? conf : 95);
       setIsTranslating(false);
       isTranslatingRef.current = false;
       return;
     } catch (backendError: unknown) {
-      // Check if this is still the latest request before proceeding
       if (currentRequestId !== translationRequestId.current) {
         console.log(`[Request ${currentRequestId}] Outdated after backend error, skipping fallback`);
+        return;
+      }
+      const errMsg = backendError instanceof Error ? backendError.message : String(backendError);
+      if (errMsg.includes('TOO_MANY_REQUESTS') || errMsg.toLowerCase().includes('quota')) {
+        setOutputText('Translation quota exceeded. Please wait a moment and try again.');
+        setTranslationQuality(0);
+        setIsTranslating(false);
+        isTranslatingRef.current = false;
         return;
       }
       console.log('Backend translation failed, trying fallback...', backendError);
@@ -186,112 +195,10 @@ export default function TranslatorScreen() {
     // Fallback to client-side AI translation
     try {
       console.log('Using client-side AI fallback...');
-      const sourceLanguage = direction ? 'zomi' : 'english';
-      const targetLanguage = direction ? 'english' : 'zomi';
-      
-      let prompt = '';
-      if (sourceLanguage === 'zomi' && targetLanguage === 'english') {
-        prompt = `You are a Tedim Zomi (ISO 639-3: ctd) to English translator.
-Use EXCLUSIVELY the Tedim (CTD) dialect. No other Zomi dialect.
-Direct translation only.
-
-TEDIM CTD VOCABULARY:
-- "Lungdam" = Thank you (happy heart)
-- "Pasian" = God
-- "Innkuan" = Family
-- "Nasep" = Work
-- "Hoih" = Good/Beautiful
-- "Hat" = Strong
-- "Dam" = Well/Healthy
-- "Pai" = Go
-- "Hong" = Come
-- "Ne" = Eat
-- "Thei" = Know
-- "Gen" = Say/Tell
-- "Mu" = See
-- "Za" = Hear
-- "It" = Love
-- "Om" = Exist/Stay
-- "Nei" = Have/Possess
-- "Pia" = Give
-- "Sem/Sep" = Do/Work
-- "Zil" = Learn
-- "Hilh" = Teach
-- "Mai kum" = Next year
-- "Kum bangzah" = How old
-- "ciang" = yet/still/afterward
-- "bang" = what
-- "na" = you, "ka" = I/my, "a" = he/she
-- "hiam/maw" = question marker
-- "ding" = will/future, "zo" = past, "lai" = progressive
-- "kei/lo" = negation
-
-EXAMPLES:
-- "An kidah?" = "How are you?"
-- "Ka dam e" = "I am fine"
-- "Lungdam mahmah" = "Thank you very much"
-- "Mai kum ciang bang sep sawm na?" = "What are you planning to do next year?"
-- "Na kum bangzah hiam?" = "How old are you?"
-- "Ka dam kei" = "I am not well"
-- "Pasian in nang hong it hi" = "God loves you"
-- "Ka innkuan dam uh" = "My family is well"
-
-Translate: "${text.trim()}"
-
-Output ONLY the English translation:`;
-      } else {
-        prompt = `You are an English to Tedim Zomi (ISO 639-3: ctd) translator.
-Use EXCLUSIVELY the Tedim (CTD) dialect. NEVER use Paite, Mizo, Hakha Chin, Falam, or any other dialect.
-
-TEDIM CTD VOCABULARY:
-- Thank you = "Lungdam"
-- God = "Pasian"
-- Family = "Innkuan"
-- Work = "Nasep"
-- Good/Beautiful = "Hoih"
-- Strong = "Hat"
-- Well/Healthy = "Dam"
-- Go = "Pai"
-- Come = "Hong"
-- Eat = "Ne"
-- Know = "Thei"
-- Say/Tell = "Gen"
-- See = "Mu"
-- Hear = "Za"
-- Love = "It"
-- Exist/Stay = "Om"
-- Have/Possess = "Nei"
-- Give = "Pia"
-- Do/Work = "Sem/Sep"
-- Learn = "Zil"
-- Teach = "Hilh"
-- Next year = "Mai kum"
-- How old = "Kum bangzah"
-- What = "bang"
-- I/my = "ka", You/your = "na", He/she = "a"
-- We/our = "kan", You all = "nan", They = "an"
-- Question markers = "hiam", "maw", "ze", "ve"
-- Will/future = "ding", Past = "zo", Progressive = "lai"
-- Negation = verb + "kei" or "lo"
-- Polite request = "ve aw"
-- This = "hi", That = "tua"
-
-GRAMMAR: SOV word order (Subject-Object-Verb)
-
-EXAMPLES:
-- "How are you?" = "An kidah?"
-- "I am fine" = "Ka dam e"
-- "Thank you very much" = "Lungdam mahmah"
-- "What are you planning to do next year?" = "Mai kum ciang bang sep sawm na?"
-- "How old are you?" = "Na kum bangzah hiam?"
-- "I am not well" = "Ka dam kei"
-- "God loves you" = "Pasian in nang hong it hi"
-- "My family is well" = "Ka innkuan dam uh"
-
-Translate: "${text.trim()}"
-
-Output ONLY the Tedim Zomi (CTD) translation:`;
-      }
+      const prompt = buildFallbackPrompt(
+        text.trim(),
+        direction ? 'zomi-to-english' : 'english-to-zomi'
+      );
 
       const fallbackResult = await generateText({ messages: [{ role: 'user', content: prompt }] });
       
