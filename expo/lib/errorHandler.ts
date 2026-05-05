@@ -23,6 +23,28 @@ export const isTextNodeError = (error: any): boolean => {
   }
 };
 
+/**
+ * Detects DOM reconciliation errors on web that are typically caused by
+ * external DOM mutations (browser translation extensions like Google Translate,
+ * Grammarly, password managers) interfering with React's virtual DOM.
+ * These are non-fatal and safe to swallow.
+ */
+export const isDomReconciliationError = (error: any): boolean => {
+  if (!error) return false;
+  try {
+    const message = String(error?.message || '').toLowerCase();
+    return (
+      message.indexOf("failed to execute 'removechild' on 'node'") !== -1 ||
+      message.indexOf("failed to execute 'insertbefore' on 'node'") !== -1 ||
+      message.indexOf('the node to be removed is not a child') !== -1 ||
+      message.indexOf('the node before which the new node is to be inserted is not a child') !== -1 ||
+      message.indexOf('notfounderror') !== -1
+    );
+  } catch {
+    return false;
+  }
+};
+
 export const isNativeModuleError = (error: any): boolean => {
   if (!error) return false;
   try {
@@ -245,12 +267,90 @@ export const retryAsync = async <T>(
   throw lastError;
 };
 
+let webHandlersInstalled = false;
+let originalRemoveChild: ((child: any) => any) | null = null;
+let originalInsertBefore: ((newNode: any, ref: any) => any) | null = null;
+let onErrorListener: ((e: ErrorEvent) => void) | null = null;
+let onRejectionListener: ((e: PromiseRejectionEvent) => void) | null = null;
+
 export const setupGlobalErrorHandlers = () => {
   console.log('Error handlers initialized for platform:', getPlatformOS());
+  if (getPlatformOS() !== 'web' || webHandlersInstalled) return;
+  if (typeof window === 'undefined' || typeof Node === 'undefined') return;
+  webHandlersInstalled = true;
+
+  try {
+    const proto = Node.prototype as any;
+    originalRemoveChild = proto.removeChild;
+    originalInsertBefore = proto.insertBefore;
+
+    proto.removeChild = function patchedRemoveChild(child: any) {
+      try {
+        if (child && child.parentNode !== this) {
+          if (child && child.parentNode && typeof originalRemoveChild === 'function') {
+            return originalRemoveChild.call(child.parentNode, child);
+          }
+          return child;
+        }
+        return originalRemoveChild!.call(this, child);
+      } catch (err) {
+        if (isDomReconciliationError(err)) {
+          return child;
+        }
+        throw err;
+      }
+    };
+
+    proto.insertBefore = function patchedInsertBefore(newNode: any, refNode: any) {
+      try {
+        if (refNode && refNode.parentNode !== this) {
+          return originalInsertBefore!.call(this, newNode, null);
+        }
+        return originalInsertBefore!.call(this, newNode, refNode);
+      } catch (err) {
+        if (isDomReconciliationError(err)) {
+          try { return originalInsertBefore!.call(this, newNode, null); } catch { return newNode; }
+        }
+        throw err;
+      }
+    };
+  } catch (e) {
+    console.warn('DOM patch skipped:', (e as Error)?.message);
+  }
+
+  try {
+    onErrorListener = (e: ErrorEvent) => {
+      if (isDomReconciliationError(e?.error) || isDomReconciliationError({ message: e?.message })) {
+        e.preventDefault?.();
+        e.stopImmediatePropagation?.();
+      }
+    };
+    onRejectionListener = (e: PromiseRejectionEvent) => {
+      if (isDomReconciliationError(e?.reason)) {
+        e.preventDefault?.();
+      }
+    };
+    window.addEventListener('error', onErrorListener, true);
+    window.addEventListener('unhandledrejection', onRejectionListener);
+  } catch {
+    // ignore
+  }
 };
 
 export const cleanupGlobalErrorHandlers = () => {
   console.log('Error handlers cleaned up');
+  if (getPlatformOS() !== 'web' || !webHandlersInstalled) return;
+  if (typeof window === 'undefined' || typeof Node === 'undefined') return;
+  try {
+    const proto = Node.prototype as any;
+    if (originalRemoveChild) proto.removeChild = originalRemoveChild;
+    if (originalInsertBefore) proto.insertBefore = originalInsertBefore;
+    if (onErrorListener) window.removeEventListener('error', onErrorListener, true);
+    if (onRejectionListener) window.removeEventListener('unhandledrejection', onRejectionListener);
+  } catch {
+    // ignore
+  }
+  webHandlersInstalled = false;
 };
 
 export const isMacCatalyst = (): boolean => false;

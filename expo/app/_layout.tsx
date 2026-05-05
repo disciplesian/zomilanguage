@@ -8,6 +8,9 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
 import { UserProfileProvider } from "@/contexts/UserProfileContext";
 import { trpc, getTrpcClient } from "@/lib/trpc";
+import { setupGlobalErrorHandlers } from "@/lib/errorHandler";
+
+setupGlobalErrorHandlers();
 
 if (Platform.OS !== 'web') {
   try {
@@ -57,7 +60,10 @@ if (Platform.OS === 'web' && typeof window !== 'undefined') {
       message.includes('Require cycle') ||
       message.includes('text node') ||
       message.includes('Text strings must be rendered') ||
-      message.includes('Unexpected text node')
+      message.includes('Unexpected text node') ||
+      message.includes("Failed to execute 'removeChild' on 'Node'") ||
+      message.includes("Failed to execute 'insertBefore' on 'Node'") ||
+      message.includes('The node to be removed is not a child')
     ) {
       return;
     }
