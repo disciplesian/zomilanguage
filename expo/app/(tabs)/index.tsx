@@ -47,6 +47,7 @@ import Colors from '@/constants/colors';
 
 import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 import { useSpeechToText } from '@/hooks/useSpeechToText';
+import { useStreamingTranslation } from '@/hooks/useStreamingTranslation';
 import { exportTranslation, ExportFormat, TranslationData } from '@/lib/exportUtils';
 
 export default function TranslatorScreen() {
@@ -119,10 +120,19 @@ export default function TranslatorScreen() {
   }, [isRecording, recordingAnim]);
 
   const translateMutation = trpc.translation.translate.useMutation();
+  const stream = useStreamingTranslation();
   const translationRequestId = useRef(0);
   const isTranslatingRef = useRef(false);
   const lastTranslatedText = useRef('');
   const lastDirection = useRef(true);
+
+  // Mirror streaming text into the visible output so the user sees token-by-token reveal.
+  useEffect(() => {
+    if (stream.isStreaming && stream.text) {
+      setOutputText(stream.text);
+      setIsTranslating(false);
+    }
+  }, [stream.isStreaming, stream.text]);
 
   const translate = useCallback(async (text: string, direction: boolean) => {
     if (!text || !text.trim()) {
@@ -154,8 +164,30 @@ export default function TranslatorScreen() {
     console.log(`[Request ${currentRequestId}] Starting translation...`);
     console.log('Input text:', text.substring(0, 50) + (text.length > 50 ? '...' : ''));
     console.log('Direction:', direction ? 'Zomi → English' : 'English → Zomi');
-    
-    // Try backend first
+
+    // Primary path: stream tokens via SSE for instant token-by-token reveal.
+    try {
+      setOutputText('');
+      const streamResult = await stream.start(text.trim(), direction ? 'english' : 'zomi');
+      if (currentRequestId !== translationRequestId.current) return;
+      if (streamResult.ok && streamResult.text) {
+        setOutputText(streamResult.text);
+        setTranslationQuality(95);
+        setIsTranslating(false);
+        isTranslatingRef.current = false;
+        console.log('[stream] success via', streamResult.model);
+        return;
+      }
+      if (streamResult.error && streamResult.error !== 'cancelled') {
+        console.log('[stream] failed, falling back to tRPC:', streamResult.error);
+      } else if (streamResult.error === 'cancelled') {
+        return;
+      }
+    } catch (streamErr) {
+      console.log('[stream] threw, falling back to tRPC:', streamErr);
+    }
+
+    // Fallback path: tRPC mutation (uses server cache + structured output).
     try {
       const result = await translateMutation.mutateAsync({
         text: text.trim(),
