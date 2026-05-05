@@ -3,8 +3,15 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, publicProcedure } from '../../create-context';
 
-const LATEST_MODEL = 'gemini-2.5-pro';
-const FALLBACK_MODEL = 'gemini-2.5-flash';
+// Model chain (newest → oldest). Updated to Google's latest Gemini 3 family
+// (Apr 2026). Gemini 3.1 Pro Preview is the current flagship; we fall back to
+// Gemini 3 Flash, then 2.5 Pro, then 2.5 Flash for maximum reliability.
+const MODEL_CHAIN = [
+  'gemini-3.1-pro-preview',
+  'gemini-3-flash',
+  'gemini-2.5-pro',
+  'gemini-2.5-flash',
+] as const;
 
 const ZOMI_SYSTEM_INSTRUCTION = `### ROLE: UNIVERSAL TRANSLATION ENGINE — TEDIM ZOMI (CTD) EXCLUSIVE
 You are a high-fidelity translation system that EXCLUSIVELY uses the Tedim dialect of the Zomi language.
@@ -100,10 +107,9 @@ Text: "${text}"`;
         topP: 0.8,
       };
 
-      const modelsToTry = [LATEST_MODEL, FALLBACK_MODEL];
       let lastError: unknown = null;
 
-      for (const modelName of modelsToTry) {
+      for (const modelName of MODEL_CHAIN) {
         try {
           console.log(`Translation: Trying model ${modelName}...`);
           const model = genAI.getGenerativeModel({
