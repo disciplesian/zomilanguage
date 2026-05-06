@@ -80,7 +80,7 @@ export default function GlossaryScreen() {
           <View style={styles.header}>
             <BookOpen size={28} color={Colors.accent} />
             <View style={styles.headerText}>
-              <Text style={styles.title}>My Tedim Glossary</Text>
+              <Text style={styles.title}>My Zomi Glossary</Text>
               <Text style={styles.subtitle}>
                 Custom Tedim (CTD) terms you add here are sent to the AI for personalised
                 accuracy on every translation.

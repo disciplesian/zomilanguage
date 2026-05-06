@@ -160,7 +160,7 @@ export default function SettingsScreen() {
                 <View style={[styles.aboutIcon, { backgroundColor: colors.glassYellow }]}>
                   <BookOpen size={20} color={colors.accent} />
                 </View>
-                <Text style={[styles.aboutText, { color: colors.text }]}>My Tedim Glossary</Text>
+                <Text style={[styles.aboutText, { color: colors.text }]}>My Zomi Glossary</Text>
                 <ChevronRight size={18} color={colors.textMuted} />
               </TouchableOpacity>
             </GlassCard>
