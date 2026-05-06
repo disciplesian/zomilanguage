@@ -19,6 +19,9 @@ import {
   Heart,
   ExternalLink,
   BookOpen,
+  Sun,
+  Moon,
+  Smartphone,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import GlassCard from '@/components/GlassCard';
@@ -26,7 +29,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { colors } = useTheme();
+  const { colors, mode, setMode } = useTheme();
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -100,6 +103,50 @@ export default function SettingsScreen() {
               <Text style={[styles.headerTitle, { color: colors.text }]}>Settings</Text>
               <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>Customize your experience</Text>
             </View>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Appearance</Text>
+            <GlassCard style={styles.aboutCard}>
+              <View style={styles.themeRow}>
+                {([
+                  { id: 'light' as const, label: 'Light', Icon: Sun },
+                  { id: 'dark' as const, label: 'Dark', Icon: Moon },
+                  { id: 'system' as const, label: 'System', Icon: Smartphone },
+                ]).map(({ id, label, Icon }) => {
+                  const active = mode === id;
+                  return (
+                    <TouchableOpacity
+                      key={id}
+                      onPress={() => {
+                        if (Platform.OS !== 'web') {
+                          Haptics.selectionAsync();
+                        }
+                        setMode(id);
+                      }}
+                      style={[
+                        styles.themeChip,
+                        {
+                          backgroundColor: active ? colors.glassCyan : colors.glass,
+                          borderColor: active ? colors.glassCyanBorder : colors.glassBorder,
+                        },
+                      ]}
+                      testID={`theme-${id}`}
+                    >
+                      <Icon size={18} color={active ? colors.primary : colors.textSecondary} />
+                      <Text
+                        style={[
+                          styles.themeChipText,
+                          { color: active ? colors.text : colors.textSecondary },
+                        ]}
+                      >
+                        {label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </GlassCard>
           </View>
 
           <View style={styles.section}>
@@ -330,5 +377,25 @@ const createStyles = (colors: any) => StyleSheet.create({
   scriptureRef: {
     fontSize: 12,
     fontWeight: '500' as const,
+  },
+  themeRow: {
+    flexDirection: 'row' as const,
+    padding: 10,
+    gap: 8,
+  },
+  themeChip: {
+    flex: 1,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 8,
+  },
+  themeChipText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
   },
 });
