@@ -19,6 +19,7 @@ import Constants from 'expo-constants';
 
 import GlassCard from '@/components/GlassCard';
 import GlassButton from '@/components/GlassButton';
+import PageBottomNav, { PAGE_BOTTOM_NAV_SPACING } from '@/components/PageBottomNav';
 import Colors from '@/constants/colors';
 import { trpc } from '@/lib/trpc';
 import { useUserProfile } from '@/contexts/UserProfileContext';
@@ -215,6 +216,7 @@ export default function FeedbackScreen() {
           </GlassCard>
         </ScrollView>
       </KeyboardAvoidingView>
+      <PageBottomNav />
     </View>
   );
 }
@@ -232,7 +234,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 20,
-    paddingBottom: 40,
+    paddingBottom: PAGE_BOTTOM_NAV_SPACING,
   },
   header: {
     alignItems: 'center',

@@ -32,6 +32,7 @@ import * as Haptics from 'expo-haptics';
 
 import Colors from '@/constants/colors';
 import GlassCard from '@/components/GlassCard';
+import PageBottomNav, { PAGE_BOTTOM_NAV_SPACING } from '@/components/PageBottomNav';
 
 interface TipSection {
   id: string;
@@ -493,6 +494,7 @@ export default function TranslationTipsScreen() {
           </View>
         </Animated.View>
       </ScrollView>
+      <PageBottomNav />
     </View>
   );
 }
@@ -511,7 +513,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 20,
-    paddingBottom: 40,
+    paddingBottom: PAGE_BOTTOM_NAV_SPACING,
   },
   header: {
     flexDirection: 'row',

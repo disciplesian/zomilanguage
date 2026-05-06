@@ -16,6 +16,7 @@ import { Plus, Trash2, BookOpen, Pencil, Check, X } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
 import GlassCard from '@/components/GlassCard';
+import PageBottomNav, { PAGE_BOTTOM_NAV_SPACING } from '@/components/PageBottomNav';
 import Colors from '@/constants/colors';
 import { useGlossary, GlossaryTerm } from '@/contexts/GlossaryContext';
 
@@ -187,6 +188,7 @@ export default function GlossaryScreen() {
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+      <PageBottomNav />
     </View>
   );
 }
@@ -195,7 +197,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   kav: { flex: 1 },
   scrollView: { flex: 1 },
-  scrollContent: { padding: 20, paddingBottom: 60 },
+  scrollContent: { padding: 20, paddingBottom: PAGE_BOTTOM_NAV_SPACING },
   header: {
     flexDirection: 'row',
     alignItems: 'flex-start',

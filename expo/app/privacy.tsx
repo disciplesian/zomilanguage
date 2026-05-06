@@ -11,6 +11,7 @@ import { useRouter, Stack } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Shield } from 'lucide-react-native';
 import GlassCard from '@/components/GlassCard';
+import PageBottomNav, { PAGE_BOTTOM_NAV_SPACING } from '@/components/PageBottomNav';
 import Colors from '@/constants/colors';
 
 export default function PrivacyScreen() {
@@ -219,6 +220,7 @@ export default function PrivacyScreen() {
           <Text style={styles.footerSubtext}>Your privacy is our priority</Text>
         </View>
       </ScrollView>
+      <PageBottomNav />
     </View>
   );
 }
@@ -254,7 +256,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: Platform.select({ web: 24, default: 20 }),
-    paddingBottom: 40,
+    paddingBottom: PAGE_BOTTOM_NAV_SPACING,
     maxWidth: 1000,
     alignSelf: 'center' as const,
     width: '100%',

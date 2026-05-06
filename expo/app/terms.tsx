@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Stack } from 'expo-router';
 import { FileText, Shield, Users, AlertCircle } from 'lucide-react-native';
 import GlassCard from '@/components/GlassCard';
+import PageBottomNav, { PAGE_BOTTOM_NAV_SPACING } from '@/components/PageBottomNav';
 import Colors from '@/constants/colors';
 
 export default function TermsScreen() {
@@ -225,6 +226,7 @@ export default function TermsScreen() {
           </Text>
         </GlassCard>
       </ScrollView>
+      <PageBottomNav />
     </View>
   );
 }
@@ -260,7 +262,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: Platform.select({ web: 24, default: 20 }),
-    paddingBottom: 40,
+    paddingBottom: PAGE_BOTTOM_NAV_SPACING,
     maxWidth: 1000,
     alignSelf: 'center' as const,
     width: '100%',

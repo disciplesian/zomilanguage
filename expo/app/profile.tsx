@@ -42,6 +42,7 @@ import {
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import GlassCard from '@/components/GlassCard';
+import PageBottomNav, { PAGE_BOTTOM_NAV_SPACING } from '@/components/PageBottomNav';
 import Colors from '@/constants/colors';
 import { useUserProfile, UserBadge } from '@/contexts/UserProfileContext';
 
@@ -501,6 +502,7 @@ export default function ProfileScreen() {
           )}
         </Animated.View>
       </ScrollView>
+      <PageBottomNav />
 
       <Modal
         visible={showEditModal}
@@ -638,7 +640,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: Platform.select({ web: 24, default: 20 }),
-    paddingBottom: 40,
+    paddingBottom: PAGE_BOTTOM_NAV_SPACING,
     maxWidth: 1200,
     alignSelf: 'center' as const,
     width: '100%',

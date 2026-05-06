@@ -26,6 +26,7 @@ import {
 import * as Haptics from 'expo-haptics';
 import GlassCard from '@/components/GlassCard';
 import GlassButton from '@/components/GlassButton';
+import PageBottomNav, { PAGE_BOTTOM_NAV_SPACING } from '@/components/PageBottomNav';
 import Colors from '@/constants/colors';
 
 type ContactCategory = 'general' | 'support' | 'bug' | 'feature' | 'feedback';
@@ -251,6 +252,7 @@ export default function ContactScreen() {
           <Text style={styles.footerSubtext}>Thank you for using Zomi Translator!</Text>
         </View>
       </ScrollView>
+      <PageBottomNav />
     </View>
   );
 }
@@ -286,7 +288,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: Platform.select({ web: 24, default: 20 }),
-    paddingBottom: 40,
+    paddingBottom: PAGE_BOTTOM_NAV_SPACING,
     maxWidth: 900,
     alignSelf: 'center' as const,
     width: '100%',

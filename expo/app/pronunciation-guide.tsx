@@ -18,6 +18,7 @@ import {
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import GlassCard from '@/components/GlassCard';
+import PageBottomNav, { PAGE_BOTTOM_NAV_SPACING } from '@/components/PageBottomNav';
 import Colors from '@/constants/colors';
 import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 
@@ -215,6 +216,7 @@ export default function PronunciationGuideScreen() {
           </Text>
         </GlassCard>
       </ScrollView>
+      <PageBottomNav />
     </View>
   );
 }
@@ -250,7 +252,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 20,
-    paddingBottom: 40,
+    paddingBottom: PAGE_BOTTOM_NAV_SPACING,
   },
   header: {
     alignItems: 'center',
