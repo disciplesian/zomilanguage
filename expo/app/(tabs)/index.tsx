@@ -136,23 +136,6 @@ export default function TranslatorScreen() {
   const lastTranslatedText = useRef('');
   const lastDirection = useRef(true);
 
-  // Blinking cursor while streaming.
-  const cursorAnim = useRef(new Animated.Value(1)).current;
-  useEffect(() => {
-    if (stream.isStreaming) {
-      const loop = Animated.loop(
-        Animated.sequence([
-          Animated.timing(cursorAnim, { toValue: 0.1, duration: 450, useNativeDriver: true }),
-          Animated.timing(cursorAnim, { toValue: 1, duration: 450, useNativeDriver: true }),
-        ])
-      );
-      loop.start();
-      return () => loop.stop();
-    } else {
-      cursorAnim.setValue(1);
-    }
-  }, [stream.isStreaming, cursorAnim]);
-
   // Mirror streaming text into the visible output so the user sees token-by-token reveal.
   useEffect(() => {
     if (stream.isStreaming && stream.text) {
@@ -208,8 +191,10 @@ export default function TranslatorScreen() {
     }
 
     // Primary path: stream tokens via SSE for instant token-by-token reveal.
+    // Note: we intentionally do NOT clear the previous output here — keeping the
+    // last translation visible while a new one streams in prevents the display
+    // from blinking on every keystroke.
     try {
-      if (!hit) setOutputText('');
       const streamResult = await stream.start(text.trim(), targetLang, {
         extraGlossary: glossary.asRecord(),
       });
@@ -983,7 +968,7 @@ export default function TranslatorScreen() {
             )}
             
             <View style={styles.outputContent}>
-              {isTranslating ? (
+              {isTranslating && !outputText ? (
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator size="large" color={Colors.accent} />
                   <Text style={styles.loadingText}>Translating with Zomi AI...</Text>
@@ -999,11 +984,6 @@ export default function TranslatorScreen() {
               ) : (
                 <Text style={styles.outputText}>
                   {outputText || 'Translation will appear here...'}
-                  {stream.isStreaming && outputText ? (
-                    <Animated.Text style={[styles.streamCursor, { opacity: cursorAnim }]}>
-                      {' ▋'}
-                    </Animated.Text>
-                  ) : null}
                 </Text>
               )}
             </View>
