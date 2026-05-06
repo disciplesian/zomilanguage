@@ -31,7 +31,6 @@ import {
   Download,
   Share as ShareIcon,
   FileDown,
-  GraduationCap,
   Wrench,
   History as HistoryIcon,
   BookOpen,
@@ -771,7 +770,6 @@ export default function TranslatorScreen() {
             style={styles.quickMenu}
           >
             {[
-              { id: 'learn', label: 'Learn', Icon: GraduationCap, color: '#00D9FF', route: '/(tabs)/learn' },
               { id: 'tools', label: 'Tools', Icon: Wrench, color: '#8C5CFF', route: '/(tabs)/tools' },
               { id: 'history', label: 'History', Icon: HistoryIcon, color: '#22D3A3', route: '/(tabs)/history' },
               { id: 'glossary', label: 'Glossary', Icon: BookOpen, color: '#FFB547', route: '/glossary' },

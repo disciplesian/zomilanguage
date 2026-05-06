@@ -1,5 +1,5 @@
 import { Tabs } from "expo-router";
-import { Languages, Settings, Wrench, GraduationCap, History } from "lucide-react-native";
+import { Languages, Settings, Wrench, History } from "lucide-react-native";
 import React, { useMemo } from "react";
 import { Platform, Dimensions } from "react-native";
 
@@ -82,8 +82,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="learn"
         options={{
-          title: "Learn",
-          tabBarIcon: ({ color, size }) => <GraduationCap color={color} size={size} />,
+          href: null,
         }}
       />
       <Tabs.Screen
