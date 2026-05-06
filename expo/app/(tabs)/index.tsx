@@ -31,6 +31,12 @@ import {
   Download,
   Share as ShareIcon,
   FileDown,
+  GraduationCap,
+  Wrench,
+  History as HistoryIcon,
+  BookOpen,
+  Mic2,
+  Lightbulb,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
@@ -773,6 +779,43 @@ export default function TranslatorScreen() {
             </View>
           </GlassCard>
 
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.quickMenuContent}
+            style={styles.quickMenu}
+          >
+            {[
+              { id: 'learn', label: 'Learn', Icon: GraduationCap, color: '#00D9FF', route: '/(tabs)/learn' },
+              { id: 'tools', label: 'Tools', Icon: Wrench, color: '#8C5CFF', route: '/(tabs)/tools' },
+              { id: 'history', label: 'History', Icon: HistoryIcon, color: '#22D3A3', route: '/(tabs)/history' },
+              { id: 'glossary', label: 'Glossary', Icon: BookOpen, color: '#FFB547', route: '/glossary' },
+              { id: 'pronounce', label: 'Pronounce', Icon: Mic2, color: '#FF6B9D', route: '/pronunciation-guide' },
+              { id: 'tips', label: 'Tips', Icon: Lightbulb, color: '#FFD166', route: '/translation-tips' },
+            ].map(({ id, label, Icon, color, route }) => (
+              <TouchableOpacity
+                key={id}
+                style={styles.quickItem}
+                activeOpacity={0.8}
+                onPress={() => {
+                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  router.push(route as any);
+                }}
+                testID={`quick-${id}`}
+              >
+                <LinearGradient
+                  colors={[`${color}33`, `${color}14`]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={[styles.quickIcon, { borderColor: `${color}55` }]}
+                >
+                  <Icon size={20} color={color} />
+                </LinearGradient>
+                <Text style={styles.quickLabel}>{label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
           <GlassCard variant="purple" style={styles.inputCard}>
             <View style={styles.inputHeader}>
               <Text style={styles.inputLabel}>
@@ -1112,6 +1155,33 @@ const styles = StyleSheet.create({
   },
   inputCard: {
     marginBottom: 12,
+  },
+  quickMenu: {
+    marginBottom: 12,
+  },
+  quickMenuContent: {
+    paddingHorizontal: 2,
+    gap: 12,
+    paddingVertical: 4,
+  },
+  quickItem: {
+    alignItems: 'center',
+    width: 68,
+  },
+  quickIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    marginBottom: 6,
+  },
+  quickLabel: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+    fontWeight: '600' as const,
+    textAlign: 'center' as const,
   },
   inputHeader: {
     flexDirection: 'row',

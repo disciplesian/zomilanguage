@@ -29,7 +29,7 @@ export default function GlossaryScreen() {
 
   const handleAdd = useCallback(() => {
     if (!term.trim() || !meaning.trim()) {
-      Alert.alert('Missing fields', 'Please enter both a Tedim term and its meaning.');
+      Alert.alert('Missing fields', 'Please enter both a Zomi term and its meaning.');
       return;
     }
     add(term, meaning);
@@ -53,7 +53,7 @@ export default function GlossaryScreen() {
   }, [editingId, editTerm, editMeaning, update]);
 
   const handleClear = useCallback(() => {
-    Alert.alert('Clear glossary?', 'This will remove all your custom Tedim terms.', [
+    Alert.alert('Clear glossary?', 'This will remove all your custom Zomi terms.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Clear', style: 'destructive', onPress: () => clear() },
     ]);
@@ -82,7 +82,7 @@ export default function GlossaryScreen() {
             <View style={styles.headerText}>
               <Text style={styles.title}>My Zomi Glossary</Text>
               <Text style={styles.subtitle}>
-                Custom Tedim (CTD) terms you add here are sent to the AI for personalised
+                Custom Zomi terms you add here are sent to the AI for personalised
                 accuracy on every translation.
               </Text>
             </View>
@@ -92,7 +92,7 @@ export default function GlossaryScreen() {
             <Text style={styles.label}>Add a term</Text>
             <TextInput
               style={styles.input}
-              placeholder="Tedim word (e.g. Lungdam)"
+              placeholder="Zomi word (e.g. Lungdam)"
               placeholderTextColor={Colors.textMuted}
               value={term}
               onChangeText={setTerm}
@@ -134,7 +134,7 @@ export default function GlossaryScreen() {
           {terms.length === 0 ? (
             <GlassCard style={styles.emptyCard}>
               <Text style={styles.emptyText}>
-                Your glossary is empty. Add Tedim terms above and they will be used to improve
+                Your glossary is empty. Add Zomi terms above and they will be used to improve
                 translation accuracy.
               </Text>
             </GlassCard>
