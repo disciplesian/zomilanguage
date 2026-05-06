@@ -20,13 +20,9 @@
         "NSPhotoLibraryUsageDescription": "Allow $(PRODUCT_NAME) to access your photos",
         "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to access your camera",
         "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone",
-        "UIBackgroundModes": [
-          "audio"
-        ],
         "CFBundleAllowMixedLocalizations": true,
         "CFBundleLocalizations": [
-          "en",
-          "fr"
+          "en"
         ],
         "ITSAppUsesNonExemptEncryption": false
       },
@@ -45,12 +41,7 @@
         "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.RECORD_AUDIO",
         "android.permission.INTERNET",
-        "android.permission.MODIFY_AUDIO_SETTINGS",
-        "CAMERA",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE",
-        "RECORD_AUDIO",
-        "INTERNET"
+        "android.permission.MODIFY_AUDIO_SETTINGS"
       ]
     },
     "web": {

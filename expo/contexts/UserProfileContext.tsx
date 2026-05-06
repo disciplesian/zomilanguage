@@ -389,6 +389,26 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
     return { success: true };
   }, [profile, updateLocalUser]);
 
+  const resetAllData = useCallback(async () => {
+    try {
+      const AsyncStorage = await getAsyncStorage();
+      if (AsyncStorage) {
+        const keys = await AsyncStorage.getAllKeys();
+        const zomiKeys = keys.filter(k => k.startsWith('@zomi_'));
+        if (zomiKeys.length > 0) await AsyncStorage.multiRemove(zomiKeys);
+      }
+      const fresh = getDefaultLocalUser();
+      setLocalUser(fresh);
+      setStats(getDefaultStats());
+      setActivities([]);
+      setProfile(getDefaultProfile(fresh));
+      await safeStorageSet(LOCAL_USER_KEY, JSON.stringify(fresh));
+      return { success: true };
+    } catch {
+      return { success: false };
+    }
+  }, []);
+
   const sendFriendRequest = useCallback(async () => ({ success: true }), []);
   const respondToFriendRequest = useCallback(async () => ({ success: true }), []);
   const removeFriend = useCallback(async () => ({ success: true }), []);
@@ -463,5 +483,6 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
     sendFriendRequest,
     respondToFriendRequest,
     removeFriend,
+    resetAllData,
   };
 });

@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Platform,
   Animated,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -22,14 +23,23 @@ import {
   Sun,
   Moon,
   Smartphone,
+  Trash2,
+  Star,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import * as StoreReview from 'expo-store-review';
 import GlassCard from '@/components/GlassCard';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useUserProfile } from '@/contexts/UserProfileContext';
+import { useGlossary } from '@/contexts/GlossaryContext';
+import { useTranslationCache } from '@/contexts/TranslationCacheContext';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const { colors, mode, setMode } = useTheme();
+  const { resetAllData } = useUserProfile();
+  const glossary = useGlossary();
+  const cache = useTranslationCache();
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -65,10 +75,50 @@ export default function SettingsScreen() {
       case 'glossary':
         router.push('/glossary' as any);
         break;
+      case 'rate':
+        (async () => {
+          try {
+            const available = await StoreReview.isAvailableAsync();
+            if (available) await StoreReview.requestReview();
+          } catch (e) {
+            console.log('Store review error', e);
+          }
+        })();
+        break;
+      case 'reset':
+        Alert.alert(
+          'Reset App Data',
+          'This will permanently delete your profile, stats, saved translations, and glossary on this device. This cannot be undone.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Reset Everything',
+              style: 'destructive',
+              onPress: async () => {
+                if (Platform.OS !== 'web') {
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                }
+                try {
+                  await resetAllData();
+                  if (typeof (glossary as any)?.clear === 'function') {
+                    await (glossary as any).clear();
+                  }
+                  if (typeof (cache as any)?.clear === 'function') {
+                    await (cache as any).clear();
+                  }
+                  Alert.alert('Done', 'All app data has been cleared.');
+                } catch {
+                  Alert.alert('Error', 'Could not clear all data. Please try again.');
+                }
+              },
+            },
+          ]
+        );
+        break;
       default:
         console.log('Action:', action);
     }
-  }, [router]);
+  }, [router, resetAllData, glossary, cache]);
 
   const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -181,6 +231,45 @@ export default function SettingsScreen() {
                 <ChevronRight size={18} color={colors.textMuted} />
               </TouchableOpacity>
             </GlassCard>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Community</Text>
+
+            <GlassCard style={styles.aboutCard}>
+              <TouchableOpacity
+                style={styles.aboutItem}
+                onPress={() => handlePress('rate')}
+                testID="settings-rate"
+              >
+                <View style={[styles.aboutIcon, { backgroundColor: colors.glassYellow }]}>
+                  <Star size={20} color={colors.accent} />
+                </View>
+                <Text style={[styles.aboutText, { color: colors.text }]}>Rate Zomi Translator</Text>
+                <ChevronRight size={18} color={colors.textMuted} />
+              </TouchableOpacity>
+            </GlassCard>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Data</Text>
+
+            <GlassCard style={styles.aboutCard}>
+              <TouchableOpacity
+                style={styles.aboutItem}
+                onPress={() => handlePress('reset')}
+                testID="settings-reset"
+              >
+                <View style={[styles.aboutIcon, { backgroundColor: 'rgba(255,90,90,0.18)' }]}>
+                  <Trash2 size={20} color={'#ff5a5a'} />
+                </View>
+                <Text style={[styles.aboutText, { color: colors.text }]}>Reset App Data</Text>
+                <ChevronRight size={18} color={colors.textMuted} />
+              </TouchableOpacity>
+            </GlassCard>
+            <Text style={[styles.dataHint, { color: colors.textMuted }]}>
+              Zomi Translator stores your data on this device only. Resetting clears your profile, stats, saved translations, and glossary.
+            </Text>
           </View>
 
           <View style={styles.section}>
@@ -397,5 +486,11 @@ const createStyles = (colors: any) => StyleSheet.create({
   themeChipText: {
     fontSize: 14,
     fontWeight: '600' as const,
+  },
+  dataHint: {
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 10,
+    paddingHorizontal: 4,
   },
 });
