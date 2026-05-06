@@ -9,9 +9,16 @@ type StreamState = {
   isStreaming: boolean;
   error: string | null;
   done: boolean;
+  confidence: number;
 };
 
-export type StreamResult = { ok: boolean; text: string; model: string | null; error: string | null };
+export type StreamResult = {
+  ok: boolean;
+  text: string;
+  model: string | null;
+  error: string | null;
+  confidence: number;
+};
 
 const initialState: StreamState = {
   text: '',
@@ -19,6 +26,7 @@ const initialState: StreamState = {
   isStreaming: false,
   error: null,
   done: false,
+  confidence: 0,
 };
 
 const getBaseUrl = (): string => {
@@ -61,25 +69,34 @@ export function useStreamingTranslation() {
   useEffect(() => () => cancel(), [cancel]);
 
   const start = useCallback(
-    (text: string, targetLanguage: string): Promise<StreamResult> => {
+    (
+      text: string,
+      targetLanguage: string,
+      options?: { extraGlossary?: Record<string, string> }
+    ): Promise<StreamResult> => {
       cancel();
       const myToken = ++tokenRef.current;
       setState({ ...initialState, isStreaming: true });
 
       const url = `${getBaseUrl()}/api/translate/stream`;
-      const body = JSON.stringify({ text, targetLanguage });
+      const body = JSON.stringify({
+        text,
+        targetLanguage,
+        extraGlossary: options?.extraGlossary ?? {},
+      });
 
       // Local accumulators (do not rely on async setState for resolution).
       let accText = '';
       let modelName: string | null = null;
+      let confidenceVal = 0;
 
       return new Promise<StreamResult>((resolve) => {
         const finish = (result: StreamResult) => {
-          if (myToken !== tokenRef.current) return resolve({ ok: false, text: '', model: null, error: 'cancelled' });
+          if (myToken !== tokenRef.current) return resolve({ ok: false, text: '', model: null, error: 'cancelled', confidence: 0 });
           if (result.ok) {
-            setState({ text: result.text, model: result.model, isStreaming: false, error: null, done: true });
+            setState({ text: result.text, model: result.model, isStreaming: false, error: null, done: true, confidence: result.confidence });
           } else {
-            setState({ text: accText, model: modelName, isStreaming: false, error: result.error, done: false });
+            setState({ text: accText, model: modelName, isStreaming: false, error: result.error, done: false, confidence: confidenceVal });
           }
           resolve(result);
         };
@@ -94,11 +111,16 @@ export function useStreamingTranslation() {
           accText += piece;
           setState((prev) => ({ ...prev, text: prev.text + piece }));
         };
-        const onDone = (full: string, m: string) => {
-          finish({ ok: true, text: full || accText, model: m || modelName, error: null });
+        const onConfidence = (c: number) => {
+          if (myToken !== tokenRef.current) return;
+          confidenceVal = c;
+        };
+        const onDone = (full: string, m: string, c?: number) => {
+          if (typeof c === 'number' && c > 0) confidenceVal = c;
+          finish({ ok: true, text: full || accText, model: m || modelName, error: null, confidence: confidenceVal });
         };
         const onError = (msg: string) => {
-          finish({ ok: false, text: accText, model: modelName, error: msg });
+          finish({ ok: false, text: accText, model: modelName, error: msg, confidence: confidenceVal });
         };
 
         const parseSSEFrame = (frame: string) => {
@@ -113,7 +135,8 @@ export function useStreamingTranslation() {
             const parsed = JSON.parse(data);
             if (event === 'start' && parsed.model) onStart(parsed.model);
             else if (event === 'delta' && typeof parsed.text === 'string') onDelta(parsed.text);
-            else if (event === 'done') onDone(parsed.text ?? '', parsed.model ?? '');
+            else if (event === 'confidence' && typeof parsed.confidence === 'number') onConfidence(parsed.confidence);
+            else if (event === 'done') onDone(parsed.text ?? '', parsed.model ?? '', typeof parsed.confidence === 'number' ? parsed.confidence : undefined);
             else if (event === 'error') onError(parsed.message ?? parsed.code ?? 'stream_error');
           } catch {
             // ignore malformed frames
@@ -152,11 +175,11 @@ export function useStreamingTranslation() {
               if (buf.trim()) parseSSEFrame(buf);
               // If the server closed without an explicit done event, finalize with what we have.
               if (myToken === tokenRef.current) {
-                finish({ ok: !!accText, text: accText, model: modelName, error: accText ? null : 'no_data' });
+                finish({ ok: !!accText, text: accText, model: modelName, error: accText ? null : 'no_data', confidence: confidenceVal });
               }
             } catch (err: unknown) {
               if ((err as Error)?.name === 'AbortError') {
-                resolve({ ok: false, text: '', model: null, error: 'cancelled' });
+                resolve({ ok: false, text: '', model: null, error: 'cancelled', confidence: 0 });
                 return;
               }
               onError(err instanceof Error ? err.message : 'stream_failed');
@@ -187,10 +210,16 @@ export function useStreamingTranslation() {
               if (typeof parsed.text === 'string') onDelta(parsed.text);
             } catch {}
           });
+          es.addEventListener('confidence', (e: any) => {
+            try {
+              const parsed = JSON.parse(e.data ?? '{}');
+              if (typeof parsed.confidence === 'number') onConfidence(parsed.confidence);
+            } catch {}
+          });
           es.addEventListener('done', (e: any) => {
             try {
               const parsed = JSON.parse(e.data ?? '{}');
-              onDone(parsed.text ?? '', parsed.model ?? '');
+              onDone(parsed.text ?? '', parsed.model ?? '', typeof parsed.confidence === 'number' ? parsed.confidence : undefined);
             } catch {
               onDone(accText, modelName ?? '');
             }

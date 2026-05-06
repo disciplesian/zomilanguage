@@ -64,7 +64,11 @@ app.get("/api/health", (c) => {
  */
 app.post("/api/translate/stream", async (c) => {
   const apiKey = process.env.GEMINI_API_KEY;
-  let body: { text?: string; targetLanguage?: string } = {};
+  let body: {
+    text?: string;
+    targetLanguage?: string;
+    extraGlossary?: Record<string, string>;
+  } = {};
   try {
     body = await c.req.json();
   } catch {
@@ -72,12 +76,15 @@ app.post("/api/translate/stream", async (c) => {
   }
   const text = (body.text ?? "").trim();
   const target = (body.targetLanguage ?? "english").trim();
+  const extraGlossary =
+    body.extraGlossary && typeof body.extraGlossary === 'object' ? body.extraGlossary : {};
   if (!text) return c.json({ error: "missing_text" }, 400);
   if (!apiKey) return c.json({ error: "api_key_missing" }, 500);
 
   const targetLang = target === "zomi" ? "Tedim Zomi (CTD, ISO 639-3: ctd)" : target;
   const ai = new GoogleGenAI({ apiKey });
-  const glossaryJson = JSON.stringify({ glossary: ZOMI_GLOSSARY, examples: ZOMI_EXAMPLES });
+  const mergedGlossary: Record<string, string> = { ...ZOMI_GLOSSARY, ...extraGlossary };
+  const glossaryJson = JSON.stringify({ glossary: mergedGlossary, examples: ZOMI_EXAMPLES });
   const contents = [
     {
       role: "user" as const,
@@ -118,9 +125,18 @@ app.post("/api/translate/stream", async (c) => {
           full += piece;
           await stream.writeSSE({ event: "delta", data: JSON.stringify({ text: piece }) });
         }
+        // Estimate a confidence based on output stability heuristics.
+        // (A best-effort proxy for true model confidence in streaming mode.)
+        const trimmed = full.trim();
+        const looksClean = trimmed.length > 0 && !/\b(sorry|cannot|unable)\b/i.test(trimmed);
+        const confidence = looksClean ? Math.min(98, 88 + Math.min(10, Math.floor(trimmed.length / 80))) : 60;
+        await stream.writeSSE({
+          event: "confidence",
+          data: JSON.stringify({ confidence }),
+        });
         await stream.writeSSE({
           event: "done",
-          data: JSON.stringify({ text: full.trim(), model }),
+          data: JSON.stringify({ text: trimmed, model, confidence }),
         });
         return;
       } catch (err) {

@@ -48,6 +48,8 @@ import Colors from '@/constants/colors';
 import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 import { useSpeechToText } from '@/hooks/useSpeechToText';
 import { useStreamingTranslation } from '@/hooks/useStreamingTranslation';
+import { useTranslationCache } from '@/contexts/TranslationCacheContext';
+import { useGlossary } from '@/contexts/GlossaryContext';
 import { exportTranslation, ExportFormat, TranslationData } from '@/lib/exportUtils';
 
 export default function TranslatorScreen() {
@@ -121,10 +123,29 @@ export default function TranslatorScreen() {
 
   const translateMutation = trpc.translation.translate.useMutation();
   const stream = useStreamingTranslation();
+  const cache = useTranslationCache();
+  const glossary = useGlossary();
   const translationRequestId = useRef(0);
   const isTranslatingRef = useRef(false);
   const lastTranslatedText = useRef('');
   const lastDirection = useRef(true);
+
+  // Blinking cursor while streaming.
+  const cursorAnim = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (stream.isStreaming) {
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(cursorAnim, { toValue: 0.1, duration: 450, useNativeDriver: true }),
+          Animated.timing(cursorAnim, { toValue: 1, duration: 450, useNativeDriver: true }),
+        ])
+      );
+      loop.start();
+      return () => loop.stop();
+    } else {
+      cursorAnim.setValue(1);
+    }
+  }, [stream.isStreaming, cursorAnim]);
 
   // Mirror streaming text into the visible output so the user sees token-by-token reveal.
   useEffect(() => {
@@ -165,16 +186,42 @@ export default function TranslatorScreen() {
     console.log('Input text:', text.substring(0, 50) + (text.length > 50 ? '...' : ''));
     console.log('Direction:', direction ? 'Zomi → English' : 'English → Zomi');
 
+    const targetLang: 'english' | 'zomi' = direction ? 'english' : 'zomi';
+    const sourceLang: 'zomi' | 'english' = direction ? 'zomi' : 'english';
+
+    // Offline / instant cache hit
+    const hit = cache.lookup(text.trim(), targetLang);
+    if (hit) {
+      console.log('[cache] hit', hit.model, hit.confidence);
+      setOutputText(hit.translatedText);
+      setTranslationQuality(hit.confidence || 95);
+      setIsTranslating(false);
+      isTranslatingRef.current = false;
+      // Continue to refresh in background only if confidence is low; otherwise return.
+      if ((hit.confidence ?? 0) >= 90) return;
+    }
+
     // Primary path: stream tokens via SSE for instant token-by-token reveal.
     try {
-      setOutputText('');
-      const streamResult = await stream.start(text.trim(), direction ? 'english' : 'zomi');
+      if (!hit) setOutputText('');
+      const streamResult = await stream.start(text.trim(), targetLang, {
+        extraGlossary: glossary.asRecord(),
+      });
       if (currentRequestId !== translationRequestId.current) return;
       if (streamResult.ok && streamResult.text) {
         setOutputText(streamResult.text);
-        setTranslationQuality(95);
+        const conf = streamResult.confidence > 0 ? streamResult.confidence : 95;
+        setTranslationQuality(conf);
         setIsTranslating(false);
         isTranslatingRef.current = false;
+        cache.save({
+          sourceText: text.trim(),
+          translatedText: streamResult.text,
+          sourceLanguage: sourceLang,
+          targetLanguage: targetLang,
+          confidence: conf,
+          model: streamResult.model,
+        });
         console.log('[stream] success via', streamResult.model);
         return;
       }
@@ -191,8 +238,8 @@ export default function TranslatorScreen() {
     try {
       const result = await translateMutation.mutateAsync({
         text: text.trim(),
-        sourceLanguage: direction ? 'zomi' : 'english',
-        targetLanguage: direction ? 'english' : 'zomi',
+        sourceLanguage: sourceLang,
+        targetLanguage: targetLang,
       });
       
       // Check if this is still the latest request
@@ -204,9 +251,18 @@ export default function TranslatorScreen() {
       console.log('Backend translation successful:', result.model, 'cached=', (result as any).cached);
       setOutputText(result.translatedText);
       const conf = (result as any).confidence;
-      setTranslationQuality(typeof conf === 'number' && conf > 0 ? conf : 95);
+      const finalConf = typeof conf === 'number' && conf > 0 ? conf : 95;
+      setTranslationQuality(finalConf);
       setIsTranslating(false);
       isTranslatingRef.current = false;
+      cache.save({
+        sourceText: text.trim(),
+        translatedText: result.translatedText,
+        sourceLanguage: sourceLang,
+        targetLanguage: targetLang,
+        confidence: finalConf,
+        model: result.model,
+      });
       return;
     } catch (backendError: unknown) {
       if (currentRequestId !== translationRequestId.current) {
@@ -240,8 +296,17 @@ export default function TranslatorScreen() {
         return;
       }
       
-      setOutputText(fallbackResult.trim());
+      const finalText = fallbackResult.trim();
+      setOutputText(finalText);
       setTranslationQuality(92);
+      cache.save({
+        sourceText: text.trim(),
+        translatedText: finalText,
+        sourceLanguage: sourceLang,
+        targetLanguage: targetLang,
+        confidence: 92,
+        model: 'rork-toolkit',
+      });
     } catch (fallbackError: unknown) {
       // Check if this is still the latest request
       if (currentRequestId !== translationRequestId.current) {
@@ -251,7 +316,15 @@ export default function TranslatorScreen() {
       
       console.error('Fallback translation also failed:', fallbackError);
       const errorMsg = fallbackError instanceof Error ? fallbackError.message.toLowerCase() : '';
-      
+
+      // Last-resort: serve from offline cache if we have any prior hit, even fuzzy.
+      const offlineHit = cache.lookup(text.trim(), targetLang);
+      if (offlineHit) {
+        setOutputText(offlineHit.translatedText);
+        setTranslationQuality(Math.max(50, offlineHit.confidence - 20));
+        return;
+      }
+
       let userMessage = 'Translation failed. Please try again.';
       if (errorMsg.includes('quota') || errorMsg.includes('limit') || errorMsg.includes('429')) {
         userMessage = 'API quota exceeded. Please wait a moment and try again.';
@@ -270,7 +343,7 @@ export default function TranslatorScreen() {
         isTranslatingRef.current = false;
       }
     }
-  }, [translateMutation]);
+  }, [translateMutation, stream, cache, glossary]);
 
   const translateRef = useRef(translate);
   translateRef.current = translate;
@@ -883,6 +956,11 @@ export default function TranslatorScreen() {
               ) : (
                 <Text style={styles.outputText}>
                   {outputText || 'Translation will appear here...'}
+                  {stream.isStreaming && outputText ? (
+                    <Animated.Text style={[styles.streamCursor, { opacity: cursorAnim }]}>
+                      {' ▋'}
+                    </Animated.Text>
+                  ) : null}
                 </Text>
               )}
             </View>
@@ -1276,6 +1354,11 @@ const styles = StyleSheet.create({
     color: Colors.warning,
     fontWeight: '500',
     flex: 1,
+  },
+  streamCursor: {
+    fontSize: 17,
+    color: Colors.accent,
+    fontWeight: '700',
   },
 
 });

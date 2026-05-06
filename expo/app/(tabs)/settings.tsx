@@ -18,6 +18,7 @@ import {
   Shield,
   Heart,
   ExternalLink,
+  BookOpen,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import GlassCard from '@/components/GlassCard';
@@ -58,6 +59,9 @@ export default function SettingsScreen() {
       case 'terms':
         router.push('/terms' as any);
         break;
+      case 'glossary':
+        router.push('/glossary' as any);
+        break;
       default:
         console.log('Action:', action);
     }
@@ -96,6 +100,23 @@ export default function SettingsScreen() {
               <Text style={[styles.headerTitle, { color: colors.text }]}>Settings</Text>
               <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>Customize your experience</Text>
             </View>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Personalisation</Text>
+
+            <GlassCard style={styles.aboutCard}>
+              <TouchableOpacity
+                style={styles.aboutItem}
+                onPress={() => handlePress('glossary')}
+              >
+                <View style={[styles.aboutIcon, { backgroundColor: colors.glassYellow }]}>
+                  <BookOpen size={20} color={colors.accent} />
+                </View>
+                <Text style={[styles.aboutText, { color: colors.text }]}>My Tedim Glossary</Text>
+                <ChevronRight size={18} color={colors.textMuted} />
+              </TouchableOpacity>
+            </GlassCard>
           </View>
 
           <View style={styles.section}>

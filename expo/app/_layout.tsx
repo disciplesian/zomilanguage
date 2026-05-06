@@ -7,6 +7,8 @@ import Colors from "@/constants/colors";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
 import { UserProfileProvider } from "@/contexts/UserProfileContext";
+import { TranslationCacheProvider } from "@/contexts/TranslationCacheContext";
+import { GlossaryProvider } from "@/contexts/GlossaryContext";
 import { trpc, getTrpcClient } from "@/lib/trpc";
 import { setupGlobalErrorHandlers } from "@/lib/errorHandler";
 
@@ -144,6 +146,13 @@ function RootLayoutNav() {
             presentation: "card",
           }} 
         />
+        <Stack.Screen 
+          name="glossary" 
+          options={{ 
+            title: "My Glossary",
+            presentation: "card",
+          }} 
+        />
 
       </Stack>
     </>
@@ -213,7 +222,11 @@ export default function RootLayout() {
           <QueryClientProvider client={queryClient}>
             <ThemeProvider>
               <UserProfileProvider>
-                <RootLayoutNav />
+                <TranslationCacheProvider>
+                  <GlossaryProvider>
+                    <RootLayoutNav />
+                  </GlossaryProvider>
+                </TranslationCacheProvider>
               </UserProfileProvider>
             </ThemeProvider>
           </QueryClientProvider>
