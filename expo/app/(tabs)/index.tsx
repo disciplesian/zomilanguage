@@ -231,6 +231,7 @@ export default function TranslatorScreen() {
         text: text.trim(),
         sourceLanguage: sourceLang,
         targetLanguage: targetLang,
+        extraGlossary: glossary.asRecord(),
       });
       
       // Check if this is still the latest request

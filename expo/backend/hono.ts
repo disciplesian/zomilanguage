@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { trpcServer } from "@hono/trpc-server";
 import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { appRouter } from "./trpc/app-router";
 import { createContext } from "./trpc/create-context";
 import {
@@ -99,25 +99,30 @@ app.post("/api/translate/stream", async (c) => {
   ];
 
   return streamSSE(c, async (stream) => {
-    const models = [
-      "gemini-3.1-pro-preview",
-      "gemini-3-flash",
-      "gemini-2.5-pro",
-      "gemini-2.5-flash",
+    // Gemini 3.x chain (Aug 2026): thinkingLevel replaces thinkingBudget and
+    // temperature/topP are deprecated on 3.x. LOW thinking keeps token-by-token
+    // streaming snappy. 2.5 fallbacks keep classic sampling params.
+    const models: { model: string; thinkingLevel?: ThinkingLevel }[] = [
+      { model: "gemini-3.1-pro-preview", thinkingLevel: ThinkingLevel.LOW },
+      { model: "gemini-3.7-flash", thinkingLevel: ThinkingLevel.LOW },
+      { model: "gemini-3.6-flash", thinkingLevel: ThinkingLevel.LOW },
+      { model: "gemini-2.5-pro" },
+      { model: "gemini-2.5-flash" },
     ];
-    for (const model of models) {
+    for (const spec of models) {
       try {
         const iter = await ai.models.generateContentStream({
-          model,
+          model: spec.model,
           contents,
           config: {
-            temperature: 0.1,
             maxOutputTokens: 8192,
-            topP: 0.8,
             systemInstruction: ZOMI_SYSTEM_INSTRUCTION,
+            ...(spec.thinkingLevel
+              ? { thinkingConfig: { thinkingLevel: spec.thinkingLevel } }
+              : { temperature: 0.1, topP: 0.8 }),
           },
         });
-        await stream.writeSSE({ event: "start", data: JSON.stringify({ model }) });
+        await stream.writeSSE({ event: "start", data: JSON.stringify({ model: spec.model }) });
         let full = "";
         for await (const chunk of iter) {
           const piece = chunk.text ?? "";
@@ -136,11 +141,11 @@ app.post("/api/translate/stream", async (c) => {
         });
         await stream.writeSSE({
           event: "done",
-          data: JSON.stringify({ text: trimmed, model, confidence }),
+          data: JSON.stringify({ text: trimmed, model: spec.model, confidence }),
         });
         return;
       } catch (err) {
-        console.error(`[stream] model ${model} failed`, err);
+        console.error(`[stream] model ${spec.model} failed`, err);
         const message = err instanceof Error ? err.message : String(err);
         const lower = message.toLowerCase();
         if (lower.includes("429") || lower.includes("quota") || lower.includes("rate limit")) {

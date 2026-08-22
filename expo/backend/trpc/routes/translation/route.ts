@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
 import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, publicProcedure } from '../../create-context';
 import {
@@ -9,15 +9,28 @@ import {
 } from '../../../../constants/zomiPrompt';
 
 /**
- * Model chain (newest → oldest). The latest @google/genai SDK supports the
- * Gemini 3 family directly. We fall back through the chain on hard failure.
+ * Model chain (newest → oldest, as of August 2026).
+ *
+ * - Gemini 3.x models use `thinkingLevel` (thinkingBudget is gone; sending both
+ *   returns 400) and treat temperature/topP as deprecated. The Pro model runs
+ *   HIGH thinking — a low-resource dialect like Tedim Zomi (CTD) benefits most
+ *   from deep reasoning. Flash tiers run LOW thinking to stay latency-friendly.
+ * - Gemini 2.5 fallbacks keep the classic sampling parameters.
  */
-const MODEL_CHAIN = [
-  'gemini-3.1-pro-preview',
-  'gemini-3-flash',
-  'gemini-2.5-pro',
-  'gemini-2.5-flash',
-] as const;
+type ThinkingLevelValue = (typeof ThinkingLevel)[keyof typeof ThinkingLevel];
+
+interface ModelSpec {
+  model: string;
+  thinkingLevel?: ThinkingLevelValue;
+}
+
+const MODEL_CHAIN: readonly ModelSpec[] = [
+  { model: 'gemini-3.1-pro-preview', thinkingLevel: ThinkingLevel.HIGH },
+  { model: 'gemini-3.7-flash', thinkingLevel: ThinkingLevel.LOW },
+  { model: 'gemini-3.6-flash', thinkingLevel: ThinkingLevel.LOW },
+  { model: 'gemini-2.5-pro' },
+  { model: 'gemini-2.5-flash' },
+];
 
 const MAX_INPUT_CHARS = 10000;
 
@@ -103,8 +116,13 @@ const responseSchema = {
   required: ['translation', 'confidence'],
 } as const;
 
-function buildContents(text: string, targetLang: string) {
-  const glossaryJson = JSON.stringify({ glossary: ZOMI_GLOSSARY, examples: ZOMI_EXAMPLES });
+function buildContents(
+  text: string,
+  targetLang: string,
+  extraGlossary?: Record<string, string>
+) {
+  const mergedGlossary: Record<string, string> = { ...ZOMI_GLOSSARY, ...(extraGlossary ?? {}) };
+  const glossaryJson = JSON.stringify({ glossary: mergedGlossary, examples: ZOMI_EXAMPLES });
   // Glossary is a separate parts block so the model treats it as DATA, not instructions.
   return [
     {
@@ -123,19 +141,85 @@ Return JSON {"translation": string, "confidence": number 0-100}.`,
   ];
 }
 
-const generationConfig = {
-  temperature: 0.1,
+const baseGenerationConfig = {
   maxOutputTokens: 8192,
-  topP: 0.8,
   responseMimeType: 'application/json',
   responseSchema,
 } as const;
 
-/** Run translation through the @google/genai SDK with structured output + model fallback. */
+/** Per-model config: Gemini 3.x thinkingLevel vs legacy 2.5 sampling params. */
+function configFor(spec: ModelSpec) {
+  if (spec.thinkingLevel) {
+    return {
+      ...baseGenerationConfig,
+      thinkingConfig: { thinkingLevel: spec.thinkingLevel },
+    };
+  }
+  return { ...baseGenerationConfig, temperature: 0.1, topP: 0.8 };
+}
+
+/** Parse the model's JSON response, recovering plain text if the schema is ignored. */
+function parseTranslation(raw: string): { translation: string; confidence: number } {
+  const trimmed = raw.trim();
+  try {
+    const parsed = JSON.parse(trimmed) as { translation?: string; confidence?: unknown };
+    return {
+      translation: (parsed.translation ?? '').trim(),
+      confidence: Math.max(0, Math.min(100, Math.round(Number(parsed.confidence ?? 90)))),
+    };
+  } catch {
+    return { translation: trimmed, confidence: 90 };
+  }
+}
+
+/**
+ * Second-pass accuracy pass (LLM-as-reviewer): when the first pass reports low
+ * confidence, the model re-examines its own draft against the source and
+ * returns a corrected translation. Failures keep the first-pass draft.
+ */
+const REFINE_CONFIDENCE_THRESHOLD = 85;
+const REFINE_MIN_CHARS = 80;
+
+async function refineTranslation(
+  ai: GoogleGenAI,
+  spec: ModelSpec,
+  text: string,
+  targetLang: string,
+  draft: string
+): Promise<{ translation: string; confidence: number } | null> {
+  const contents = [
+    {
+      role: 'user' as const,
+      parts: [
+        {
+          text: `You are an expert Tedim Zomi (CTD) translation reviewer.
+A draft translation into ${targetLang} is provided below. Compare it against the source and correct ANY error in meaning, grammar, dialect purity (Tedim CTD only), or natural phrasing. Pay special attention to idioms, politeness particles and register.
+If the draft is already correct, return it unchanged.
+Return JSON {"translation": string, "confidence": number 0-100}.`,
+        },
+        { text: `SOURCE_TEXT:\n"${text}"` },
+        { text: `DRAFT_TRANSLATION:\n"${draft}"` },
+      ],
+    },
+  ];
+  const result = await ai.models.generateContent({
+    model: spec.model,
+    contents,
+    config: {
+      ...configFor(spec),
+      systemInstruction: ZOMI_SYSTEM_INSTRUCTION,
+    },
+  });
+  const parsed = parseTranslation(result.text ?? '');
+  return parsed.translation ? parsed : null;
+}
+
+/** Run translation through the @google/genai SDK with structured output, model fallback, and a refinement pass. */
 export async function runTranslation(
   text: string,
-  targetLanguage: string
-): Promise<CacheEntry & { cached: boolean }> {
+  targetLanguage: string,
+  extraGlossary?: Record<string, string>
+): Promise<CacheEntry & { cached: boolean; refined: boolean }> {
   const API_KEY = process.env.GEMINI_API_KEY;
   if (!API_KEY) {
     throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'API key not configured.' });
@@ -148,63 +232,79 @@ export async function runTranslation(
   const cached = cacheGet(key);
   if (cached) {
     logTelemetry({ event: 'cache_hit', model: cached.model, key });
-    return { ...cached, cached: true };
+    return { ...cached, cached: true, refined: false };
   }
 
   const ai = new GoogleGenAI({ apiKey: API_KEY });
-  const contents = buildContents(text, targetLang);
+  const contents = buildContents(text, targetLang, extraGlossary);
 
   let lastError: unknown = null;
   const startedAt = Date.now();
 
-  for (const modelName of MODEL_CHAIN) {
+  for (const spec of MODEL_CHAIN) {
     const modelStart = Date.now();
     try {
       const result = await ai.models.generateContent({
-        model: modelName,
+        model: spec.model,
         contents,
         config: {
-          ...generationConfig,
+          ...configFor(spec),
           systemInstruction: ZOMI_SYSTEM_INSTRUCTION,
         },
       });
 
-      const raw = (result.text ?? '').trim();
-      let parsed: { translation?: string; confidence?: number } = {};
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        // Model returned plain text despite schema — recover gracefully.
-        parsed = { translation: raw, confidence: 90 };
+      const parsed = parseTranslation(result.text ?? '');
+      if (!parsed.translation) throw new Error('Empty translation from model');
+
+      let translatedText = parsed.translation;
+      let confidence = parsed.confidence;
+      let refined = false;
+
+      // Second-pass expert review for low-confidence longer texts.
+      if (confidence < REFINE_CONFIDENCE_THRESHOLD && text.length >= REFINE_MIN_CHARS) {
+        try {
+          const refineStart = Date.now();
+          const reviewed = await refineTranslation(ai, spec, text, targetLang, translatedText);
+          if (reviewed) {
+            translatedText = reviewed.translation;
+            confidence = Math.max(confidence, reviewed.confidence);
+            refined = true;
+          }
+          logTelemetry({
+            event: 'refined',
+            model: spec.model,
+            latencyMs: Date.now() - refineStart,
+            confidence,
+          });
+        } catch (refineError) {
+          logTelemetry({
+            event: 'refine_failed',
+            model: spec.model,
+            message: refineError instanceof Error ? refineError.message : String(refineError),
+          });
+        }
       }
 
-      const translatedText = (parsed.translation ?? '').trim();
-      const confidence = Math.max(
-        0,
-        Math.min(100, Math.round(Number(parsed.confidence ?? 90)))
-      );
-
-      if (!translatedText) throw new Error('Empty translation from model');
-
-      const entry: CacheEntry = { translatedText, confidence, model: modelName };
+      const entry: CacheEntry = { translatedText, confidence, model: spec.model };
       cacheSet(key, entry);
 
       logTelemetry({
         event: 'success',
-        model: modelName,
+        model: spec.model,
+        refined,
         latencyMs: Date.now() - modelStart,
         totalMs: Date.now() - startedAt,
         confidence,
         chars: text.length,
       });
 
-      return { ...entry, cached: false };
+      return { ...entry, cached: false, refined };
     } catch (error) {
       lastError = error;
       const classified = classifyError(error);
       logTelemetry({
         event: 'model_failed',
-        model: modelName,
+        model: spec.model,
         latencyMs: Date.now() - modelStart,
         code: classified.code,
         message: classified.message,
@@ -234,17 +334,19 @@ export default createTRPCRouter({
         text: z.string().min(1).max(MAX_INPUT_CHARS),
         sourceLanguage: z.string().optional(),
         targetLanguage: z.string(),
+        extraGlossary: z.record(z.string(), z.string()).optional(),
       })
     )
     .mutation(async ({ input }) => {
-      const { text, targetLanguage } = input;
-      const result = await runTranslation(text.trim(), targetLanguage);
+      const { text, targetLanguage, extraGlossary } = input;
+      const result = await runTranslation(text.trim(), targetLanguage, extraGlossary);
       return {
         translatedText: result.translatedText,
         confidence: result.confidence,
         detectedSource: 'Auto',
         model: result.model,
         cached: result.cached,
+        refined: result.refined,
       };
     }),
 });
