@@ -101,6 +101,17 @@ final class TranslatorViewModel {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
+        // Portal policy: translation is a members-only service.
+        guard AuthManager.hasStoredSession() else {
+            outputText = ""
+            quality = 0
+            isTranslating = false
+            isStreaming = false
+            hasStreamedText = false
+            errorText = "Sign in required — please sign in from the Settings tab."
+            return
+        }
+
         // Skip identical re-translations (prevents flicker on refocus).
         if trimmed == lastTranslatedText && direction == lastDirection { return }
 
@@ -169,6 +180,13 @@ final class TranslatorViewModel {
                     ))
                 case .failure(let message):
                     if message == "cancelled" { return }
+                    if message == "sign_in_required" {
+                        self.errorText = "Sign in required — please sign in from the Settings tab."
+                        self.isTranslating = false
+                        self.isStreaming = false
+                        finished = true
+                        break
+                    }
                     print("[Translator] stream failed, falling back: \(message)")
                 }
             }

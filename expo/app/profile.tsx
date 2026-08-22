@@ -43,6 +43,7 @@ import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import GlassCard from '@/components/GlassCard';
 import AuthCard from '@/components/AuthCard';
+import PortalAccountCard from '@/components/PortalAccountCard';
 import PageBottomNav, { PAGE_BOTTOM_NAV_SPACING } from '@/components/PageBottomNav';
 import Colors from '@/constants/colors';
 import { useUserProfile, UserBadge } from '@/contexts/UserProfileContext';
@@ -213,6 +214,7 @@ export default function ProfileScreen() {
           </GlassCard>
 
           <AuthCard />
+          <PortalAccountCard />
 
           <View style={styles.quickStats}>
             <GlassCard style={styles.quickStatCard}>

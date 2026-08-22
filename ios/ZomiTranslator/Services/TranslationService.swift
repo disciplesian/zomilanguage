@@ -39,6 +39,12 @@ nonisolated final class TranslationService: Sendable {
         AsyncStream { continuation in
             let task = Task {
                 do {
+                    // Portal policy: translation requires a signed-in account.
+                    guard let accessToken = KeychainHelper.get("access_token") else {
+                        continuation.yield(.failure(message: "sign_in_required"))
+                        continuation.finish()
+                        return
+                    }
                     guard let url = URL(string: "\(baseURL)/api/translate/stream") else {
                         continuation.yield(.failure(message: "invalid_url"))
                         continuation.finish()
@@ -48,6 +54,7 @@ nonisolated final class TranslationService: Sendable {
                     request.httpMethod = "POST"
                     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
                     request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+                    request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
                     request.timeoutInterval = 60
 
                     let body: [String: Any] = [
@@ -60,7 +67,11 @@ nonisolated final class TranslationService: Sendable {
                     let (bytes, response) = try await URLSession.shared.bytes(for: request)
                     guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                         let code = (response as? HTTPURLResponse)?.statusCode ?? -1
-                        continuation.yield(.failure(message: "HTTP \(code)"))
+                        if code == 401 {
+                            continuation.yield(.failure(message: "sign_in_required"))
+                        } else {
+                            continuation.yield(.failure(message: "HTTP \(code)"))
+                        }
                         continuation.finish()
                         return
                     }

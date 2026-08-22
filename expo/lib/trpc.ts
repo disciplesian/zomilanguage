@@ -3,6 +3,7 @@ import { httpLink } from "@trpc/client";
 import type { AppRouter } from "@/backend/trpc/app-router";
 import superjson from "superjson";
 import { Platform } from "react-native";
+import { getStoredAccessToken } from "@/lib/authStorage";
 
 const getPlatformOS = (): string => {
   try {
@@ -67,11 +68,20 @@ const createTrpcClient = (): ReturnType<typeof trpc.createClient> => {
         url: baseUrl + '/api/trpc',
         transformer: superjson,
         fetch: fetchWithTimeout,
-        headers() {
-          return {
+        headers: async () => {
+          const headers: Record<string, string> = {
             'Content-Type': 'application/json',
             'X-Platform': platformOS,
           };
+          // Attach the signed-in user's token so translation can be logged
+          // to their account (portal policy: sign-in required to translate).
+          try {
+            const token = await getStoredAccessToken();
+            if (token) headers.Authorization = `Bearer ${token}`;
+          } catch {
+            // no stored token — request proceeds unauthenticated
+          }
+          return headers;
         },
       }),
     ],

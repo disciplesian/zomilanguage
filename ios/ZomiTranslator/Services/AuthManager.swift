@@ -38,6 +38,18 @@ final class AuthManager {
         Task { await checkAuth() }
     }
 
+    /// Quick synchronous check for any stored session (Keychain tokens or the
+    /// simulator-injected refresh token). Used by the translator gate — the
+    /// translation service is members-only in the Zomi Language Portal.
+    nonisolated static func hasStoredSession() -> Bool {
+        if KeychainHelper.get("access_token") != nil { return true }
+        if KeychainHelper.get("refresh_token") != nil { return true }
+        #if targetEnvironment(simulator)
+        if UserDefaults.standard.string(forKey: "RORK_AUTH_REFRESH_TOKEN") != nil { return true }
+        #endif
+        return false
+    }
+
     private var authEnv: String {
         #if targetEnvironment(simulator)
         return "simulator"

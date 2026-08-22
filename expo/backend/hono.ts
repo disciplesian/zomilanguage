@@ -1,11 +1,20 @@
 import { Hono } from "hono";
+import type { Context } from "hono";
 import { trpcServer } from "@hono/trpc-server";
 import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
+import type Surreal from "surrealdb.js";
 import { appRouter } from "./trpc/app-router";
 import { createContext } from "./trpc/create-context";
 import { getDB } from "./db/client";
+import {
+  authFromRequest,
+  ensurePortalUser,
+  portalProfileFor,
+  logTranslation,
+  type AuthInfo,
+} from "./portal";
 import {
   ZOMI_SYSTEM_INSTRUCTION,
   ZOMI_GLOSSARY,
@@ -64,6 +73,10 @@ app.get("/api/health", (c) => {
  * Falls back gracefully if the SDK or API key is unavailable.
  */
 app.post("/api/translate/stream", async (c) => {
+  // Zomi Language Portal policy: translation requires a signed-in account.
+  const auth = await authFromRequest(c.req.header("authorization"));
+  if (!auth) return c.json({ error: "sign_in_required" }, 401);
+
   const apiKey = process.env.GEMINI_API_KEY;
   let body: {
     text?: string;
@@ -144,6 +157,19 @@ app.post("/api/translate/stream", async (c) => {
           event: "done",
           data: JSON.stringify({ text: trimmed, model: spec.model, confidence }),
         });
+        // Per-user usage log for the admin dashboard. Non-fatal on failure.
+        try {
+          const db = await getDB();
+          await logTranslation(db, auth, {
+            sourceText: text,
+            translatedText: trimmed,
+            targetLanguage: target,
+            model: spec.model,
+            confidence,
+          });
+        } catch {
+          // ignore logging failures
+        }
         return;
       } catch (err) {
         console.error(`[stream] model ${spec.model} failed`, err);
@@ -168,62 +194,8 @@ app.post("/api/translate/stream", async (c) => {
 /**
  * Cloud sync: stores each signed-in user's personal glossary and saved
  * translations in SurrealDB so they stay consistent across devices.
- * Auth: Rork Auth access token (JWT bearer). The signature is verified with
- * RORK_AUTH_SECRET_KEY (HS256) when the secret is available in this runtime.
+ * Auth helpers (JWT bearer verification) live in ./portal.ts.
  */
-function b64UrlDecode(segment: string): string {
-  const b64 = segment.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
-  return atob(padded);
-}
-
-function b64UrlToBytes(segment: string): Uint8Array<ArrayBuffer> {
-  const raw = atob(segment.replace(/-/g, "+").replace(/_/g, "/"));
-  const bytes = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
-  return bytes;
-}
-
-async function authUserIdFromRequest(header: string | undefined): Promise<string | null> {
-  const token = header?.startsWith("Bearer ") ? header.slice(7).trim() : null;
-  if (!token) return null;
-  const parts = token.split(".");
-  if (parts.length !== 3) return null;
-
-  let payload: { sub?: string; exp?: number };
-  try {
-    payload = JSON.parse(b64UrlDecode(parts[1]));
-  } catch {
-    return null;
-  }
-  if (!payload.sub) return null;
-  if (typeof payload.exp === "number" && payload.exp * 1000 < Date.now()) return null;
-
-  // Verify the JWT signature when the shared secret is present (HS256).
-  const secret = process.env.RORK_AUTH_SECRET_KEY;
-  if (secret && typeof crypto !== "undefined" && crypto.subtle) {
-    try {
-      const key = await crypto.subtle.importKey(
-        "raw",
-        new TextEncoder().encode(secret),
-        { name: "HMAC", hash: "SHA-256" },
-        false,
-        ["verify"]
-      );
-      const ok = await crypto.subtle.verify(
-        "HMAC",
-        key,
-        b64UrlToBytes(parts[2]),
-        new TextEncoder().encode(`${parts[0]}.${parts[1]}`)
-      );
-      if (!ok) return null;
-    } catch (err) {
-      console.warn("[sync] JWT signature verification skipped:", err);
-    }
-  }
-  return String(payload.sub);
-}
-
 function sanitizeString(value: unknown, max: number): string {
   return typeof value === "string" ? value.slice(0, max) : "";
 }
@@ -262,8 +234,9 @@ function sanitizeTranslations(input: unknown): unknown[] {
 }
 
 app.post("/api/sync/push", async (c) => {
-  const userId = await authUserIdFromRequest(c.req.header("authorization"));
-  if (!userId) return c.json({ error: "unauthorized" }, 401);
+  const auth = await authFromRequest(c.req.header("authorization"));
+  if (!auth) return c.json({ error: "unauthorized" }, 401);
+  const userId = auth.userId;
 
   let body: Record<string, unknown> = {};
   try {
@@ -288,8 +261,9 @@ app.post("/api/sync/push", async (c) => {
 });
 
 app.post("/api/sync/pull", async (c) => {
-  const userId = await authUserIdFromRequest(c.req.header("authorization"));
-  if (!userId) return c.json({ error: "unauthorized" }, 401);
+  const auth = await authFromRequest(c.req.header("authorization"));
+  if (!auth) return c.json({ error: "unauthorized" }, 401);
+  const userId = auth.userId;
 
   try {
     const db = await getDB();
@@ -310,6 +284,265 @@ app.post("/api/sync/pull", async (c) => {
   } catch (err) {
     console.error("[sync] pull failed", err);
     return c.json({ error: "sync_failed" }, 500);
+  }
+});
+
+/** Portal profile for the signed-in user: role, verification status, usage stats. */
+app.get("/api/portal/me", async (c) => {
+  const auth = await authFromRequest(c.req.header("authorization"));
+  if (!auth) return c.json({ error: "unauthorized" }, 401);
+  try {
+    const db = await getDB();
+    const profile = await portalProfileFor(db, auth);
+    return c.json({
+      userId: profile.userId,
+      email: profile.email,
+      name: profile.name,
+      role: profile.role,
+      verified: profile.verified,
+      verificationStatus: profile.verificationStatus,
+      translationCount: profile.translationCount,
+      joinedAt: profile.createdAt,
+    });
+  } catch (err) {
+    console.error("[portal] me failed", err);
+    return c.json({ error: "portal_failed" }, 500);
+  }
+});
+
+/** Submit a blue-check verification request for admin review. */
+app.post("/api/portal/verification/request", async (c) => {
+  const auth = await authFromRequest(c.req.header("authorization"));
+  if (!auth) return c.json({ error: "unauthorized" }, 401);
+
+  let body: { reason?: string } = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_json" }, 400);
+  }
+  const reason = typeof body.reason === "string" ? body.reason.slice(0, 500).trim() : "";
+
+  try {
+    const db = await getDB();
+    const profile = await ensurePortalUser(db, auth);
+    if (profile.verified) return c.json({ success: true, status: "approved" });
+    if (profile.verificationStatus === "pending") {
+      return c.json({ success: true, status: "pending" });
+    }
+    await db.query(
+      "UPDATE portal_users SET verificationStatus = 'pending', verificationReason = $reason, requestedAt = $now WHERE userId = $userId",
+      { reason, now: new Date().toISOString(), userId: auth.userId }
+    );
+    return c.json({ success: true, status: "pending" });
+  } catch (err) {
+    console.error("[portal] verification request failed", err);
+    return c.json({ error: "request_failed" }, 500);
+  }
+});
+
+type AdminGuard =
+  | { ok: true; auth: AuthInfo; db: Surreal }
+  | { ok: false; response: Response };
+
+/** Verifies the caller is a signed-in admin before any /api/admin route runs. */
+async function requireAdmin(c: Context): Promise<AdminGuard> {
+  const auth = await authFromRequest(c.req.header("authorization"));
+  if (!auth) return { ok: false, response: c.json({ error: "unauthorized" }, 401) };
+  let db: Surreal;
+  try {
+    db = await getDB();
+  } catch {
+    return { ok: false, response: c.json({ error: "db_unavailable" }, 500) };
+  }
+  const profile = await ensurePortalUser(db, auth);
+  if (profile.role !== "admin") {
+    return { ok: false, response: c.json({ error: "forbidden" }, 403) };
+  }
+  return { ok: true, auth, db };
+}
+
+/** Admin dashboard overview: usage stats, top users, recent translations. */
+app.get("/api/admin/overview", async (c) => {
+  const guard = await requireAdmin(c);
+  if (!guard.ok) return guard.response;
+  const { db } = guard;
+  try {
+    const usersRes = await db.query<[Record<string, unknown>[]]>("SELECT * FROM portal_users");
+    const counts = await db.query<[{ userId: string; total: number }[]]>(
+      "SELECT userId, count() AS total FROM translation_logs GROUP BY userId"
+    );
+
+    let totalTranslations = 0;
+    const countMap = new Map<string, number>();
+    for (const row of counts[0] ?? []) {
+      const total = Number(row.total ?? 0);
+      totalTranslations += total;
+      if (row.userId) countMap.set(String(row.userId), total);
+    }
+
+    let translationsToday = 0;
+    try {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const todayRes = await db.query<[{ total: number }[]]>(
+        "SELECT count() AS total FROM translation_logs WHERE createdAt >= $start GROUP ALL",
+        { start: start.toISOString() }
+      );
+      translationsToday = Number(todayRes[0]?.[0]?.total ?? 0);
+    } catch {
+      translationsToday = 0;
+    }
+
+    let recent: Record<string, unknown>[] = [];
+    try {
+      const recentRes = await db.query<[Record<string, unknown>[]]>(
+        "SELECT * FROM translation_logs ORDER BY createdAt DESC LIMIT 50"
+      );
+      recent = recentRes[0] ?? [];
+    } catch {
+      recent = [];
+    }
+
+    const userList = usersRes[0] ?? [];
+    const userById = new Map(userList.map((u) => [String(u.userId), u]));
+    const topUsers = [...countMap.entries()]
+      .map(([userId, total]) => {
+        const u = userById.get(userId);
+        return {
+          userId,
+          email: String(u?.email ?? ""),
+          name: (u?.name as string | null) ?? null,
+          total,
+        };
+      })
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 10);
+
+    return c.json({
+      totalUsers: userList.length,
+      totalTranslations,
+      translationsToday,
+      verifiedUsers: userList.filter((u) => u.verified === true).length,
+      pendingVerifications: userList.filter((u) => u.verificationStatus === "pending").length,
+      topUsers,
+      recentTranslations: recent.map((r) => {
+        const u = userById.get(String(r.userId));
+        return {
+          userId: String(r.userId ?? ""),
+          email: String(u?.email ?? ""),
+          name: (u?.name as string | null) ?? null,
+          sourceText: String(r.sourceText ?? ""),
+          translatedText: String(r.translatedText ?? ""),
+          targetLanguage: String(r.targetLanguage ?? ""),
+          model: (r.model as string | null) ?? null,
+          confidence: Number(r.confidence ?? 0),
+          wordCount: Number(r.wordCount ?? 0),
+          createdAt: String(r.createdAt ?? ""),
+        };
+      }),
+    });
+  } catch (err) {
+    console.error("[admin] overview failed", err);
+    return c.json({ error: "overview_failed" }, 500);
+  }
+});
+
+/** Admin: list every portal user with roles, verification state, usage. */
+app.get("/api/admin/users", async (c) => {
+  const guard = await requireAdmin(c);
+  if (!guard.ok) return guard.response;
+  try {
+    const { db } = guard;
+    const usersRes = await db.query<[Record<string, unknown>[]]>("SELECT * FROM portal_users");
+    const counts = await db.query<[{ userId: string; total: number }[]]>(
+      "SELECT userId, count() AS total FROM translation_logs GROUP BY userId"
+    );
+    const countMap = new Map<string, number>();
+    for (const row of counts[0] ?? []) {
+      if (row.userId) countMap.set(String(row.userId), Number(row.total ?? 0));
+    }
+    const users = (usersRes[0] ?? []).map((u) => ({
+      userId: String(u.userId ?? ""),
+      email: String(u.email ?? ""),
+      name: (u.name as string | null) ?? null,
+      role: String(u.role ?? "user"),
+      verified: u.verified === true,
+      verificationStatus: String(u.verificationStatus ?? "none"),
+      verificationReason: String(u.verificationReason ?? ""),
+      requestedAt: (u.requestedAt as string | null) ?? null,
+      translationCount: countMap.get(String(u.userId)) ?? 0,
+      joinedAt: String(u.createdAt ?? ""),
+    }));
+    return c.json({ users });
+  } catch (err) {
+    console.error("[admin] users failed", err);
+    return c.json({ error: "users_failed" }, 500);
+  }
+});
+
+/** Admin: assign a role (user | moderator | admin) to any account. */
+app.post("/api/admin/role", async (c) => {
+  const guard = await requireAdmin(c);
+  if (!guard.ok) return guard.response;
+
+  let body: { userId?: string; role?: string } = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_json" }, 400);
+  }
+  const userId = typeof body.userId === "string" ? body.userId.trim() : "";
+  const role = body.role;
+  if (!userId) return c.json({ error: "missing_user_id" }, 400);
+  if (role !== "user" && role !== "moderator" && role !== "admin") {
+    return c.json({ error: "invalid_role" }, 400);
+  }
+  try {
+    await guard.db.query("UPDATE portal_users SET role = $role WHERE userId = $userId", {
+      role,
+      userId,
+    });
+    return c.json({ success: true });
+  } catch (err) {
+    console.error("[admin] role update failed", err);
+    return c.json({ error: "role_update_failed" }, 500);
+  }
+});
+
+/** Admin: approve or reject a verification request (also used to grant directly). */
+app.post("/api/admin/verification", async (c) => {
+  const guard = await requireAdmin(c);
+  if (!guard.ok) return guard.response;
+
+  let body: { userId?: string; decision?: string } = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_json" }, 400);
+  }
+  const userId = typeof body.userId === "string" ? body.userId.trim() : "";
+  const decision = body.decision;
+  if (!userId) return c.json({ error: "missing_user_id" }, 400);
+  if (decision !== "approve" && decision !== "reject") {
+    return c.json({ error: "invalid_decision" }, 400);
+  }
+  try {
+    if (decision === "approve") {
+      await guard.db.query(
+        "UPDATE portal_users SET verified = true, verificationStatus = 'approved' WHERE userId = $userId",
+        { userId }
+      );
+    } else {
+      await guard.db.query(
+        "UPDATE portal_users SET verified = false, verificationStatus = 'rejected' WHERE userId = $userId",
+        { userId }
+      );
+    }
+    return c.json({ success: true });
+  } catch (err) {
+    console.error("[admin] verification decision failed", err);
+    return c.json({ error: "verification_failed" }, 500);
   }
 });
 

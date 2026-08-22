@@ -72,7 +72,7 @@ export function useStreamingTranslation() {
     (
       text: string,
       targetLanguage: string,
-      options?: { extraGlossary?: Record<string, string> }
+      options?: { extraGlossary?: Record<string, string>; authToken?: string }
     ): Promise<StreamResult> => {
       cancel();
       const myToken = ++tokenRef.current;
@@ -148,9 +148,14 @@ export function useStreamingTranslation() {
           abortRef.current = ctrl;
           (async () => {
             try {
+              const reqHeaders: Record<string, string> = {
+                'Content-Type': 'application/json',
+                Accept: 'text/event-stream',
+              };
+              if (options?.authToken) reqHeaders.Authorization = `Bearer ${options.authToken}`;
               const res = await fetch(url, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+                headers: reqHeaders,
                 body,
                 signal: ctrl.signal,
               });
@@ -190,9 +195,14 @@ export function useStreamingTranslation() {
 
         // Native: react-native-sse with POST + body
         try {
+          const esHeaders: Record<string, string> = {
+            'Content-Type': 'application/json',
+            Accept: 'text/event-stream',
+          };
+          if (options?.authToken) esHeaders.Authorization = `Bearer ${options.authToken}`;
           const es: RNEventSource = new RNEventSource(url, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+            headers: esHeaders,
             body,
             pollingInterval: 0,
           } as any);

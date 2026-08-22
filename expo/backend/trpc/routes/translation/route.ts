@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
 import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, publicProcedure } from '../../create-context';
+import { authFromRequest, logTranslation } from '../../../portal';
+import { getDB } from '../../../db/client';
 import {
   ZOMI_SYSTEM_INSTRUCTION,
   ZOMI_GLOSSARY,
@@ -337,9 +339,27 @@ export default createTRPCRouter({
         extraGlossary: z.record(z.string(), z.string()).optional(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      // Zomi Language Portal policy: translation requires a signed-in account.
+      const auth = await authFromRequest(ctx.req?.headers?.get('authorization') ?? undefined);
+      if (!auth) {
+        throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sign in required to translate.' });
+      }
       const { text, targetLanguage, extraGlossary } = input;
       const result = await runTranslation(text.trim(), targetLanguage, extraGlossary);
+      // Per-user usage log for the admin dashboard. Non-fatal on failure.
+      try {
+        const db = await getDB();
+        await logTranslation(db, auth, {
+          sourceText: text,
+          translatedText: result.translatedText,
+          targetLanguage,
+          model: result.model,
+          confidence: result.confidence,
+        });
+      } catch {
+        // ignore logging failures
+      }
       return {
         translatedText: result.translatedText,
         confidence: result.confidence,

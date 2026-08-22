@@ -57,6 +57,8 @@ import { useSpeechToText } from '@/hooks/useSpeechToText';
 import { useStreamingTranslation } from '@/hooks/useStreamingTranslation';
 import { useTranslationCache } from '@/contexts/TranslationCacheContext';
 import { useGlossary } from '@/contexts/GlossaryContext';
+import { useAuth } from '@/contexts/AuthContext';
+import SignInGate from '@/components/SignInGate';
 import { exportTranslation, ExportFormat, TranslationData } from '@/lib/exportUtils';
 import { SUGGESTED_PHRASES, SuggestedPhrase } from '@/constants/suggestedPhrases';
 
@@ -135,6 +137,7 @@ export default function TranslatorScreen() {
   const stream = useStreamingTranslation();
   const cache = useTranslationCache();
   const glossary = useGlossary();
+  const { user, getAccessToken } = useAuth();
   const translationRequestId = useRef(0);
   const isTranslatingRef = useRef(false);
   const lastTranslatedText = useRef('');
@@ -170,7 +173,7 @@ export default function TranslatorScreen() {
 
   // Segments of the output that came from the user's personal glossary.
   const glossarySegments = useMemo(() => {
-    const isError = /^(Translation|Service|Error:|Invalid|API|Network|Authentication|Request timed)/.test(outputText);
+    const isError = /^(Translation|Service|Error:|Invalid|API|Network|Authentication|Request timed|Sign in|Your session)/.test(outputText);
     if (!outputText || isError) return [] as { text: string; highlighted: boolean }[];
     const phrases: string[] = [];
     for (const t of glossary.terms) {
@@ -202,6 +205,16 @@ export default function TranslatorScreen() {
 
     // Skip if same text and direction (prevents unnecessary re-translations)
     if (text.trim() === lastTranslatedText.current && direction === lastDirection.current) {
+      return;
+    }
+
+    // Portal policy: translation is a members-only service.
+    if (!user) {
+      setOutputText('Sign in required to translate.');
+      setTranslationQuality(0);
+      setIsTranslating(false);
+      isTranslatingRef.current = false;
+      lastTranslatedText.current = '';
       return;
     }
 
@@ -242,8 +255,10 @@ export default function TranslatorScreen() {
     // last translation visible while a new one streams in prevents the display
     // from blinking on every keystroke.
     try {
+      const authToken = (await getAccessToken()) ?? undefined;
       const streamResult = await stream.start(text.trim(), targetLang, {
         extraGlossary: glossary.asRecord(),
+        authToken,
       });
       if (currentRequestId !== translationRequestId.current) return;
       if (streamResult.ok && streamResult.text) {
@@ -264,6 +279,14 @@ export default function TranslatorScreen() {
         return;
       }
       if (streamResult.error && streamResult.error !== 'cancelled') {
+        // Session/permission problems should not fall through to other paths.
+        if (/401|unauthorized|sign.?in/i.test(streamResult.error)) {
+          setOutputText('Your session expired. Please sign in again from the Profile tab.');
+          setTranslationQuality(0);
+          setIsTranslating(false);
+          isTranslatingRef.current = false;
+          return;
+        }
         console.log('[stream] failed, falling back to tRPC:', streamResult.error);
       } else if (streamResult.error === 'cancelled') {
         return;
@@ -309,6 +332,13 @@ export default function TranslatorScreen() {
         return;
       }
       const errMsg = backendError instanceof Error ? backendError.message : String(backendError);
+      if (errMsg.toLowerCase().includes('sign in')) {
+        setOutputText('Your session expired. Please sign in again from the Profile tab.');
+        setTranslationQuality(0);
+        setIsTranslating(false);
+        isTranslatingRef.current = false;
+        return;
+      }
       if (errMsg.includes('TOO_MANY_REQUESTS') || errMsg.toLowerCase().includes('quota')) {
         setOutputText('Translation quota exceeded. Please wait a moment and try again.');
         setTranslationQuality(0);
@@ -382,7 +412,7 @@ export default function TranslatorScreen() {
         isTranslatingRef.current = false;
       }
     }
-  }, [translateMutation, stream, cache, glossary]);
+  }, [translateMutation, stream, cache, glossary, user, getAccessToken]);
 
   const translateRef = useRef(translate);
   translateRef.current = translate;
@@ -859,6 +889,8 @@ export default function TranslatorScreen() {
             ))}
           </ScrollView>
 
+          {user ? (
+          <>
           <GlassCard variant="purple" style={styles.inputCard}>
             <View style={styles.inputHeader}>
               <Text style={styles.inputLabel}>
@@ -1043,7 +1075,7 @@ export default function TranslatorScreen() {
                   <TypingDots color={Colors.accent} dotSize={9} />
                   <Text style={styles.loadingText}>Translating with Zomi AI...</Text>
                 </View>
-              ) : outputText.startsWith('Translation') || outputText.startsWith('Service') || outputText.startsWith('Error:') || outputText.startsWith('Invalid') || outputText.startsWith('API') || outputText.startsWith('Network') || outputText.startsWith('Authentication') || outputText.startsWith('Request timed') ? (
+              ) : outputText.startsWith('Translation') || outputText.startsWith('Service') || outputText.startsWith('Error:') || outputText.startsWith('Invalid') || outputText.startsWith('API') || outputText.startsWith('Network') || outputText.startsWith('Authentication') || outputText.startsWith('Sign in') || outputText.startsWith('Your session') || outputText.startsWith('Request timed') ? (
                 <View style={styles.errorContainer}>
                   <AlertCircle size={20} color={Colors.error} />
                   <Text style={styles.errorText}>{outputText}</Text>
@@ -1122,6 +1154,10 @@ export default function TranslatorScreen() {
               </View>
             )}
           </GlassCard>
+          </>
+          ) : (
+            <SignInGate />
+          )}
 
           <GlassCard variant="cyan" style={styles.suggestedCard}>
             <View style={styles.suggestedHeader}>
