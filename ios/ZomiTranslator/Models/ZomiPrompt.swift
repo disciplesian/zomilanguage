@@ -60,6 +60,7 @@ nonisolated enum ZomiPrompt {
             You are a Tedim Zomi (ISO 639-3: ctd) to English translator.
             Use EXCLUSIVELY the Tedim (CTD) dialect. No other Zomi dialect.
             Direct translation only.
+            STYLE: Match the register of the input — dictionary word, everyday sentence, song lyrics, news, scripture/theology, prayer/religious, or poetry — and mirror it in English. Use terminology consistent with the Tedim (CTD) Bible for religious text. Preserve line breaks for songs and poetry.
 
             TEDIM CTD GLOSSARY:
             \(glossaryLines)
@@ -81,6 +82,7 @@ nonisolated enum ZomiPrompt {
         \(glossaryLines)
 
         GRAMMAR: SOV word order (Subject-Object-Verb)
+        STYLE: Detect the register of the input — dictionary word, everyday sentence, song lyrics, news, scripture/theology, prayer/religious, or poetry — and match it in Tedim. Use terminology consistent with the Tedim (CTD) Bible and hymnal for religious text. Preserve line breaks for songs and poetry.
 
         EXAMPLES:
         \(exampleLines)

@@ -3,7 +3,7 @@
     "name": "Zomi Language",
     "slug": "zomilanguage",
     "version": "2.3.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "zomilanguage",
     "userInterfaceStyle": "automatic",

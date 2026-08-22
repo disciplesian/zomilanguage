@@ -156,7 +156,7 @@ final class ThemeManager {
 
     init() {
         let saved = UserDefaults.standard.string(forKey: Self.storageKey)
-        mode = ThemeMode(rawValue: saved ?? "") ?? .dark
+        mode = ThemeMode(rawValue: saved ?? "") ?? .system
     }
 
     var isDark: Bool {

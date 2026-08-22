@@ -47,6 +47,7 @@ import { buildFallbackPrompt } from '@/constants/zomiPrompt';
 
 
 import GlassCard from '@/components/GlassCard';
+import TypingDots from '@/components/TypingDots';
 
 import Colors from '@/constants/colors';
 
@@ -901,6 +902,13 @@ export default function TranslatorScreen() {
               </View>
             </View>
             
+            {stream.isStreaming && !!outputText && (
+              <View style={styles.streamingStatus}>
+                <TypingDots color={Colors.accent} dotSize={5} />
+                <Text style={styles.streamingStatusText}>Zomi AI is translating</Text>
+              </View>
+            )}
+
             {showExportOptions && (
               <View style={styles.exportOptionsContainer}>
                 <Text style={styles.exportLabel}>Export Format</Text>
@@ -968,7 +976,7 @@ export default function TranslatorScreen() {
             <View style={styles.outputContent}>
               {isTranslating && !outputText ? (
                 <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="large" color={Colors.accent} />
+                  <TypingDots color={Colors.accent} dotSize={9} />
                   <Text style={styles.loadingText}>Translating with Zomi AI...</Text>
                 </View>
               ) : outputText.startsWith('Translation') || outputText.startsWith('Service') || outputText.startsWith('Error:') || outputText.startsWith('Invalid') || outputText.startsWith('API') || outputText.startsWith('Network') || outputText.startsWith('Authentication') || outputText.startsWith('Request timed') ? (
@@ -1327,6 +1335,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.textSecondary,
     fontWeight: '500',
+  },
+  streamingStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  streamingStatusText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: Colors.textSecondary,
   },
   errorContainer: {
     flexDirection: 'row',

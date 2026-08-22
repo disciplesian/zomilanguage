@@ -182,10 +182,12 @@ const defaultThemeValue = {
 
 export const [ThemeProvider, useTheme] = createContextHook(() => {
   const initialSystemDark = Platform.OS === 'web'
-    ? true
+    ? (typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(prefers-color-scheme: dark)').matches
+      : true)
     : (Appearance.getColorScheme?.() ?? 'dark') === 'dark';
 
-  const [mode, setModeState] = useState<ThemeMode>('dark');
+  const [mode, setModeState] = useState<ThemeMode>('system');
   const [systemIsDark, setSystemIsDark] = useState<boolean>(initialSystemDark);
 
   // Load persisted mode once.
@@ -210,6 +212,17 @@ export const [ThemeProvider, useTheme] = createContextHook(() => {
       setSystemIsDark((colorScheme ?? 'dark') === 'dark');
     });
     return () => { try { sub?.remove?.(); } catch {} };
+  }, []);
+
+  // Track system appearance changes on web (cross-browser).
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return;
+    }
+    const query = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (event: MediaQueryListEvent) => setSystemIsDark(event.matches);
+    query.addEventListener('change', handler);
+    return () => query.removeEventListener('change', handler);
   }, []);
 
   const isDark = useMemo(() => {

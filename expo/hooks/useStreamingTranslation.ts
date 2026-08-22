@@ -198,25 +198,25 @@ export function useStreamingTranslation() {
           } as any);
           esRef.current = es;
 
-          es.addEventListener('start', (e: any) => {
+          (es as any).addEventListener('start', (e: any) => {
             try {
               const parsed = JSON.parse(e.data ?? '{}');
               if (parsed.model) onStart(parsed.model);
             } catch {}
           });
-          es.addEventListener('delta', (e: any) => {
+          (es as any).addEventListener('delta', (e: any) => {
             try {
               const parsed = JSON.parse(e.data ?? '{}');
               if (typeof parsed.text === 'string') onDelta(parsed.text);
             } catch {}
           });
-          es.addEventListener('confidence', (e: any) => {
+          (es as any).addEventListener('confidence', (e: any) => {
             try {
               const parsed = JSON.parse(e.data ?? '{}');
               if (typeof parsed.confidence === 'number') onConfidence(parsed.confidence);
             } catch {}
           });
-          es.addEventListener('done', (e: any) => {
+          (es as any).addEventListener('done', (e: any) => {
             try {
               const parsed = JSON.parse(e.data ?? '{}');
               onDone(parsed.text ?? '', parsed.model ?? '', typeof parsed.confidence === 'number' ? parsed.confidence : undefined);

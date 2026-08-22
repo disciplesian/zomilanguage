@@ -74,6 +74,7 @@ export interface UserStats {
   xp: number;
   level: number;
   translationsCount: number;
+  dictionaryContributions: number;
 
   forumPosts: number;
   forumReplies: number;
@@ -146,6 +147,7 @@ const getDefaultStats = (): UserStats => ({
   xp: 0,
   level: 1,
   translationsCount: 0,
+  dictionaryContributions: 0,
 
   forumPosts: 0,
   forumReplies: 0,
