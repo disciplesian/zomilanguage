@@ -378,13 +378,17 @@ struct TranslatorView: View {
                     }
                 }
 
+                if viewModel.isStreaming && !viewModel.outputText.isEmpty {
+                    streamingStatus
+                }
+
                 if showSpeedOptions {
                     speedOptions
                 }
 
                 outputContent
 
-                if viewModel.quality > 0 && !viewModel.isTranslating {
+                if viewModel.quality > 0 && !viewModel.isTranslating && !viewModel.isStreaming {
                     qualitySection
                 }
             }
@@ -395,9 +399,7 @@ struct TranslatorView: View {
     private var outputContent: some View {
         if viewModel.isTranslating && viewModel.outputText.isEmpty {
             VStack(spacing: 12) {
-                ProgressView()
-                    .controlSize(.large)
-                    .tint(colors.accent)
+                TypingDotsIndicator(color: colors.accent, dotSize: 9)
                 Text("Translating with Zomi AI...")
                     .font(.system(size: 14))
                     .foregroundStyle(colors.textSecondary)
@@ -426,13 +428,41 @@ struct TranslatorView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
         } else {
-            Text(viewModel.outputText.isEmpty ? "Translation will appear here..." : viewModel.outputText)
+            outputTextBody
                 .font(.system(size: 17))
                 .foregroundStyle(viewModel.outputText.isEmpty ? colors.textMuted : colors.text)
                 .frame(maxWidth: .infinity, minHeight: 60, alignment: .topLeading)
                 .textSelection(.enabled)
                 .animation(.default, value: viewModel.outputText)
         }
+    }
+
+    /// The translation text, with a blinking caret appended while the AI is
+    /// actively streaming tokens.
+    @ViewBuilder
+    private var outputTextBody: some View {
+        if viewModel.isStreaming && viewModel.hasStreamedText {
+            TimelineView(.periodic(from: .now, by: 0.5)) { timeline in
+                let blink = Int(timeline.date.timeIntervalSinceReferenceDate * 2) % 2 == 0
+                (Text(viewModel.outputText)
+                    + Text(" \u{258C}").foregroundStyle(blink ? colors.accent : Color.clear))
+            }
+        } else {
+            Text(viewModel.outputText.isEmpty ? "Translation will appear here..." : viewModel.outputText)
+        }
+    }
+
+    /// Compact status row shown while a refresh translation streams in
+    /// (i.e. previous text is still on screen).
+    private var streamingStatus: some View {
+        HStack(spacing: 8) {
+            TypingDotsIndicator(color: colors.accent, dotSize: 5)
+            Text("Zomi AI is translating")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(colors.textSecondary)
+        }
+        .transition(.opacity)
+        .animation(.easeInOut(duration: 0.2), value: viewModel.isStreaming)
     }
 
     private var speakButton: some View {

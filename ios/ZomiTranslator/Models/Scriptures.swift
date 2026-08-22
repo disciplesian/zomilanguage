@@ -1,7 +1,9 @@
 import Foundation
 
 nonisolated enum Scriptures {
-    static let all: [Scripture] = [
+    /// Bundled verses — seed data copied into the local SQLite database on
+    /// first launch so the app works fully offline.
+    static let seed: [Scripture] = [
         Scripture(
             id: "1",
             verseZomi: "Pasian pen itna a hihi; a itna sung ah gimna om kei hi.",
@@ -88,12 +90,20 @@ nonisolated enum Scriptures {
         ),
     ]
 
+    /// Scripture entries served from the local SQLite cache (offline-ready),
+    /// falling back to the bundled seed if the database is unavailable.
+    static var all: [Scripture] {
+        let cached = DatabaseService.shared.scriptures
+        return cached.isEmpty ? seed : cached
+    }
+
     static func random() -> Scripture {
-        all.randomElement() ?? all[0]
+        all.randomElement() ?? seed[0]
     }
 
     static func ofTheDay() -> Scripture {
+        let verses = all
         let dayOfYear = Calendar.current.ordinality(of: .day, in: .year, for: Date()) ?? 1
-        return all[dayOfYear % all.count]
+        return verses[dayOfYear % verses.count]
     }
 }

@@ -15,6 +15,11 @@ final class TranslatorViewModel {
 
     private(set) var outputText = ""
     private(set) var isTranslating = false
+    /// True from request start until the response completes — drives the
+    /// typing indicator on the Translate screen.
+    private(set) var isStreaming = false
+    /// True once any streamed token has arrived for the current request.
+    private(set) var hasStreamedText = false
     private(set) var quality = 0
     private(set) var errorText: String?
 
@@ -59,6 +64,8 @@ final class TranslatorViewModel {
         quality = 0
         errorText = nil
         isTranslating = false
+        isStreaming = false
+        hasStreamedText = false
         lastTranslatedText = ""
     }
 
@@ -77,6 +84,8 @@ final class TranslatorViewModel {
             quality = 0
             errorText = nil
             isTranslating = false
+            isStreaming = false
+            hasStreamedText = false
             lastTranslatedText = ""
             return
         }
@@ -100,6 +109,7 @@ final class TranslatorViewModel {
         lastTranslatedText = trimmed
         lastDirection = direction
         errorText = nil
+        hasStreamedText = false
 
         let target: Language = direction ? .english : .zomi
         let source: Language = direction ? .zomi : .english
@@ -109,7 +119,10 @@ final class TranslatorViewModel {
             outputText = hit.translatedText
             quality = hit.confidence
             isTranslating = false
-            if hit.confidence >= 90 { return }
+            if hit.confidence >= 90 {
+                isStreaming = false
+                return
+            }
         } else if outputText.isEmpty {
             // Only show the loading state when there is nothing on screen yet.
             isTranslating = true
@@ -117,6 +130,7 @@ final class TranslatorViewModel {
 
         let extraGlossary = glossaryStore?.asRecord() ?? [:]
 
+        isStreaming = true
         streamTask?.cancel()
         streamTask = Task { [weak self] in
             guard let self else { return }
@@ -136,12 +150,14 @@ final class TranslatorViewModel {
                     streamedText += piece
                     self.outputText = streamedText
                     self.isTranslating = false
+                    self.hasStreamedText = true
                 case .done(let full, let model, let confidence):
                     let final = full.isEmpty ? streamedText : full
                     guard !final.isEmpty else { break }
                     self.outputText = final
                     self.quality = confidence
                     self.isTranslating = false
+                    self.isStreaming = false
                     finished = true
                     self.translationStore?.save(SavedTranslation(
                         sourceText: trimmed,
@@ -170,6 +186,7 @@ final class TranslatorViewModel {
                 self.outputText = fallback
                 self.quality = 92
                 self.isTranslating = false
+                self.isStreaming = false
                 self.translationStore?.save(SavedTranslation(
                     sourceText: trimmed,
                     translatedText: fallback,
@@ -181,6 +198,7 @@ final class TranslatorViewModel {
             } catch {
                 guard currentRequest == self.requestId else { return }
                 self.isTranslating = false
+                self.isStreaming = false
 
                 // Last resort: any cached entry.
                 if let hit = self.translationStore?.lookup(text: trimmed, target: target) {

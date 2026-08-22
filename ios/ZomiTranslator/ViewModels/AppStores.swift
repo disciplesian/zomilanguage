@@ -1,16 +1,28 @@
 import Foundation
 import SwiftUI
 
-/// Persists user glossary terms. Mirrors expo GlossaryContext.
+/// Persists user glossary terms in the local SQLite database (offline-first).
+/// Mirrors expo GlossaryContext; migrates the legacy UserDefaults store once.
 @Observable
 final class GlossaryStore {
-    private static let key = "zomi_user_glossary_v1"
+    private static let legacyKey = "zomi_user_glossary_v1"
     private static let maxTerms = 200
 
     private(set) var terms: [GlossaryTerm] = []
 
     init() {
-        load()
+        let database = DatabaseService.shared
+        if database.glossaryTermCount() == 0,
+           let data = UserDefaults.standard.data(forKey: Self.legacyKey),
+           let decoded = try? JSONDecoder().decode([GlossaryTerm].self, from: data),
+           !decoded.isEmpty {
+            // One-time migration from the pre-SQLite UserDefaults store.
+            terms = Array(decoded.prefix(Self.maxTerms))
+            database.replaceGlossaryTerms(terms)
+            UserDefaults.standard.removeObject(forKey: Self.legacyKey)
+        } else {
+            terms = database.loadGlossaryTerms()
+        }
     }
 
     func add(term: String, meaning: String) {
@@ -47,16 +59,8 @@ final class GlossaryStore {
         return out
     }
 
-    private func load() {
-        guard let data = UserDefaults.standard.data(forKey: Self.key),
-              let decoded = try? JSONDecoder().decode([GlossaryTerm].self, from: data) else { return }
-        terms = Array(decoded.prefix(Self.maxTerms))
-    }
-
     private func persist() {
-        if let data = try? JSONEncoder().encode(terms) {
-            UserDefaults.standard.set(data, forKey: Self.key)
-        }
+        DatabaseService.shared.replaceGlossaryTerms(terms)
     }
 }
 

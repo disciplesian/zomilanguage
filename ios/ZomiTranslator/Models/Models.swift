@@ -8,10 +8,19 @@ nonisolated struct GlossaryTerm: Identifiable, Codable, Equatable {
     let createdAt: Date
 
     init(term: String, meaning: String) {
-        self.id = "g_" + UUID().uuidString.lowercased()
+        self.init(
+            id: "g_" + UUID().uuidString.lowercased(),
+            term: term,
+            meaning: meaning,
+            createdAt: Date()
+        )
+    }
+
+    init(id: String, term: String, meaning: String, createdAt: Date) {
+        self.id = id
         self.term = term
         self.meaning = meaning
-        self.createdAt = Date()
+        self.createdAt = createdAt
     }
 }
 
