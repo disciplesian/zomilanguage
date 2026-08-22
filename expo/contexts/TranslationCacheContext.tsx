@@ -131,5 +131,25 @@ export const [TranslationCacheProvider, useTranslationCache] = createContextHook
     persist([]);
   }, [persist]);
 
-  return { entries, hydrated, lookup, save, toggleFavorite, remove, clear };
+  /** Import entries synced from another device: union-merge by key, newest wins. */
+  const importEntries = useCallback(
+    (remote: CachedTranslation[]) => {
+      if (!remote.length) return;
+      setEntries((prev) => {
+        const byKey = new Map<string, CachedTranslation>();
+        for (const e of [...prev, ...remote]) {
+          const existing = byKey.get(e.key);
+          if (!existing || e.createdAt >= existing.createdAt) byKey.set(e.key, e);
+        }
+        const next = [...byKey.values()]
+          .sort((a, b) => b.createdAt - a.createdAt)
+          .slice(0, MAX_ENTRIES);
+        persist(next);
+        return next;
+      });
+    },
+    [persist]
+  );
+
+  return { entries, hydrated, lookup, save, toggleFavorite, remove, clear, importEntries };
 });

@@ -5,6 +5,7 @@ import { streamSSE } from "hono/streaming";
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { appRouter } from "./trpc/app-router";
 import { createContext } from "./trpc/create-context";
+import { getDB } from "./db/client";
 import {
   ZOMI_SYSTEM_INSTRUCTION,
   ZOMI_GLOSSARY,
@@ -162,6 +163,154 @@ app.post("/api/translate/stream", async (c) => {
       data: JSON.stringify({ code: "SERVICE_UNAVAILABLE", message: "All models failed" }),
     });
   });
+});
+
+/**
+ * Cloud sync: stores each signed-in user's personal glossary and saved
+ * translations in SurrealDB so they stay consistent across devices.
+ * Auth: Rork Auth access token (JWT bearer). The signature is verified with
+ * RORK_AUTH_SECRET_KEY (HS256) when the secret is available in this runtime.
+ */
+function b64UrlDecode(segment: string): string {
+  const b64 = segment.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+  return atob(padded);
+}
+
+function b64UrlToBytes(segment: string): Uint8Array<ArrayBuffer> {
+  const raw = atob(segment.replace(/-/g, "+").replace(/_/g, "/"));
+  const bytes = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+  return bytes;
+}
+
+async function authUserIdFromRequest(header: string | undefined): Promise<string | null> {
+  const token = header?.startsWith("Bearer ") ? header.slice(7).trim() : null;
+  if (!token) return null;
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+
+  let payload: { sub?: string; exp?: number };
+  try {
+    payload = JSON.parse(b64UrlDecode(parts[1]));
+  } catch {
+    return null;
+  }
+  if (!payload.sub) return null;
+  if (typeof payload.exp === "number" && payload.exp * 1000 < Date.now()) return null;
+
+  // Verify the JWT signature when the shared secret is present (HS256).
+  const secret = process.env.RORK_AUTH_SECRET_KEY;
+  if (secret && typeof crypto !== "undefined" && crypto.subtle) {
+    try {
+      const key = await crypto.subtle.importKey(
+        "raw",
+        new TextEncoder().encode(secret),
+        { name: "HMAC", hash: "SHA-256" },
+        false,
+        ["verify"]
+      );
+      const ok = await crypto.subtle.verify(
+        "HMAC",
+        key,
+        b64UrlToBytes(parts[2]),
+        new TextEncoder().encode(`${parts[0]}.${parts[1]}`)
+      );
+      if (!ok) return null;
+    } catch (err) {
+      console.warn("[sync] JWT signature verification skipped:", err);
+    }
+  }
+  return String(payload.sub);
+}
+
+function sanitizeString(value: unknown, max: number): string {
+  return typeof value === "string" ? value.slice(0, max) : "";
+}
+
+function sanitizeGlossary(input: unknown): unknown[] {
+  if (!Array.isArray(input)) return [];
+  return input
+    .slice(0, 200)
+    .map((item: Record<string, unknown>) => ({
+      id: sanitizeString(item?.id, 64) || `g_${Math.random().toString(36).slice(2)}`,
+      term: sanitizeString(item?.term, 200),
+      meaning: sanitizeString(item?.meaning, 400),
+      createdAt: typeof item?.createdAt === "number" ? item.createdAt : 0,
+    }))
+    .filter((t) => t.term && t.meaning);
+}
+
+function sanitizeTranslations(input: unknown): unknown[] {
+  if (!Array.isArray(input)) return [];
+  const lang = (v: unknown): "zomi" | "english" =>
+    v === "zomi" || v === "english" ? v : "english";
+  return input
+    .slice(0, 100)
+    .map((item: Record<string, unknown>) => ({
+      key: sanitizeString(item?.key, 64),
+      sourceText: sanitizeString(item?.sourceText, 5000),
+      translatedText: sanitizeString(item?.translatedText, 5000),
+      sourceLanguage: lang(item?.sourceLanguage),
+      targetLanguage: lang(item?.targetLanguage),
+      confidence: typeof item?.confidence === "number" ? Math.round(item.confidence) : 0,
+      model: sanitizeString(item?.model, 64) || null,
+      createdAt: typeof item?.createdAt === "number" ? item.createdAt : 0,
+      isFavorite: item?.isFavorite === true,
+    }))
+    .filter((t) => t.key && t.sourceText && t.translatedText);
+}
+
+app.post("/api/sync/push", async (c) => {
+  const userId = await authUserIdFromRequest(c.req.header("authorization"));
+  if (!userId) return c.json({ error: "unauthorized" }, 401);
+
+  let body: Record<string, unknown> = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_json" }, 400);
+  }
+
+  const glossary = sanitizeGlossary(body.glossary);
+  const translations = sanitizeTranslations(body.translations);
+  const updatedAt = new Date().toISOString();
+
+  try {
+    const db = await getDB();
+    await db.query("DELETE FROM user_sync WHERE userId = $userId", { userId });
+    await db.create("user_sync", { userId, glossary, translations, updatedAt });
+    return c.json({ success: true, updatedAt });
+  } catch (err) {
+    console.error("[sync] push failed", err);
+    return c.json({ error: "sync_failed" }, 500);
+  }
+});
+
+app.post("/api/sync/pull", async (c) => {
+  const userId = await authUserIdFromRequest(c.req.header("authorization"));
+  if (!userId) return c.json({ error: "unauthorized" }, 401);
+
+  try {
+    const db = await getDB();
+    const result = await db.query<[Record<string, unknown>[]]>(
+      "SELECT * FROM user_sync WHERE userId = $userId LIMIT 1",
+      { userId }
+    );
+    const row = result[0]?.[0];
+    if (!row) {
+      return c.json({ exists: false, glossary: [], translations: [], updatedAt: null });
+    }
+    return c.json({
+      exists: true,
+      glossary: Array.isArray(row.glossary) ? row.glossary : [],
+      translations: Array.isArray(row.translations) ? row.translations : [],
+      updatedAt: row.updatedAt ?? null,
+    });
+  } catch (err) {
+    console.error("[sync] pull failed", err);
+    return c.json({ error: "sync_failed" }, 500);
+  }
 });
 
 export default app;

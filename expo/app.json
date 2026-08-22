@@ -5,7 +5,10 @@
     "version": "2.3.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
-    "scheme": "zomilanguage",
+    "scheme": [
+      "zomilanguage",
+      "rork-c71czcicbp014dj0l1fu3"
+    ],
     "userInterfaceStyle": "automatic",
     "newArchEnabled": false,
     "splash": {

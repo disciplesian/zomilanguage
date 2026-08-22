@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -36,6 +36,7 @@ import {
   BookOpen,
   Mic2,
   Lightbulb,
+  MessageCircle,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
@@ -57,6 +58,7 @@ import { useStreamingTranslation } from '@/hooks/useStreamingTranslation';
 import { useTranslationCache } from '@/contexts/TranslationCacheContext';
 import { useGlossary } from '@/contexts/GlossaryContext';
 import { exportTranslation, ExportFormat, TranslationData } from '@/lib/exportUtils';
+import { SUGGESTED_PHRASES, SuggestedPhrase } from '@/constants/suggestedPhrases';
 
 export default function TranslatorScreen() {
   const [inputText, setInputText] = useState('');
@@ -75,6 +77,8 @@ export default function TranslatorScreen() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const recordingAnim = useRef(new Animated.Value(1)).current;
+  const resultAnim = useRef(new Animated.Value(1)).current;
+  const resultSlide = useRef(new Animated.Value(0)).current;
 
   const { 
     speak, 
@@ -143,6 +147,49 @@ export default function TranslatorScreen() {
       setIsTranslating(false);
     }
   }, [stream.isStreaming, stream.text]);
+
+  // Fade-in + slide-up whenever a finished translation result appears.
+  useEffect(() => {
+    const finished = !!outputText && !isTranslating && !stream.isStreaming;
+    if (!finished) return;
+    resultAnim.setValue(0);
+    resultSlide.setValue(24);
+    Animated.parallel([
+      Animated.timing(resultAnim, {
+        toValue: 1,
+        duration: 450,
+        useNativeDriver: true,
+      }),
+      Animated.timing(resultSlide, {
+        toValue: 0,
+        duration: 450,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [outputText, isTranslating, stream.isStreaming, resultAnim, resultSlide]);
+
+  // Segments of the output that came from the user's personal glossary.
+  const glossarySegments = useMemo(() => {
+    const isError = /^(Translation|Service|Error:|Invalid|API|Network|Authentication|Request timed)/.test(outputText);
+    if (!outputText || isError) return [] as { text: string; highlighted: boolean }[];
+    const phrases: string[] = [];
+    for (const t of glossary.terms) {
+      const phrase = (isZomiToEnglish ? t.term : t.meaning).trim();
+      if (phrase.length >= 2) phrases.push(phrase);
+    }
+    if (!phrases.length) return [] as { text: string; highlighted: boolean }[];
+    const unique = [...new Set(phrases)].sort((a, b) => b.length - a.length);
+    const escaped = unique.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const regex = new RegExp(`(${escaped.join('|')})`, 'gi');
+    const parts = outputText.split(regex).filter(Boolean);
+    const lowerSet = new Set(unique.map((p) => p.toLowerCase()));
+    return parts.map((p) => ({ text: p, highlighted: lowerSet.has(p.toLowerCase()) }));
+  }, [outputText, glossary.terms, isZomiToEnglish]);
+
+  const hasGlossaryHighlights = useMemo(
+    () => glossarySegments.some((seg) => seg.highlighted),
+    [glossarySegments]
+  );
 
   const translate = useCallback(async (text: string, direction: boolean) => {
     if (!text || !text.trim()) {
@@ -668,6 +715,17 @@ export default function TranslatorScreen() {
     }
   }, [speak, stopSpeaking, isSpeaking, currentSpeed]);
 
+  const handlePhraseTap = useCallback(
+    (phrase: SuggestedPhrase) => {
+      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const text = isZomiToEnglish ? phrase.zomi : phrase.english;
+      setInputText(text);
+      lastTranslatedText.current = '';
+      translate(text, isZomiToEnglish);
+    },
+    [isZomiToEnglish, translate]
+  );
+
   const formatDuration = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -974,7 +1032,12 @@ export default function TranslatorScreen() {
               </View>
             )}
             
-            <View style={styles.outputContent}>
+            <Animated.View
+              style={[
+                styles.outputContent,
+                { opacity: resultAnim, transform: [{ translateY: resultSlide }] },
+              ]}
+            >
               {isTranslating && !outputText ? (
                 <View style={styles.loadingContainer}>
                   <TypingDots color={Colors.accent} dotSize={9} />
@@ -988,13 +1051,34 @@ export default function TranslatorScreen() {
                     <Text style={styles.retryText}>Retry</Text>
                   </TouchableOpacity>
                 </View>
+              ) : glossarySegments.length > 0 ? (
+                <Text style={styles.outputText}>
+                  {glossarySegments.map((seg, i) =>
+                    seg.highlighted ? (
+                      <Text key={i} style={styles.glossaryHighlight}>
+                        {seg.text}
+                      </Text>
+                    ) : (
+                      <Text key={i}>{seg.text}</Text>
+                    )
+                  )}
+                </Text>
               ) : (
                 <Text style={styles.outputText}>
                   {outputText || 'Translation will appear here...'}
                 </Text>
               )}
-            </View>
-            
+            </Animated.View>
+
+            {hasGlossaryHighlights && !isTranslating && !stream.isStreaming && (
+              <View style={styles.glossaryLegend}>
+                <View style={styles.glossaryLegendDot} />
+                <Text style={styles.glossaryLegendText}>
+                  Highlighted words come from your personal glossary
+                </Text>
+              </View>
+            )}
+
             {translationQuality > 0 && !isTranslating && (
               <View style={styles.qualitySection}>
                 <View style={styles.qualityHeader}>
@@ -1037,6 +1121,35 @@ export default function TranslatorScreen() {
                 )}
               </View>
             )}
+          </GlassCard>
+
+          <GlassCard variant="cyan" style={styles.suggestedCard}>
+            <View style={styles.suggestedHeader}>
+              <MessageCircle size={16} color={Colors.accent} />
+              <Text style={styles.suggestedTitle}>Suggested Phrases</Text>
+            </View>
+            <Text style={styles.suggestedSubtitle}>
+              Common Zomi greetings and expressions — tap one to translate it
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.suggestedList}
+            >
+              {SUGGESTED_PHRASES.map((phrase) => (
+                <TouchableOpacity
+                  key={phrase.id}
+                  style={styles.suggestedChip}
+                  activeOpacity={0.85}
+                  onPress={() => handlePhraseTap(phrase)}
+                  accessibilityLabel={`${phrase.zomi}, ${phrase.english}`}
+                >
+                  <Text style={styles.suggestedChipZomi}>{phrase.zomi}</Text>
+                  <Text style={styles.suggestedChipEn}>{phrase.english}</Text>
+                  <Text style={styles.suggestedChipPron}>{phrase.pronunciation}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           </GlassCard>
 
 
@@ -1347,6 +1460,77 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     color: Colors.textSecondary,
+  },
+  suggestedCard: {
+    marginBottom: 12,
+  },
+  suggestedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  suggestedTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  suggestedSubtitle: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginBottom: 12,
+  },
+  suggestedList: {
+    paddingVertical: 2,
+    gap: 10,
+  },
+  suggestedChip: {
+    backgroundColor: 'rgba(0, 240, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 240, 255, 0.2)',
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    minWidth: 130,
+    maxWidth: 200,
+  },
+  suggestedChipZomi: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.accent,
+    marginBottom: 2,
+  },
+  suggestedChipEn: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  suggestedChipPron: {
+    fontSize: 10,
+    color: Colors.textMuted,
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  glossaryHighlight: {
+    backgroundColor: 'rgba(255, 181, 71, 0.18)',
+    color: '#FFB547',
+    fontWeight: '700',
+  },
+  glossaryLegend: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 10,
+  },
+  glossaryLegendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255, 181, 71, 0.35)',
+  },
+  glossaryLegendText: {
+    fontSize: 11,
+    color: Colors.textMuted,
+    flex: 1,
   },
   errorContainer: {
     flexDirection: 'row',

@@ -9,6 +9,8 @@ import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
 import { UserProfileProvider } from "@/contexts/UserProfileContext";
 import { TranslationCacheProvider } from "@/contexts/TranslationCacheContext";
 import { GlossaryProvider } from "@/contexts/GlossaryContext";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { SyncProvider } from "@/contexts/SyncContext";
 import { trpc, getTrpcClient } from "@/lib/trpc";
 import { setupGlobalErrorHandlers } from "@/lib/errorHandler";
 
@@ -224,7 +226,11 @@ export default function RootLayout() {
               <UserProfileProvider>
                 <TranslationCacheProvider>
                   <GlossaryProvider>
-                    <RootLayoutNav />
+                    <AuthProvider>
+                      <SyncProvider>
+                        <RootLayoutNav />
+                      </SyncProvider>
+                    </AuthProvider>
                   </GlossaryProvider>
                 </TranslationCacheProvider>
               </UserProfileProvider>

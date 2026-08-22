@@ -42,6 +42,7 @@ import {
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import GlassCard from '@/components/GlassCard';
+import AuthCard from '@/components/AuthCard';
 import PageBottomNav, { PAGE_BOTTOM_NAV_SPACING } from '@/components/PageBottomNav';
 import Colors from '@/constants/colors';
 import { useUserProfile, UserBadge } from '@/contexts/UserProfileContext';
@@ -210,6 +211,8 @@ export default function ProfileScreen() {
               {xpForNextLevel - stats.xp} XP to Level {stats.level + 1}
             </Text>
           </GlassCard>
+
+          <AuthCard />
 
           <View style={styles.quickStats}>
             <GlassCard style={styles.quickStatCard}>

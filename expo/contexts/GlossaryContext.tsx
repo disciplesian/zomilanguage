@@ -107,6 +107,27 @@ export const [GlossaryProvider, useGlossary] = createContextHook(() => {
     persist([]);
   }, [persist]);
 
+  /** Import terms synced from another device: union-merge by term, newest edit wins. */
+  const importTerms = useCallback(
+    (remote: GlossaryTerm[]) => {
+      if (!remote.length) return;
+      setTerms((prev) => {
+        const byTerm = new Map<string, GlossaryTerm>();
+        for (const t of [...prev, ...remote]) {
+          const key = t.term.trim().toLowerCase();
+          const existing = byTerm.get(key);
+          if (!existing || t.createdAt >= existing.createdAt) byTerm.set(key, t);
+        }
+        const next = [...byTerm.values()]
+          .sort((a, b) => b.createdAt - a.createdAt)
+          .slice(0, MAX_TERMS);
+        persist(next);
+        return next;
+      });
+    },
+    [persist]
+  );
+
   /** Returns a plain object suitable for sending to the backend / fallback prompts. */
   const asRecord = useCallback((): Record<string, string> => {
     const out: Record<string, string> = {};
@@ -114,5 +135,5 @@ export const [GlossaryProvider, useGlossary] = createContextHook(() => {
     return out;
   }, [terms]);
 
-  return { terms, hydrated, add, update, remove, clear, asRecord };
+  return { terms, hydrated, add, update, remove, clear, importTerms, asRecord };
 });
