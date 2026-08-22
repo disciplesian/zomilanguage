@@ -11,6 +11,7 @@ struct ZomiTranslatorApp: App {
     @State private var translationStore = TranslationStore()
     @State private var glossaryStore = GlossaryStore()
     @State private var speechService = SpeechService()
+    @State private var authManager = AuthManager()
 
     var body: some Scene {
         WindowGroup {
@@ -19,6 +20,7 @@ struct ZomiTranslatorApp: App {
                 .environment(translationStore)
                 .environment(glossaryStore)
                 .environment(speechService)
+                .environment(authManager)
         }
     }
 }

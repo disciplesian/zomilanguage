@@ -76,4 +76,5 @@ struct ContentView: View {
         .environment(TranslationStore())
         .environment(GlossaryStore())
         .environment(SpeechService())
+        .environment(AuthManager())
 }

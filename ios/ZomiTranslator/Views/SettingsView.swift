@@ -22,6 +22,10 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     header
 
+                    section("Account") {
+                        AccountCard()
+                    }
+
                     section("Appearance") {
                         GlassCard(padding: 10, colors: colors, isDark: theme.isDark) {
                             themeSelector
