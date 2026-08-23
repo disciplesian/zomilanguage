@@ -18,6 +18,7 @@ export type StreamResult = {
   model: string | null;
   error: string | null;
   confidence: number;
+  usage?: { authed: boolean; wordsUsed: number; wordLimit: number };
 };
 
 const initialState: StreamState = {
@@ -72,7 +73,7 @@ export function useStreamingTranslation() {
     (
       text: string,
       targetLanguage: string,
-      options?: { extraGlossary?: Record<string, string>; authToken?: string }
+      options?: { extraGlossary?: Record<string, string>; authToken?: string; anonymousId?: string }
     ): Promise<StreamResult> => {
       cancel();
       const myToken = ++tokenRef.current;
@@ -83,12 +84,14 @@ export function useStreamingTranslation() {
         text,
         targetLanguage,
         extraGlossary: options?.extraGlossary ?? {},
+        anonymousId: options?.anonymousId,
       });
 
       // Local accumulators (do not rely on async setState for resolution).
       let accText = '';
       let modelName: string | null = null;
       let confidenceVal = 0;
+      let usageVal: StreamResult['usage'];
 
       return new Promise<StreamResult>((resolve) => {
         const finish = (result: StreamResult) => {
@@ -98,7 +101,7 @@ export function useStreamingTranslation() {
           } else {
             setState({ text: accText, model: modelName, isStreaming: false, error: result.error, done: false, confidence: confidenceVal });
           }
-          resolve(result);
+          resolve(result.usage ? { ...result, usage: result.usage } : result);
         };
 
         const onStart = (m: string) => {
@@ -115,9 +118,12 @@ export function useStreamingTranslation() {
           if (myToken !== tokenRef.current) return;
           confidenceVal = c;
         };
+        const onUsage = (u: StreamResult['usage']) => {
+          usageVal = u;
+        };
         const onDone = (full: string, m: string, c?: number) => {
           if (typeof c === 'number' && c > 0) confidenceVal = c;
-          finish({ ok: true, text: full || accText, model: m || modelName, error: null, confidence: confidenceVal });
+          finish({ ok: true, text: full || accText, model: m || modelName, error: null, confidence: confidenceVal, usage: usageVal });
         };
         const onError = (msg: string) => {
           finish({ ok: false, text: accText, model: modelName, error: msg, confidence: confidenceVal });
@@ -136,6 +142,13 @@ export function useStreamingTranslation() {
             if (event === 'start' && parsed.model) onStart(parsed.model);
             else if (event === 'delta' && typeof parsed.text === 'string') onDelta(parsed.text);
             else if (event === 'confidence' && typeof parsed.confidence === 'number') onConfidence(parsed.confidence);
+            else if (event === 'usage' && typeof parsed === 'object' && parsed !== null) {
+              onUsage({
+                authed: parsed.authed === true,
+                wordsUsed: typeof parsed.wordsUsed === 'number' ? parsed.wordsUsed : 0,
+                wordLimit: typeof parsed.wordLimit === 'number' ? parsed.wordLimit : 0,
+              });
+            }
             else if (event === 'done') onDone(parsed.text ?? '', parsed.model ?? '', typeof parsed.confidence === 'number' ? parsed.confidence : undefined);
             else if (event === 'error') onError(parsed.message ?? parsed.code ?? 'stream_error');
           } catch {
@@ -153,6 +166,7 @@ export function useStreamingTranslation() {
                 Accept: 'text/event-stream',
               };
               if (options?.authToken) reqHeaders.Authorization = `Bearer ${options.authToken}`;
+              if (options?.anonymousId) reqHeaders['X-Anonymous-Id'] = options.anonymousId;
               const res = await fetch(url, {
                 method: 'POST',
                 headers: reqHeaders,
@@ -160,7 +174,19 @@ export function useStreamingTranslation() {
                 signal: ctrl.signal,
               });
               if (!res.ok || !res.body) {
-                onError(`HTTP ${res.status}`);
+                if (res.status === 401) {
+                  // Distinguish free-tier exhaustion from an expired session.
+                  let code = 'sign_in_required';
+                  try {
+                    const errBody = (await res.json()) as { error?: string };
+                    if (errBody?.error === 'word_limit_reached') code = 'word_limit_reached';
+                  } catch {
+                    // fall back to sign_in_required
+                  }
+                  onError(code);
+                } else {
+                  onError(`HTTP ${res.status}`);
+                }
                 return;
               }
               const reader = res.body.getReader();
@@ -180,7 +206,7 @@ export function useStreamingTranslation() {
               if (buf.trim()) parseSSEFrame(buf);
               // If the server closed without an explicit done event, finalize with what we have.
               if (myToken === tokenRef.current) {
-                finish({ ok: !!accText, text: accText, model: modelName, error: accText ? null : 'no_data', confidence: confidenceVal });
+                finish({ ok: !!accText, text: accText, model: modelName, error: accText ? null : 'no_data', confidence: confidenceVal, usage: usageVal });
               }
             } catch (err: unknown) {
               if ((err as Error)?.name === 'AbortError') {
@@ -200,6 +226,7 @@ export function useStreamingTranslation() {
             Accept: 'text/event-stream',
           };
           if (options?.authToken) esHeaders.Authorization = `Bearer ${options.authToken}`;
+          if (options?.anonymousId) esHeaders['X-Anonymous-Id'] = options.anonymousId;
           const es: RNEventSource = new RNEventSource(url, {
             method: 'POST',
             headers: esHeaders,
@@ -224,6 +251,16 @@ export function useStreamingTranslation() {
             try {
               const parsed = JSON.parse(e.data ?? '{}');
               if (typeof parsed.confidence === 'number') onConfidence(parsed.confidence);
+            } catch {}
+          });
+          (es as any).addEventListener('usage', (e: any) => {
+            try {
+              const parsed = JSON.parse(e.data ?? '{}');
+              onUsage({
+                authed: parsed.authed === true,
+                wordsUsed: typeof parsed.wordsUsed === 'number' ? parsed.wordsUsed : 0,
+                wordLimit: typeof parsed.wordLimit === 'number' ? parsed.wordLimit : 0,
+              });
             } catch {}
           });
           (es as any).addEventListener('done', (e: any) => {

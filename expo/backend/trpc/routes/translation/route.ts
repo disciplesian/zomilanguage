@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
 import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, publicProcedure } from '../../create-context';
-import { authFromRequest, logTranslation } from '../../../portal';
+import { authFromRequest, logTranslation, FREE_WORD_LIMIT, anonymousWordsUsed, countWords, recordAnonymousWords } from '../../../portal';
 import { getDB } from '../../../db/client';
 import {
   ZOMI_SYSTEM_INSTRUCTION,
@@ -337,26 +337,48 @@ export default createTRPCRouter({
         sourceLanguage: z.string().optional(),
         targetLanguage: z.string(),
         extraGlossary: z.record(z.string(), z.string()).optional(),
+        anonymousId: z.string().max(128).optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
-      // Zomi Language Portal policy: translation requires a signed-in account.
+      // Free tier: anonymous visitors may translate up to FREE_WORD_LIMIT words
+      // (tracked per device); past that a signed-in account is required.
       const auth = await authFromRequest(ctx.req?.headers?.get('authorization') ?? undefined);
+      const anonymousId =
+        (input.anonymousId ?? '').trim() ||
+        (ctx.req?.headers?.get('x-anonymous-id') ?? '').trim();
+      let wordsUsed = 0;
       if (!auth) {
-        throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sign in required to translate.' });
+        if (!anonymousId) {
+          throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sign in required to translate.' });
+        }
+        const db = await getDB();
+        wordsUsed = await anonymousWordsUsed(db, anonymousId);
+        if (wordsUsed >= FREE_WORD_LIMIT) {
+          throw new TRPCError({
+            code: 'UNAUTHORIZED',
+            message: 'word_limit_reached: You have used your 1,500 free words. Sign in to keep translating.',
+          });
+        }
       }
       const { text, targetLanguage, extraGlossary } = input;
       const result = await runTranslation(text.trim(), targetLanguage, extraGlossary);
-      // Per-user usage log for the admin dashboard. Non-fatal on failure.
+      // Usage accounting: per-user log for members, free-tier words for guests.
+      let usage = { authed: true, wordsUsed: 0, wordLimit: 0 };
       try {
         const db = await getDB();
-        await logTranslation(db, auth, {
-          sourceText: text,
-          translatedText: result.translatedText,
-          targetLanguage,
-          model: result.model,
-          confidence: result.confidence,
-        });
+        if (auth) {
+          await logTranslation(db, auth, {
+            sourceText: text,
+            translatedText: result.translatedText,
+            targetLanguage,
+            model: result.model,
+            confidence: result.confidence,
+          });
+        } else if (anonymousId) {
+          wordsUsed = await recordAnonymousWords(db, anonymousId, countWords(text));
+          usage = { authed: false, wordsUsed, wordLimit: FREE_WORD_LIMIT };
+        }
       } catch {
         // ignore logging failures
       }
@@ -367,6 +389,7 @@ export default createTRPCRouter({
         model: result.model,
         cached: result.cached,
         refined: result.refined,
+        usage,
       };
     }),
 });

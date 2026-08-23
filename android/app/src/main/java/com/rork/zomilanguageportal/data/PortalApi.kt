@@ -101,12 +101,20 @@ private data class RoleBody(val userId: String, val role: String)
 private data class VerificationBody(val userId: String, val decision: String)
 
 @Serializable
-private data class TranslateBody(val text: String, val targetLanguage: String)
+private data class TranslateBody(
+    val text: String,
+    val targetLanguage: String,
+    val anonymousId: String? = null,
+)
 
 data class TranslationResult(val text: String, val model: String?, val confidence: Int)
 
 /** Raised when the backend rejects the session; the UI prompts a fresh sign-in. */
 class SessionExpiredException : Exception("Your session expired. Please sign in again.")
+
+/** Raised when the anonymous free tier (1,500 words) is exhausted. */
+class WordLimitException :
+    Exception("You've used your 1,500 free words. Sign in to keep translating — it is free.")
 
 /** Client for the members-only Zomi Language Portal backend. */
 object PortalApi {
@@ -154,11 +162,14 @@ object PortalApi {
     }
 
     /**
-     * Streams a translation from the members-only endpoint, calling [onDelta]
-     * for each token so the UI reveals the result as it arrives.
+     * Streams a translation, calling [onDelta] for each token so the UI reveals
+     * the result as it arrives. Signed-in members translate without limits;
+     * anonymous visitors draw down their 1,500-word free allowance via
+     * [anonymousId] and hit [WordLimitException] once it runs out.
      */
     suspend fun streamTranslation(
-        token: String,
+        token: String?,
+        anonymousId: String,
         text: String,
         targetLanguage: String,
         onDelta: (String) -> Unit,
@@ -167,12 +178,28 @@ object PortalApi {
         var finalResult: TranslationResult? = null
 
         PortalHttp.client.preparePost("${AppConfig.API_BASE_URL}/api/translate/stream") {
-            header(HttpHeaders.Authorization, "Bearer $token")
+            token?.let { header(HttpHeaders.Authorization, "Bearer $it") }
+            header("X-Anonymous-Id", anonymousId)
             header(HttpHeaders.Accept, "text/event-stream")
             contentType(ContentType.Application.Json)
-            setBody(TranslateBody(text, targetLanguage))
+            setBody(TranslateBody(text, targetLanguage, anonymousId))
         }.execute { response ->
-            if (response.status.value == 401) throw SessionExpiredException()
+            if (response.status.value == 401) {
+                // Read the JSON error body to tell an exhausted free tier apart
+                // from an expired member session.
+                val errBody = StringBuilder()
+                val errChannel = response.bodyAsChannel()
+                while (true) {
+                    errBody.append(errChannel.readUTF8Line() ?: break)
+                    if (errBody.length > 512) break
+                }
+                val errorCode = runCatching {
+                    PortalHttp.json.parseToJsonElement(errBody.toString()).jsonObject["error"]
+                        ?.jsonPrimitive?.content
+                }.getOrNull()
+                if (errorCode == "word_limit_reached") throw WordLimitException()
+                throw SessionExpiredException()
+            }
 
             val channel = response.bodyAsChannel()
             var eventName = "message"

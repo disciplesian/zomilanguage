@@ -142,30 +142,60 @@ export interface TranslationResult {
   text: string;
   model: string | null;
   confidence: number;
+  usage?: UsageInfo;
 }
 
+export interface UsageInfo {
+  authed: boolean;
+  wordsUsed: number;
+  wordLimit: number;
+}
+
+/** Machine-readable marker thrown when the anonymous free tier is exhausted. */
+export const WORD_LIMIT_ERROR = 'WORD_LIMIT_REACHED';
+
 /**
- * Streams a translation from the members-only endpoint, invoking `onDelta`
- * for each token so the UI can reveal the result as it arrives.
+ * Streams a translation from the backend. Signed-in members translate without
+ * limits; anonymous visitors draw down their 1,500-word free allowance via
+ * `anonymousId` and are asked to sign in once it runs out.
  */
 export async function streamTranslation(
-  token: string,
-  input: { text: string; targetLanguage: 'english' | 'zomi' },
+  input: {
+    text: string;
+    targetLanguage: 'english' | 'zomi';
+    token?: string | null;
+    anonymousId?: string | null;
+  },
   onDelta: (chunk: string) => void,
   signal?: AbortSignal
 ): Promise<TranslationResult> {
-  const res = await fetch(`${API_BASE_URL}/api/translate/stream`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'text/event-stream',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ text: input.text, targetLanguage: input.targetLanguage }),
-    signal,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}/api/translate/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+        ...(input.token ? { Authorization: `Bearer ${input.token}` } : {}),
+        ...(input.anonymousId ? { 'X-Anonymous-Id': input.anonymousId } : {}),
+      },
+      body: JSON.stringify({
+        text: input.text,
+        targetLanguage: input.targetLanguage,
+        anonymousId: input.anonymousId ?? undefined,
+      }),
+      signal,
+    });
+  } catch (err) {
+    if (signal?.aborted) throw err;
+    throw new Error('Translation service is unreachable. Please check your connection and try again.');
+  }
 
-  if (res.status === 401) throw new Error('Your session expired. Please sign in again.');
+  if (res.status === 401) {
+    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (body.error === 'word_limit_reached') throw new Error(WORD_LIMIT_ERROR);
+    throw new Error('Your session expired. Please sign in again.');
+  }
   if (!res.ok || !res.body) throw new Error(`Translation failed (${res.status})`);
 
   const reader = res.body.getReader();
@@ -198,6 +228,15 @@ export async function streamTranslation(
         text: finalText,
         model: (payload.model as string | null) ?? null,
         confidence: Number(payload.confidence ?? 0),
+      };
+    } else if (eventName === 'usage') {
+      result = {
+        ...result,
+        usage: {
+          authed: payload.authed === true,
+          wordsUsed: Number(payload.wordsUsed ?? 0),
+          wordLimit: Number(payload.wordLimit ?? 0),
+        },
       };
     } else if (eventName === 'error') {
       throw new Error(String(payload.message ?? 'Translation failed'));

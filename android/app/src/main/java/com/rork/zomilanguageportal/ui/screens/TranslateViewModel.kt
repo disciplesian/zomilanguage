@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.rork.zomilanguageportal.data.AuthManager
 import com.rork.zomilanguageportal.data.PortalApi
 import com.rork.zomilanguageportal.data.SessionExpiredException
+import com.rork.zomilanguageportal.data.WordLimitException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -62,19 +63,13 @@ class TranslateViewModel : ViewModel() {
         translateJob = viewModelScope.launch {
             _uiState.update { it.copy(isTranslating = true, error = null, output = "", confidence = 0) }
             try {
+                // Signed-in members translate without limits; guests draw down
+                // their 1,500-word free allowance tracked by a stable device ID.
                 val token = AuthManager.accessToken()
-                if (token == null) {
-                    _uiState.update {
-                        it.copy(
-                            isTranslating = false,
-                            error = "Your session expired. Please sign in again.",
-                        )
-                    }
-                    return@launch
-                }
 
                 val result = PortalApi.streamTranslation(
                     token = token,
+                    anonymousId = AuthManager.anonymousId(),
                     text = text,
                     targetLanguage = if (state.zomiToEnglish) "english" else "zomi",
                 ) { piece ->
@@ -88,6 +83,8 @@ class TranslateViewModel : ViewModel() {
                         isTranslating = false,
                     )
                 }
+            } catch (e: WordLimitException) {
+                _uiState.update { it.copy(isTranslating = false, error = e.message) }
             } catch (e: SessionExpiredException) {
                 _uiState.update { it.copy(isTranslating = false, error = e.message) }
             } catch (e: Exception) {

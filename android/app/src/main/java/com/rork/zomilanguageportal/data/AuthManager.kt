@@ -180,6 +180,9 @@ object AuthManager {
         return tokenStore.accessToken
     }
 
+    /** Stable per-device ID for the anonymous 1,500-word translation free tier. */
+    fun anonymousId(): String = tokenStore.anonymousId()
+
     fun hasStoredSession(): Boolean =
         tokenStore.accessToken != null || tokenStore.refreshToken != null
 

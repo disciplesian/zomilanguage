@@ -58,7 +58,7 @@ import { useStreamingTranslation } from '@/hooks/useStreamingTranslation';
 import { useTranslationCache } from '@/contexts/TranslationCacheContext';
 import { useGlossary } from '@/contexts/GlossaryContext';
 import { useAuth } from '@/contexts/AuthContext';
-import SignInGate from '@/components/SignInGate';
+import { getAnonymousId } from '@/lib/anonymousId';
 import { exportTranslation, ExportFormat, TranslationData } from '@/lib/exportUtils';
 
 export default function TranslatorScreen() {
@@ -207,16 +207,6 @@ export default function TranslatorScreen() {
       return;
     }
 
-    // Portal policy: translation is a members-only service.
-    if (!user) {
-      setOutputText('Sign in required to translate.');
-      setTranslationQuality(0);
-      setIsTranslating(false);
-      isTranslatingRef.current = false;
-      lastTranslatedText.current = '';
-      return;
-    }
-
     // Increment request ID to track the latest request
     const currentRequestId = ++translationRequestId.current;
     
@@ -254,10 +244,14 @@ export default function TranslatorScreen() {
     // last translation visible while a new one streams in prevents the display
     // from blinking on every keystroke.
     try {
+      // Signed-in members translate without limits; guests draw down their
+      // 1,500-word free allowance tracked by a stable per-device anonymous ID.
       const authToken = (await getAccessToken()) ?? undefined;
+      const anonymousId = await getAnonymousId();
       const streamResult = await stream.start(text.trim(), targetLang, {
         extraGlossary: glossary.asRecord(),
         authToken,
+        anonymousId,
       });
       if (currentRequestId !== translationRequestId.current) return;
       if (streamResult.ok && streamResult.text) {
@@ -278,9 +272,20 @@ export default function TranslatorScreen() {
         return;
       }
       if (streamResult.error && streamResult.error !== 'cancelled') {
-        // Session/permission problems should not fall through to other paths.
+        // Quota and session problems must not fall through to the client-side fallback.
+        if (/word.?limit/i.test(streamResult.error)) {
+          setOutputText('You have used your 1,500 free words. Sign in from the Profile tab to keep translating.');
+          setTranslationQuality(0);
+          setIsTranslating(false);
+          isTranslatingRef.current = false;
+          return;
+        }
         if (/401|unauthorized|sign.?in/i.test(streamResult.error)) {
-          setOutputText('Your session expired. Please sign in again from the Profile tab.');
+          setOutputText(
+            user
+              ? 'Your session expired. Please sign in again from the Profile tab.'
+              : 'You have used your 1,500 free words. Sign in from the Profile tab to keep translating.'
+          );
           setTranslationQuality(0);
           setIsTranslating(false);
           isTranslatingRef.current = false;
@@ -301,6 +306,7 @@ export default function TranslatorScreen() {
         sourceLanguage: sourceLang,
         targetLanguage: targetLang,
         extraGlossary: glossary.asRecord(),
+        anonymousId: await getAnonymousId(),
       });
       
       // Check if this is still the latest request
@@ -331,6 +337,13 @@ export default function TranslatorScreen() {
         return;
       }
       const errMsg = backendError instanceof Error ? backendError.message : String(backendError);
+      if (errMsg.toLowerCase().includes('word_limit_reached')) {
+        setOutputText('You have used your 1,500 free words. Sign in from the Profile tab to keep translating.');
+        setTranslationQuality(0);
+        setIsTranslating(false);
+        isTranslatingRef.current = false;
+        return;
+      }
       if (errMsg.toLowerCase().includes('sign in')) {
         setOutputText('Your session expired. Please sign in again from the Profile tab.');
         setTranslationQuality(0);
@@ -877,8 +890,6 @@ export default function TranslatorScreen() {
             ))}
           </ScrollView>
 
-          {user ? (
-          <>
           <GlassCard variant="purple" style={styles.inputCard}>
             <View style={styles.inputHeader}>
               <Text style={styles.inputLabel}>
@@ -1150,10 +1161,6 @@ export default function TranslatorScreen() {
               </View>
             )}
           </GlassCard>
-          </>
-          ) : (
-            <SignInGate />
-          )}
 
 
         </Animated.View>

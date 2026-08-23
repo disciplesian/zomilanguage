@@ -4,12 +4,12 @@ import { GlassCard } from '@/components/SiteLayout';
 import { useAuth } from '@/lib/auth';
 
 /**
- * Members-only gate. Translation and account features require a signed-in
- * portal account, so unauthenticated visitors see this card instead.
+ * Sign-in card. Translation is free for the first 1,500 words; signing in
+ * unlocks unlimited translation plus synced history and a personal glossary.
  */
 export function SignInPanel({
-  title = 'Members only',
-  message = 'The Zomi translation service is available to portal members. Sign in with Google or Apple to continue — it is free.',
+  title = 'Sign in',
+  message = 'Sign in with Google or Apple for unlimited translation, synced history and a personal glossary — it is free.',
 }: {
   title?: string;
   message?: string;

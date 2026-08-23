@@ -14,7 +14,8 @@ import {
 import { SiteLayout, GlassCard } from '@/components/SiteLayout';
 import { SignInPanel } from '@/components/SignInPanel';
 import { useAuth } from '@/lib/auth';
-import { streamTranslation } from '@/lib/portalApi';
+import { getAnonymousId } from '@/lib/anonymousId';
+import { streamTranslation, WORD_LIMIT_ERROR, type UsageInfo } from '@/lib/portalApi';
 
 const SUGGESTIONS = [
   'Na dam maw?',
@@ -33,6 +34,8 @@ const Translate = () => {
   const [confidence, setConfidence] = useState<number>(0);
   const [isTranslating, setIsTranslating] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsSignIn, setNeedsSignIn] = useState<boolean>(false);
+  const [usage, setUsage] = useState<UsageInfo | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -49,30 +52,39 @@ const Translate = () => {
 
     setIsTranslating(true);
     setError(null);
+    setNeedsSignIn(false);
     setOutput('');
     setConfidence(0);
 
     try {
-      const token = await getAccessToken();
-      if (!token) {
-        setError('Your session expired. Please sign in again.');
-        return;
-      }
+      // Signed-in members translate without limits; guests draw down their
+      // 1,500-word free allowance tracked by a stable anonymous ID.
+      const token = user ? await getAccessToken() : null;
       const result = await streamTranslation(
-        token,
-        { text, targetLanguage: zomiToEnglish ? 'english' : 'zomi' },
+        {
+          text,
+          targetLanguage: zomiToEnglish ? 'english' : 'zomi',
+          token,
+          anonymousId: getAnonymousId(),
+        },
         (chunk) => setOutput((prev) => prev + chunk),
         controller.signal
       );
       setOutput(result.text);
       setConfidence(result.confidence);
+      if (result.usage) setUsage(result.usage);
     } catch (err) {
       if (controller.signal.aborted) return;
-      setError(err instanceof Error ? err.message : 'Translation failed. Please try again.');
+      if (err instanceof Error && err.message === WORD_LIMIT_ERROR) {
+        setError('You have used your 1,500 free words. Sign in below to keep translating — it is free.');
+        setNeedsSignIn(true);
+      } else {
+        setError(err instanceof Error ? err.message : 'Translation failed. Please try again.');
+      }
     } finally {
       if (!controller.signal.aborted) setIsTranslating(false);
     }
-  }, [input, zomiToEnglish, getAccessToken]);
+  }, [input, zomiToEnglish, getAccessToken, user]);
 
   useEffect(() => {
     return () => abortRef.current?.abort();
@@ -124,15 +136,9 @@ const Translate = () => {
     );
   }
 
-  if (!user) {
-    return (
-      <SiteLayout>
-        <div className="mx-auto w-full max-w-6xl px-5 py-20">
-          <SignInPanel />
-        </div>
-      </SiteLayout>
-    );
-  }
+  const freeWordsLeft = usage && !usage.authed && usage.wordLimit > 0
+    ? Math.max(0, usage.wordLimit - usage.wordsUsed)
+    : null;
 
   return (
     <SiteLayout>
@@ -141,9 +147,23 @@ const Translate = () => {
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Translator</h1>
             <p className="mt-1.5 text-sm text-white/50">
-              Signed in as {user.name ?? user.email}
+              {user
+                ? `Signed in as ${user.name ?? user.email}`
+                : 'Free for your first 1,500 words — no account needed'}
             </p>
           </div>
+          {!user && (
+            <div className="flex flex-col items-end gap-1.5">
+              {freeWordsLeft !== null ? (
+                <span className="rounded-full border border-[#00f0ff]/30 bg-[#00f0ff]/10 px-3 py-1 text-xs font-semibold text-[#7de9ff]">
+                  {freeWordsLeft.toLocaleString()} of 1,500 free words left
+                </span>
+              ) : (
+                <span className="text-xs text-white/40">1,500 free words without an account</span>
+              )}
+              <span className="text-xs text-white/35">Sign in anytime for unlimited translation</span>
+            </div>
+          )}
           <button
             type="button"
             onClick={swap}
@@ -265,6 +285,15 @@ const Translate = () => {
           <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-[#ff5e5e]/30 bg-[#ff5e5e]/10 p-4">
             <AlertCircle className="mt-0.5 h-4.5 w-4.5 shrink-0 text-[#ff8a8a]" />
             <p className="text-sm text-[#ffb3b3]">{error}</p>
+          </div>
+        )}
+
+        {needsSignIn && !user && (
+          <div className="mt-6">
+            <SignInPanel
+              title="Keep translating"
+              message="You have used your 1,500 free words. Sign in with Google or Apple for unlimited translation — it is free and your history syncs across devices."
+            />
           </div>
         )}
 

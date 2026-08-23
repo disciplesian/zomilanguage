@@ -9,10 +9,14 @@ import { appRouter } from "./trpc/app-router";
 import { createContext } from "./trpc/create-context";
 import { getDB } from "./db/client";
 import {
+  FREE_WORD_LIMIT,
+  anonymousWordsUsed,
   authFromRequest,
+  countWords,
   ensurePortalUser,
   portalProfileFor,
   logTranslation,
+  recordAnonymousWords,
   type AuthInfo,
 } from "./portal";
 import {
@@ -36,8 +40,10 @@ app.options('*', (c) => {
   return new Response(null, { status: 204 });
 });
 
+// NOTE: the platform mounts this Hono app at /api, so routes are defined
+// WITHOUT the /api prefix — e.g. "/translate/stream" serves /api/translate/stream.
 app.use(
-  "/api/trpc/*",
+  "/trpc/*",
   trpcServer({
     endpoint: "/api/trpc",
     router: appRouter,
@@ -63,31 +69,49 @@ app.get("/health", (c) => {
   return c.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-app.get("/api/health", (c) => {
-  return c.json({ status: "ok", timestamp: new Date().toISOString() });
-});
-
 /**
  * Streaming translation endpoint (Server-Sent Events).
  * Delivers Gemini output token-by-token so long translations feel instant.
  * Falls back gracefully if the SDK or API key is unavailable.
  */
-app.post("/api/translate/stream", async (c) => {
-  // Zomi Language Portal policy: translation requires a signed-in account.
-  const auth = await authFromRequest(c.req.header("authorization"));
-  if (!auth) return c.json({ error: "sign_in_required" }, 401);
-
+app.post("/translate/stream", async (c) => {
   const apiKey = process.env.GEMINI_API_KEY;
   let body: {
     text?: string;
     targetLanguage?: string;
     extraGlossary?: Record<string, string>;
+    anonymousId?: string;
   } = {};
   try {
     body = await c.req.json();
   } catch {
     return c.json({ error: "invalid_json" }, 400);
   }
+
+  // Free tier: anyone can translate up to FREE_WORD_LIMIT words without an
+  // account (tracked per device). Past the limit a signed-in account is
+  // required; signed-in members translate without limits.
+  const auth = await authFromRequest(c.req.header("authorization"));
+  const anonymousId =
+    (body.anonymousId ?? "").trim() ||
+    (c.req.header("x-anonymous-id") ?? "").trim() ||
+    (c.req.header("x-forwarded-for") ?? "").split(",")[0].trim() ||
+    "anonymous";
+  if (!auth) {
+    try {
+      const db = await getDB();
+      const wordsUsed = await anonymousWordsUsed(db, anonymousId);
+      if (wordsUsed >= FREE_WORD_LIMIT) {
+        return c.json(
+          { error: "word_limit_reached", wordsUsed, wordLimit: FREE_WORD_LIMIT },
+          401
+        );
+      }
+    } catch {
+      // Quota store unavailable — fail open rather than blocking translation.
+    }
+  }
+
   const text = (body.text ?? "").trim();
   const target = (body.targetLanguage ?? "english").trim();
   const extraGlossary =
@@ -157,18 +181,38 @@ app.post("/api/translate/stream", async (c) => {
           event: "done",
           data: JSON.stringify({ text: trimmed, model: spec.model, confidence }),
         });
-        // Per-user usage log for the admin dashboard. Non-fatal on failure.
+        // Report the caller's free-tier usage so clients can show remaining words.
         try {
-          const db = await getDB();
-          await logTranslation(db, auth, {
-            sourceText: text,
-            translatedText: trimmed,
-            targetLanguage: target,
-            model: spec.model,
-            confidence,
-          });
+          if (auth) {
+            await stream.writeSSE({
+              event: "usage",
+              data: JSON.stringify({ authed: true, wordsUsed: 0, wordLimit: 0 }),
+            });
+          } else {
+            const db = await getDB();
+            const wordsUsed = await recordAnonymousWords(db, anonymousId, countWords(text));
+            await stream.writeSSE({
+              event: "usage",
+              data: JSON.stringify({ authed: false, wordsUsed, wordLimit: FREE_WORD_LIMIT }),
+            });
+          }
         } catch {
-          // ignore logging failures
+          // usage reporting is best-effort
+        }
+        // Per-user usage log for the admin dashboard. Non-fatal on failure.
+        if (auth) {
+          try {
+            const db = await getDB();
+            await logTranslation(db, auth, {
+              sourceText: text,
+              translatedText: trimmed,
+              targetLanguage: target,
+              model: spec.model,
+              confidence,
+            });
+          } catch {
+            // ignore logging failures
+          }
         }
         return;
       } catch (err) {
@@ -233,7 +277,7 @@ function sanitizeTranslations(input: unknown): unknown[] {
     .filter((t) => t.key && t.sourceText && t.translatedText);
 }
 
-app.post("/api/sync/push", async (c) => {
+app.post("/sync/push", async (c) => {
   const auth = await authFromRequest(c.req.header("authorization"));
   if (!auth) return c.json({ error: "unauthorized" }, 401);
   const userId = auth.userId;
@@ -260,7 +304,7 @@ app.post("/api/sync/push", async (c) => {
   }
 });
 
-app.post("/api/sync/pull", async (c) => {
+app.post("/sync/pull", async (c) => {
   const auth = await authFromRequest(c.req.header("authorization"));
   if (!auth) return c.json({ error: "unauthorized" }, 401);
   const userId = auth.userId;
@@ -288,7 +332,7 @@ app.post("/api/sync/pull", async (c) => {
 });
 
 /** Portal profile for the signed-in user: role, verification status, usage stats. */
-app.get("/api/portal/me", async (c) => {
+app.get("/portal/me", async (c) => {
   const auth = await authFromRequest(c.req.header("authorization"));
   if (!auth) return c.json({ error: "unauthorized" }, 401);
   try {
@@ -311,7 +355,7 @@ app.get("/api/portal/me", async (c) => {
 });
 
 /** Submit a blue-check verification request for admin review. */
-app.post("/api/portal/verification/request", async (c) => {
+app.post("/portal/verification/request", async (c) => {
   const auth = await authFromRequest(c.req.header("authorization"));
   if (!auth) return c.json({ error: "unauthorized" }, 401);
 
@@ -363,7 +407,7 @@ async function requireAdmin(c: Context): Promise<AdminGuard> {
 }
 
 /** Admin dashboard overview: usage stats, top users, recent translations. */
-app.get("/api/admin/overview", async (c) => {
+app.get("/admin/overview", async (c) => {
   const guard = await requireAdmin(c);
   if (!guard.ok) return guard.response;
   const { db } = guard;
@@ -449,7 +493,7 @@ app.get("/api/admin/overview", async (c) => {
 });
 
 /** Admin: list every portal user with roles, verification state, usage. */
-app.get("/api/admin/users", async (c) => {
+app.get("/admin/users", async (c) => {
   const guard = await requireAdmin(c);
   if (!guard.ok) return guard.response;
   try {
@@ -482,7 +526,7 @@ app.get("/api/admin/users", async (c) => {
 });
 
 /** Admin: assign a role (user | moderator | admin) to any account. */
-app.post("/api/admin/role", async (c) => {
+app.post("/admin/role", async (c) => {
   const guard = await requireAdmin(c);
   if (!guard.ok) return guard.response;
 
@@ -511,7 +555,7 @@ app.post("/api/admin/role", async (c) => {
 });
 
 /** Admin: approve or reject a verification request (also used to grant directly). */
-app.post("/api/admin/verification", async (c) => {
+app.post("/admin/verification", async (c) => {
   const guard = await requireAdmin(c);
   if (!guard.ok) return guard.response;
 

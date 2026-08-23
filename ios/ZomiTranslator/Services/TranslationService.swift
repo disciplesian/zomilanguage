@@ -29,6 +29,17 @@ nonisolated final class TranslationService: Sendable {
         return "https://api.rork.app"
     }
 
+    /// Stable per-device identifier for the anonymous free tier. Guests may
+    /// translate up to 1,500 words before an account is required.
+    var anonymousId: String {
+        if let existing = KeychainHelper.get("anonymous_id") {
+            return existing
+        }
+        let created = UUID().uuidString
+        KeychainHelper.set("anonymous_id", value: created)
+        return created
+    }
+
     /// Streams a translation. Emits events as they arrive; the stream finishes
     /// after a `.done` or `.failure` event.
     func stream(
@@ -39,12 +50,10 @@ nonisolated final class TranslationService: Sendable {
         AsyncStream { continuation in
             let task = Task {
                 do {
-                    // Portal policy: translation requires a signed-in account.
-                    guard let accessToken = KeychainHelper.get("access_token") else {
-                        continuation.yield(.failure(message: "sign_in_required"))
-                        continuation.finish()
-                        return
-                    }
+                    // Free tier: members translate without limits; guests draw
+                    // down a 1,500-word allowance tracked by anonymous ID.
+                    let accessToken = KeychainHelper.get("access_token")
+                    let guestId = anonymousId
                     guard let url = URL(string: "\(baseURL)/api/translate/stream") else {
                         continuation.yield(.failure(message: "invalid_url"))
                         continuation.finish()
@@ -54,13 +63,17 @@ nonisolated final class TranslationService: Sendable {
                     request.httpMethod = "POST"
                     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
                     request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
-                    request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+                    request.setValue(guestId, forHTTPHeaderField: "X-Anonymous-Id")
+                    if let accessToken {
+                        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+                    }
                     request.timeoutInterval = 60
 
                     let body: [String: Any] = [
                         "text": text,
                         "targetLanguage": targetLanguage.rawValue,
                         "extraGlossary": extraGlossary,
+                        "anonymousId": guestId,
                     ]
                     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
@@ -68,7 +81,15 @@ nonisolated final class TranslationService: Sendable {
                     guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                         let code = (response as? HTTPURLResponse)?.statusCode ?? -1
                         if code == 401 {
-                            continuation.yield(.failure(message: "sign_in_required"))
+                            // Read the JSON error body to tell an exhausted free
+                            // tier apart from an expired member session.
+                            var raw = ""
+                            for try await line in bytes.lines {
+                                raw += line
+                                if raw.count > 512 { break }
+                            }
+                            let errorCode = ((try? JSONSerialization.jsonObject(with: Data(raw.utf8))) as? [String: Any])?["error"] as? String
+                            continuation.yield(.failure(message: errorCode ?? "sign_in_required"))
                         } else {
                             continuation.yield(.failure(message: "HTTP \(code)"))
                         }

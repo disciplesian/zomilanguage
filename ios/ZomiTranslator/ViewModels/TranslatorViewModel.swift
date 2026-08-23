@@ -180,6 +180,13 @@ final class TranslatorViewModel {
                     ))
                 case .failure(let message):
                     if message == "cancelled" { return }
+                    if message == "word_limit_reached" {
+                        self.errorText = "You've used your 1,500 free words — sign in from the Settings tab to keep translating."
+                        self.isTranslating = false
+                        self.isStreaming = false
+                        finished = true
+                        break
+                    }
                     if message == "sign_in_required" {
                         self.errorText = "Sign in required — please sign in from the Settings tab."
                         self.isTranslating = false

@@ -74,8 +74,8 @@ const Index = () => {
           </h1>
 
           <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-white/60">
-            A members-only translation service and community portal for Zomi speakers, learners and
-            families — on your phone and in your browser.
+            A free English–Zomi translation service and community portal for Zomi speakers, learners
+            and families — on your phone and in your browser.
           </p>
 
           <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
@@ -95,7 +95,7 @@ const Index = () => {
           </div>
 
           <p className="mt-5 text-sm text-white/40">
-            Free to join · Sign in with Google or Apple
+            Your first 1,500 words are free · No account needed
           </p>
         </div>
 

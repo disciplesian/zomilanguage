@@ -6,6 +6,57 @@ import { getDB } from "./db/client";
  * Used by both the Hono REST endpoints and the tRPC translation route.
  */
 
+/** Free tier: words an anonymous visitor may translate before sign-in is required. */
+export const FREE_WORD_LIMIT = 1500;
+
+/** Splits text into words the same way on every quota check. */
+export function countWords(text: string): number {
+  const trimmed = text.trim();
+  return trimmed ? trimmed.split(/\s+/).length : 0;
+}
+
+/** Words translated so far by an anonymous visitor (0 when unknown). */
+export async function anonymousWordsUsed(db: Surreal, anonymousId: string): Promise<number> {
+  try {
+    const res = await db.query<[{ wordsUsed: number }[]]>(
+      "SELECT wordsUsed FROM anonymous_usage WHERE anonymousId = $anonymousId LIMIT 1",
+      { anonymousId }
+    );
+    return Math.max(0, Number(res[0]?.[0]?.wordsUsed ?? 0));
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Adds `words` to an anonymous visitor's lifetime counter and returns the new
+ * total. Failures are non-fatal — quota tracking must never break a translation.
+ */
+export async function recordAnonymousWords(
+  db: Surreal,
+  anonymousId: string,
+  words: number
+): Promise<number> {
+  if (words <= 0) return anonymousWordsUsed(db, anonymousId);
+  try {
+    const updated = await db.query<[{ wordsUsed: number }[]]>(
+      "UPDATE anonymous_usage SET wordsUsed = $total, updatedAt = $now WHERE anonymousId = $anonymousId RETURN AFTER",
+      { total: (await anonymousWordsUsed(db, anonymousId)) + words, now: new Date().toISOString(), anonymousId }
+    );
+    const row = updated[0]?.[0];
+    if (row) return Math.max(0, Number(row.wordsUsed ?? 0));
+    await db.create("anonymous_usage", {
+      anonymousId,
+      wordsUsed: words,
+      updatedAt: new Date().toISOString(),
+    });
+    return words;
+  } catch (err) {
+    console.warn("[portal] anonymous usage update failed:", err);
+    return 0;
+  }
+}
+
 export interface AuthInfo {
   userId: string;
   email: string;
@@ -154,7 +205,7 @@ export async function logTranslation(
 ): Promise<void> {
   try {
     await ensurePortalUser(db, auth);
-    const wordCount = entry.sourceText.trim() ? entry.sourceText.trim().split(/\s+/).length : 0;
+    const wordCount = countWords(entry.sourceText);
     await db.create("translation_logs", {
       userId: auth.userId,
       sourceText: entry.sourceText.slice(0, 5000),
