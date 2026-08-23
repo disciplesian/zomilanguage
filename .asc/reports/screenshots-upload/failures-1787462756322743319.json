@@ -1,0 +1,52 @@
+{
+  "versionLocalizationId": "7e28c292-7e68-465a-8792-c4a7f88d16e7",
+  "path": ".asc/reports/screenshots-upload/failures-1787462756322743319.json",
+  "rootPath": "/home/user/rork-app/screenshots/iphone/en",
+  "deviceType": "IPHONE_65",
+  "displayType": "APP_IPHONE_65",
+  "skipExisting": true,
+  "setId": "610b1574-4075-453c-9bc5-755143f5764b",
+  "files": [
+    "/home/user/rork-app/screenshots/iphone/en/01_translator.png",
+    "/home/user/rork-app/screenshots/iphone/en/02_glossary.png",
+    "/home/user/rork-app/screenshots/iphone/en/03_pronunciation.png",
+    "/home/user/rork-app/screenshots/iphone/en/04_history.png",
+    "/home/user/rork-app/screenshots/iphone/en/05_settings.png"
+  ],
+  "orderedIds": [
+    "77c5f1bd-b5b4-45cf-b01a-3aaff0f6ca0c",
+    "bf9553ed-fb88-4719-9413-e77c79a83669"
+  ],
+  "pendingFiles": [
+    "/home/user/rork-app/screenshots/iphone/en/02_glossary.png",
+    "/home/user/rork-app/screenshots/iphone/en/03_pronunciation.png",
+    "/home/user/rork-app/screenshots/iphone/en/04_history.png",
+    "/home/user/rork-app/screenshots/iphone/en/05_settings.png"
+  ],
+  "pendingAssets": [
+    {
+      "fileName": "02_glossary.png",
+      "filePath": "/home/user/rork-app/screenshots/iphone/en/02_glossary.png",
+      "assetId": "e76ba607-65b1-4c63-9ad6-6bcf7123ed9a",
+      "checksum": "00948a3b9bd27812b86ed3f2ea91bf3a",
+      "state": "FAILED"
+    }
+  ],
+  "results": [
+    {
+      "fileName": "01_translator.png",
+      "filePath": "/home/user/rork-app/screenshots/iphone/en/01_translator.png",
+      "assetId": "bf9553ed-fb88-4719-9413-e77c79a83669",
+      "state": "COMPLETE"
+    }
+  ],
+  "failures": [
+    {
+      "fileName": "02_glossary.png",
+      "filePath": "/home/user/rork-app/screenshots/iphone/en/02_glossary.png",
+      "error": "screenshot e76ba607-65b1-4c63-9ad6-6bcf7123ed9a delivery failed: IMAGE_ALPHA_NOT_ALLOWED"
+    }
+  ],
+  "error": "screenshot e76ba607-65b1-4c63-9ad6-6bcf7123ed9a delivery failed: IMAGE_ALPHA_NOT_ALLOWED",
+  "generatedAt": "2026-08-23T05:25:56Z"
+}

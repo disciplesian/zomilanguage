@@ -1,0 +1,53 @@
+{
+  "theme": {
+    "style": "Deep navy and charcoal glass world inspired by nocturnal linguistic connection, with cyan and violet light threading through frosted translucent layers like data flowing between two languages. Moods shift from cool electric energy to warm scholarly calm, always with cinematic depth, soft glass reflections, and fine light-particle textures. The world feels premium, intelligent, and quietly global.",
+    "headlineFont": "'Plus Jakarta Sans', sans-serif — import via @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700;800&display=swap')",
+    "headlineFontSize": 120,
+    "mockupIds": {
+      "iphone": "deep-blue",
+      "ipad": "space-gray"
+    },
+    "palette": {
+      "primary": "#0B1226",
+      "secondary": "#1E2A4A",
+      "accent": "#2FE0E0"
+    },
+    "layoutId": "hero-clipped"
+  },
+  "slides": [
+    {
+      "label": "Translator",
+      "backgroundPrompt": "Abstract digital art of two intersecting streams of translucent light, one cyan and one deep violet, weaving through a dark navy glass void, converging into a bright glowing nexus at center. Colors are deep navy #0B1226, electric cyan #2FE0E0, and soft violet undertones, with cinematic side lighting casting sharp rim highlights along the streams. Fine particle glow drifts through the depth of field, the upper 30% fading to calm near-black for text clarity, 8K quality, ultra smooth gradients, premium feel, no text, no letters, no UI elements, no device mockups",
+      "backgroundUrl": "https://r2-pub.rork.com/app-store-screenshots/43d37120-7d5d-4773-b821-740581e2b2bc.png"
+    },
+    {
+      "label": "Glossary",
+      "backgroundPrompt": "Abstract digital art of warm amber and deep bronze light layered over a dark charcoal-navy backdrop, with softly stacked translucent glass panels catching golden edge highlights like archived fragments of light. Colors are dark navy #0B1226, warm amber gold, and muted bronze, illuminated by a single warm glow from the lower right creating long soft shadows. Subtle dust particles float in shallow depth of field, the top third calm and dark for text overlay, 8K quality, ultra smooth gradients, premium feel, no text, no letters, no UI elements, no device mockups",
+      "backgroundUrl": "https://r2-pub.rork.com/app-store-screenshots/946b810e-13d3-4ce3-a5b8-4e7e6c749872.png"
+    },
+    {
+      "label": "Pronunciation",
+      "backgroundPrompt": "Abstract digital art of vivid concentric waveform ripples in electric cyan and magenta pulsing outward from a bright central point on a deep navy background, evoking rhythmic sound energy. Colors are deep navy #0B1226, electric cyan #2FE0E0, and vibrant magenta-violet accents, with dynamic radial lighting bursting from center and soft glow bleeding into the edges. Fine grain texture and gentle motion blur add energy, the upper portion darker and quieter for text legibility, 8K quality, ultra smooth gradients, premium feel, no text, no letters, no UI elements, no device mockups",
+      "backgroundUrl": "https://r2-pub.rork.com/app-store-screenshots/d5977176-4977-4eef-b719-ffa9b0cd62e3.png"
+    },
+    {
+      "label": "History",
+      "backgroundPrompt": "Abstract digital art of a luminous inverted scene with a soft pale ivory and cool silver base, gentle flowing ribbons of light navy and cyan drifting diagonally across the frame like a calm timeline. Colors are soft ivory white, pale silver-gray, and deep navy #0B1226 accents, lit by diffused overhead light creating a bright airy atmosphere with subtle soft shadows. Delicate glass morphism layers add depth near the edges, the upper 30% remaining clean and softly lit for text overlay, 8K quality, ultra smooth gradients, premium feel, no text, no letters, no UI elements, no device mockups",
+      "backgroundUrl": "https://r2-pub.rork.com/app-store-screenshots/f42ce384-9549-4b9d-b5aa-6cd28917f64e.png"
+    },
+    {
+      "label": "Settings",
+      "backgroundPrompt": "Abstract digital art of a quiet dark navy expanse with subtle deep purple and violet light pooling softly in the lower half, scattered faint points of light resembling a distant network of connected voices. Colors are deep navy #0B1226, muted violet, and soft indigo #1E2A4A, with gentle diffused lighting from below creating a calm, confident glow and soft ambient haze. Minimal fine grain texture adds richness, the upper region dark, still, and uncluttered for text overlay, 8K quality, ultra smooth gradients, premium feel, no text, no letters, no UI elements, no device mockups",
+      "backgroundUrl": "https://r2-pub.rork.com/app-store-screenshots/d5b5da4b-4e1d-4929-ab14-edeb5cb62ea2.png"
+    }
+  ],
+  "headlines": {
+    "en": {
+      "Translator": "Two Languages<br>Finally Speak",
+      "Glossary": "Every Word,<br>Saved Forever",
+      "Pronunciation": "Speak It With<br>Confidence",
+      "History": "Your Whole<br>Journey, Kept",
+      "Settings": "Part Of The<br>Zomi Community"
+    }
+  }
+}
