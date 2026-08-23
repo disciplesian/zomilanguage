@@ -1,0 +1,226 @@
+package com.rork.zomilanguageportal.data
+
+import io.ktor.client.HttpClient
+import io.ktor.client.call.body
+import io.ktor.client.engine.android.Android
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.request.post
+import io.ktor.client.request.preparePost
+import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsChannel
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.contentType
+import io.ktor.serialization.kotlinx.json.json
+import io.ktor.utils.io.readUTF8Line
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+
+/** Shared Ktor client for auth and portal API calls. */
+object PortalHttp {
+    val json: Json = Json { ignoreUnknownKeys = true; isLenient = true }
+
+    val client: HttpClient = HttpClient(Android) {
+        expectSuccess = true
+        install(ContentNegotiation) { json(json) }
+    }
+}
+
+@Serializable
+data class PortalProfile(
+    val userId: String = "",
+    val email: String = "",
+    val name: String? = null,
+    val role: String = "user",
+    val verified: Boolean = false,
+    val verificationStatus: String = "none",
+    val translationCount: Int = 0,
+    val joinedAt: String = "",
+)
+
+@Serializable
+data class PortalUserRecord(
+    val userId: String = "",
+    val email: String = "",
+    val name: String? = null,
+    val role: String = "user",
+    val verified: Boolean = false,
+    val verificationStatus: String = "none",
+    val verificationReason: String = "",
+    val translationCount: Int = 0,
+    val joinedAt: String = "",
+)
+
+@Serializable
+data class TopUser(
+    val userId: String = "",
+    val email: String = "",
+    val name: String? = null,
+    val total: Int = 0,
+)
+
+@Serializable
+data class TranslationLog(
+    val userId: String = "",
+    val email: String = "",
+    val name: String? = null,
+    val sourceText: String = "",
+    val translatedText: String = "",
+    val targetLanguage: String = "",
+    val model: String? = null,
+    val confidence: Int = 0,
+    val wordCount: Int = 0,
+    val createdAt: String = "",
+)
+
+@Serializable
+data class AdminOverview(
+    val totalUsers: Int = 0,
+    val totalTranslations: Int = 0,
+    val translationsToday: Int = 0,
+    val verifiedUsers: Int = 0,
+    val pendingVerifications: Int = 0,
+    val topUsers: List<TopUser> = emptyList(),
+    val recentTranslations: List<TranslationLog> = emptyList(),
+)
+
+@Serializable
+private data class UsersResponse(val users: List<PortalUserRecord> = emptyList())
+
+@Serializable
+private data class ReasonBody(val reason: String)
+
+@Serializable
+private data class RoleBody(val userId: String, val role: String)
+
+@Serializable
+private data class VerificationBody(val userId: String, val decision: String)
+
+@Serializable
+private data class TranslateBody(val text: String, val targetLanguage: String)
+
+data class TranslationResult(val text: String, val model: String?, val confidence: Int)
+
+/** Raised when the backend rejects the session; the UI prompts a fresh sign-in. */
+class SessionExpiredException : Exception("Your session expired. Please sign in again.")
+
+/** Client for the members-only Zomi Language Portal backend. */
+object PortalApi {
+
+    suspend fun profile(token: String): PortalProfile =
+        PortalHttp.client.get("${AppConfig.API_BASE_URL}/api/portal/me") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+        }.body()
+
+    suspend fun requestVerification(token: String, reason: String) {
+        PortalHttp.client.post("${AppConfig.API_BASE_URL}/api/portal/verification/request") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            contentType(ContentType.Application.Json)
+            setBody(ReasonBody(reason))
+        }
+    }
+
+    suspend fun adminOverview(token: String): AdminOverview =
+        PortalHttp.client.get("${AppConfig.API_BASE_URL}/api/admin/overview") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+        }.body()
+
+    suspend fun adminUsers(token: String): List<PortalUserRecord> {
+        val response: UsersResponse =
+            PortalHttp.client.get("${AppConfig.API_BASE_URL}/api/admin/users") {
+                header(HttpHeaders.Authorization, "Bearer $token")
+            }.body()
+        return response.users
+    }
+
+    suspend fun setRole(token: String, userId: String, role: String) {
+        PortalHttp.client.post("${AppConfig.API_BASE_URL}/api/admin/role") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            contentType(ContentType.Application.Json)
+            setBody(RoleBody(userId, role))
+        }
+    }
+
+    suspend fun decideVerification(token: String, userId: String, decision: String) {
+        PortalHttp.client.post("${AppConfig.API_BASE_URL}/api/admin/verification") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            contentType(ContentType.Application.Json)
+            setBody(VerificationBody(userId, decision))
+        }
+    }
+
+    /**
+     * Streams a translation from the members-only endpoint, calling [onDelta]
+     * for each token so the UI reveals the result as it arrives.
+     */
+    suspend fun streamTranslation(
+        token: String,
+        text: String,
+        targetLanguage: String,
+        onDelta: (String) -> Unit,
+    ): TranslationResult {
+        val streamed = StringBuilder()
+        var finalResult: TranslationResult? = null
+
+        PortalHttp.client.preparePost("${AppConfig.API_BASE_URL}/api/translate/stream") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            header(HttpHeaders.Accept, "text/event-stream")
+            contentType(ContentType.Application.Json)
+            setBody(TranslateBody(text, targetLanguage))
+        }.execute { response ->
+            if (response.status.value == 401) throw SessionExpiredException()
+
+            val channel = response.bodyAsChannel()
+            var eventName = "message"
+            val data = StringBuilder()
+
+            fun dispatch() {
+                if (data.isEmpty()) return
+                val payload = runCatching {
+                    PortalHttp.json.parseToJsonElement(data.toString()).jsonObject
+                }.getOrNull()
+                if (payload != null) {
+                    when (eventName) {
+                        "delta" -> {
+                            val piece = payload["text"]?.jsonPrimitive?.content.orEmpty()
+                            if (piece.isNotEmpty()) {
+                                streamed.append(piece)
+                                onDelta(piece)
+                            }
+                        }
+                        "done" -> {
+                            val full = payload["text"]?.jsonPrimitive?.content.orEmpty()
+                            finalResult = TranslationResult(
+                                text = full.ifEmpty { streamed.toString() },
+                                model = payload["model"]?.jsonPrimitive?.content,
+                                confidence = payload["confidence"]?.jsonPrimitive?.content
+                                    ?.toIntOrNull() ?: 0,
+                            )
+                        }
+                    }
+                }
+                data.clear()
+                eventName = "message"
+            }
+
+            while (true) {
+                val line = channel.readUTF8Line() ?: break
+                when {
+                    line.startsWith("event:") -> eventName = line.removePrefix("event:").trim()
+                    line.startsWith("data:") -> data.append(line.removePrefix("data:").trim())
+                    line.isBlank() -> dispatch()
+                }
+            }
+            dispatch()
+        }
+
+        val result = finalResult
+            ?: TranslationResult(streamed.toString(), null, if (streamed.isEmpty()) 0 else 90)
+        if (result.text.isEmpty()) error("No translation was returned. Please try again.")
+        return result
+    }
+}

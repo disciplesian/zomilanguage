@@ -1,4 +1,5 @@
 {
+  "$schema": "https://rork.com/schema/rork.json",
   "apps": [
     {
       "name": "Expo",
@@ -9,7 +10,16 @@
       "name": "Zomi Translator",
       "path": "ios",
       "framework": "swift"
+    },
+    {
+      "name": "Zomi Language Portal",
+      "path": "web",
+      "framework": "web"
+    },
+    {
+      "name": "Zomi Language Portal",
+      "path": "android",
+      "framework": "kotlin"
     }
-  ],
-  "$schema": "https://rork.com/schema/rork.json"
+  ]
 }
