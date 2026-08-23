@@ -3,11 +3,11 @@ import type { Context } from "hono";
 import { trpcServer } from "@hono/trpc-server";
 import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
-import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import type Surreal from "surrealdb.js";
 import { appRouter } from "./trpc/app-router";
 import { createContext } from "./trpc/create-context";
 import { getDB } from "./db/client";
+import { streamChatCompletion, aiProxyConfigured } from "./aiProxy";
 import {
   FREE_WORD_LIMIT,
   anonymousWordsUsed,
@@ -71,11 +71,10 @@ app.get("/health", (c) => {
 
 /**
  * Streaming translation endpoint (Server-Sent Events).
- * Delivers Gemini output token-by-token so long translations feel instant.
- * Falls back gracefully if the SDK or API key is unavailable.
+ * Delivers model output token-by-token so long translations feel instant.
+ * Models are served through the Rork Toolkit proxy (Vercel AI Gateway).
  */
 app.post("/translate/stream", async (c) => {
-  const apiKey = process.env.GEMINI_API_KEY;
   let body: {
     text?: string;
     targetLanguage?: string;
@@ -117,57 +116,45 @@ app.post("/translate/stream", async (c) => {
   const extraGlossary =
     body.extraGlossary && typeof body.extraGlossary === 'object' ? body.extraGlossary : {};
   if (!text) return c.json({ error: "missing_text" }, 400);
-  if (!apiKey) return c.json({ error: "api_key_missing" }, 500);
+  if (!aiProxyConfigured()) return c.json({ error: "ai_proxy_unavailable" }, 500);
 
   const targetLang = target === "zomi" ? "Tedim Zomi (CTD, ISO 639-3: ctd)" : target;
-  const ai = new GoogleGenAI({ apiKey });
   const mergedGlossary: Record<string, string> = { ...ZOMI_GLOSSARY, ...extraGlossary };
   const glossaryJson = JSON.stringify({ glossary: mergedGlossary, examples: ZOMI_EXAMPLES });
-  const contents = [
-    {
-      role: "user" as const,
-      parts: [
-        {
-          text: `Translate the following text into ${targetLang}.\nUse EXCLUSIVELY the Tedim dialect (CTD). Output plain translated text only.`,
-        },
-        { text: `GLOSSARY_DATA_JSON:\n${glossaryJson}` },
-        { text: `INPUT_TEXT:\n"${text}"` },
-      ],
-    },
-  ];
+  const prompt = [
+    `Translate the following text into ${targetLang}.`,
+    "Use EXCLUSIVELY the Tedim dialect (CTD). Output plain translated text only.",
+    "",
+    `GLOSSARY_DATA_JSON:\n${glossaryJson}`,
+    "",
+    `INPUT_TEXT:\n"${text}"`,
+  ].join("\n");
 
   return streamSSE(c, async (stream) => {
-    // Gemini 3.x chain (Aug 2026): thinkingLevel replaces thinkingBudget and
-    // temperature/topP are deprecated on 3.x. LOW thinking keeps token-by-token
-    // streaming snappy. 2.5 fallbacks keep classic sampling params.
-    const models: { model: string; thinkingLevel?: ThinkingLevel }[] = [
-      { model: "gemini-3.1-pro-preview", thinkingLevel: ThinkingLevel.LOW },
-      { model: "gemini-3.7-flash", thinkingLevel: ThinkingLevel.LOW },
-      { model: "gemini-3.6-flash", thinkingLevel: ThinkingLevel.LOW },
-      { model: "gemini-2.5-pro" },
-      { model: "gemini-2.5-flash" },
+    // Model chain (newest → oldest), served via the Rork AI proxy.
+    const models = [
+      "google/gemini-3.1-pro-preview",
+      "google/gemini-3.7-flash",
+      "google/gemini-3.6-flash",
+      "google/gemini-2.5-pro",
+      "google/gemini-2.5-flash",
     ];
-    for (const spec of models) {
+    for (const model of models) {
       try {
-        const iter = await ai.models.generateContentStream({
-          model: spec.model,
-          contents,
-          config: {
-            maxOutputTokens: 8192,
-            systemInstruction: ZOMI_SYSTEM_INSTRUCTION,
-            ...(spec.thinkingLevel
-              ? { thinkingConfig: { thinkingLevel: spec.thinkingLevel } }
-              : { temperature: 0.1, topP: 0.8 }),
+        await stream.writeSSE({ event: "start", data: JSON.stringify({ model }) });
+        const full = await streamChatCompletion(
+          {
+            model,
+            maxTokens: 8192,
+            messages: [
+              { role: "system", content: ZOMI_SYSTEM_INSTRUCTION },
+              { role: "user", content: prompt },
+            ],
           },
-        });
-        await stream.writeSSE({ event: "start", data: JSON.stringify({ model: spec.model }) });
-        let full = "";
-        for await (const chunk of iter) {
-          const piece = chunk.text ?? "";
-          if (!piece) continue;
-          full += piece;
-          await stream.writeSSE({ event: "delta", data: JSON.stringify({ text: piece }) });
-        }
+          async (piece) => {
+            await stream.writeSSE({ event: "delta", data: JSON.stringify({ text: piece }) });
+          }
+        );
         // Estimate a confidence based on output stability heuristics.
         // (A best-effort proxy for true model confidence in streaming mode.)
         const trimmed = full.trim();
@@ -179,7 +166,7 @@ app.post("/translate/stream", async (c) => {
         });
         await stream.writeSSE({
           event: "done",
-          data: JSON.stringify({ text: trimmed, model: spec.model, confidence }),
+          data: JSON.stringify({ text: trimmed, model, confidence }),
         });
         // Report the caller's free-tier usage so clients can show remaining words.
         try {
@@ -207,7 +194,7 @@ app.post("/translate/stream", async (c) => {
               sourceText: text,
               translatedText: trimmed,
               targetLanguage: target,
-              model: spec.model,
+              model,
               confidence,
             });
           } catch {
@@ -216,7 +203,7 @@ app.post("/translate/stream", async (c) => {
         }
         return;
       } catch (err) {
-        console.error(`[stream] model ${spec.model} failed`, err);
+        console.error(`[stream] model ${model} failed`, err);
         const message = err instanceof Error ? err.message : String(err);
         const lower = message.toLowerCase();
         if (lower.includes("429") || lower.includes("quota") || lower.includes("rate limit")) {
