@@ -291,7 +291,9 @@ final class AuthManager {
             let tokenResponse = try JSONDecoder().decode(TokenResponse.self, from: data)
 
             KeychainHelper.set("access_token", value: tokenResponse.access_token)
-            KeychainHelper.set("refresh_token", value: tokenResponse.refresh_token)
+            if let refreshToken = tokenResponse.refresh_token, !refreshToken.isEmpty {
+                KeychainHelper.set("refresh_token", value: refreshToken)
+            }
             user = tokenResponse.user ?? userFromToken(tokenResponse.access_token)
         } catch {
             setError("Sign in failed: \(error.localizedDescription)")
@@ -356,7 +358,7 @@ nonisolated private struct PollCodeResponse: Codable {
 
 nonisolated private struct TokenResponse: Codable {
     let access_token: String
-    let refresh_token: String
+    let refresh_token: String?
     let user: AuthManager.User?
 }
 

@@ -159,12 +159,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setError(body.error ?? `Sign in failed (${response.status})`);
       return;
     }
-    const data = (await response.json()) as {
-      access_token: string;
-      refresh_token: string;
+    const data = (await response.json().catch(() => null)) as {
+      access_token?: string;
+      refresh_token?: string;
       user?: AuthUser;
-    };
-    setStoredTokens(data.access_token, data.refresh_token);
+    } | null;
+    if (!data?.access_token) {
+      setError('Sign in could not be completed. Please try again.');
+      return;
+    }
+    setStoredTokens(data.access_token, data.refresh_token ?? '');
     setUser(data.user ?? userFromToken(data.access_token));
   }, []);
 
