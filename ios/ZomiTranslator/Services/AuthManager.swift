@@ -8,10 +8,10 @@ import CryptoKit
 final class AuthManager {
     struct User: Codable, Sendable {
         let id: String
-        let email: String
+        let email: String?
         let name: String?
         let picture: String?
-        let verified: Bool
+        let verified: Bool?
     }
 
     private(set) var user: User?
@@ -90,7 +90,7 @@ final class AuthManager {
 
         guard let payload = try? JSONDecoder().decode(JWTPayload.self, from: data) else { return nil }
         if let exp = payload.exp, Date(timeIntervalSince1970: exp) < Date() { return nil }
-        return User(id: payload.sub, email: payload.email ?? "", name: payload.name, picture: payload.picture, verified: payload.verified ?? false)
+        return User(id: payload.sub, email: payload.email, name: payload.name, picture: payload.picture, verified: payload.verified)
     }
 
     /// Refresh token from UserDefaults (simulator-injected) first, then Keychain.
@@ -292,7 +292,7 @@ final class AuthManager {
 
             KeychainHelper.set("access_token", value: tokenResponse.access_token)
             KeychainHelper.set("refresh_token", value: tokenResponse.refresh_token)
-            user = tokenResponse.user
+            user = tokenResponse.user ?? userFromToken(tokenResponse.access_token)
         } catch {
             setError("Sign in failed: \(error.localizedDescription)")
         }
@@ -357,7 +357,7 @@ nonisolated private struct PollCodeResponse: Codable {
 nonisolated private struct TokenResponse: Codable {
     let access_token: String
     let refresh_token: String
-    let user: AuthManager.User
+    let user: AuthManager.User?
 }
 
 nonisolated private struct RefreshResponse: Codable {

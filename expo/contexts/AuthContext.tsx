@@ -191,13 +191,17 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       setError(message);
       return;
     }
-    const { access_token, refresh_token, user: userData } = (await response.json()) as {
-      access_token: string;
-      refresh_token: string;
-      user: AuthUser;
-    };
-    await setStoredTokens(access_token, refresh_token);
-    setUser(userData ?? userFromToken(access_token));
+    const body = (await response.json().catch(() => null)) as {
+      access_token?: string;
+      refresh_token?: string;
+      user?: AuthUser;
+    } | null;
+    if (!body?.access_token) {
+      setError('Sign in could not be completed. Please try again.');
+      return;
+    }
+    await setStoredTokens(body.access_token, body.refresh_token ?? '');
+    setUser(body.user ?? userFromToken(body.access_token));
   }, []);
 
   const handleCallbackUrl = useCallback(

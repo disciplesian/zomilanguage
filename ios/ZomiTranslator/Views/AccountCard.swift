@@ -128,7 +128,7 @@ struct AccountCard: View {
                         Circle().strokeBorder(colors.glassCyanBorder, lineWidth: 1)
                     }
                     .overlay {
-                        Text(String((user.name ?? user.email).first ?? "?").uppercased())
+                        Text(String((user.name ?? user.email ?? "?").first ?? "?").uppercased())
                             .font(.system(size: 17, weight: .bold))
                             .foregroundStyle(colors.accent)
                             .allowsHitTesting(false)
@@ -140,14 +140,14 @@ struct AccountCard: View {
                             .font(.system(size: 15, weight: .bold))
                             .foregroundStyle(colors.text)
                             .lineLimit(1)
-                        if user.verified {
+                        if user.verified ?? false {
                             Image(systemName: "checkmark.seal.fill")
                                 .font(.system(size: 12))
                                 .foregroundStyle(Color(red: 0.39, green: 0.75, blue: 1.0))
                                 .accessibilityLabel("Verified contributor")
                         }
                     }
-                    Text(user.email.isEmpty ? "Account linked" : user.email)
+                    Text((user.email ?? "").isEmpty ? "Account linked" : user.email ?? "")
                         .font(.system(size: 12))
                         .foregroundStyle(colors.textMuted)
                         .lineLimit(1)
