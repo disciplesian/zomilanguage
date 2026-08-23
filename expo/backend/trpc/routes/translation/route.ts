@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, publicProcedure } from '../../create-context';
-import { chatCompletion, aiProxyConfigured, type ChatMessage } from '../../../aiProxy';
+import { chatCompletion, aiProxyConfigured, type ChatMessage, type ChatRequest } from '../../../aiProxy';
+import { chatCompletionDirect, geminiConfigured } from '../../../geminiDirect';
 import { authFromRequest, logTranslation, FREE_WORD_LIMIT, anonymousWordsUsed, countWords, recordAnonymousWords } from '../../../portal';
 import { getDB } from '../../../db/client';
 import {
@@ -11,16 +12,51 @@ import {
 } from '../../../../constants/zomiPrompt';
 
 /**
- * Model chain (newest → oldest, as of August 2026), served through the Rork
- * Toolkit proxy (Vercel AI Gateway) — no direct provider API keys needed.
+ * Model chain (newest → oldest, as of August 2026). Called directly with the
+ * project's GEMINI_API_KEY when configured, with the Rork Toolkit proxy
+ * (Vercel AI Gateway) as fallback.
  */
-const MODEL_CHAIN: readonly string[] = [
-  'google/gemini-3.1-pro-preview',
-  'google/gemini-3.7-flash',
-  'google/gemini-3.6-flash',
-  'google/gemini-2.5-pro',
-  'google/gemini-2.5-flash',
+const MODEL_NAMES: readonly string[] = [
+  'gemini-3.1-pro-preview',
+  'gemini-3.7-flash',
+  'gemini-3.6-flash',
+  'gemini-2.5-pro',
+  'gemini-2.5-flash',
 ];
+
+/** One provider attempt: a model id plus a completion function. */
+type Attempt = { model: string; run: (req: ChatRequest) => Promise<string> };
+
+function buildAttempts(): Attempt[] {
+  const attempts: Attempt[] = [];
+  if (geminiConfigured()) {
+    for (const m of MODEL_NAMES) attempts.push({ model: m, run: chatCompletionDirect });
+  }
+  if (aiProxyConfigured()) {
+    for (const m of MODEL_NAMES) attempts.push({ model: `google/${m}`, run: chatCompletion });
+  }
+  return attempts;
+}
+
+/** Completes via the first provider that succeeds (direct Gemini → proxy). */
+async function completeWithFallback(
+  model: string,
+  messages: ChatMessage[],
+  opts: { maxTokens?: number; temperature?: number } = {}
+): Promise<string> {
+  const attempts = buildAttempts();
+  const preferred = attempts.find((a) => a.model === model);
+  const ordered = preferred ? [preferred, ...attempts.filter((a) => a !== preferred)] : attempts;
+  let lastError: unknown = null;
+  for (const attempt of ordered) {
+    try {
+      return await attempt.run({ model: attempt.model, messages, ...opts });
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError ?? new Error('No AI provider configured.');
+}
 
 const MAX_INPUT_CHARS = 10000;
 
@@ -124,7 +160,7 @@ INPUT_TEXT:
 
 /** Parse the model's JSON response, recovering plain text if the schema is ignored. */
 function parseTranslation(raw: string): { translation: string; confidence: number } {
-  const trimmed = raw.trim();
+  const trimmed = raw.trim().replace(/```[a-z]*\s*/gi, '').replace(/```/g, '').trim();
   try {
     const parsed = JSON.parse(trimmed) as { translation?: string; confidence?: unknown };
     return {
@@ -150,11 +186,9 @@ async function refineTranslation(
   targetLang: string,
   draft: string
 ): Promise<{ translation: string; confidence: number } | null> {
-  const raw = await chatCompletion({
+  const raw = await completeWithFallback(
     model,
-    maxTokens: 8192,
-    temperature: 0.1,
-    messages: [
+    [
       { role: 'system', content: ZOMI_SYSTEM_INSTRUCTION },
       {
         role: 'user',
@@ -170,19 +204,21 @@ DRAFT_TRANSLATION:
 "${draft}"`,
       },
     ],
-  });
+    { maxTokens: 8192, temperature: 0.1 }
+  );
   const parsed = parseTranslation(raw);
   return parsed.translation ? parsed : null;
 }
 
-/** Run translation through the @google/genai SDK with structured output, model fallback, and a refinement pass. */
+/** Run translation with structured output, model/provider fallback, and a refinement pass. */
 export async function runTranslation(
   text: string,
   targetLanguage: string,
   extraGlossary?: Record<string, string>
 ): Promise<CacheEntry & { cached: boolean; refined: boolean }> {
-  if (!aiProxyConfigured()) {
-    throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'AI proxy is not configured.' });
+  const attempts = buildAttempts();
+  if (attempts.length === 0) {
+    throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'No AI provider configured.' });
   }
 
   const targetLang =
@@ -200,10 +236,10 @@ export async function runTranslation(
   let lastError: unknown = null;
   const startedAt = Date.now();
 
-  for (const model of MODEL_CHAIN) {
+  for (const { model, run } of attempts) {
     const modelStart = Date.now();
     try {
-      const raw = await chatCompletion({ model, maxTokens: 8192, temperature: 0.1, messages });
+      const raw = await run({ model, maxTokens: 8192, temperature: 0.1, messages });
       const parsed = parseTranslation(raw);
       if (!parsed.translation) throw new Error('Empty translation from model');
 

@@ -7,7 +7,15 @@ import type Surreal from "surrealdb.js";
 import { appRouter } from "./trpc/app-router";
 import { createContext } from "./trpc/create-context";
 import { getDB } from "./db/client";
-import { streamChatCompletion, aiProxyConfigured } from "./aiProxy";
+import {
+  streamChatCompletion,
+  aiProxyConfigured,
+  type ChatRequest,
+} from "./aiProxy";
+import {
+  streamChatCompletionDirect,
+  geminiConfigured,
+} from "./geminiDirect";
 import {
   FREE_WORD_LIMIT,
   anonymousWordsUsed,
@@ -72,8 +80,46 @@ app.get("/health", (c) => {
 /**
  * Streaming translation endpoint (Server-Sent Events).
  * Delivers model output token-by-token so long translations feel instant.
- * Models are served through the Rork Toolkit proxy (Vercel AI Gateway).
+ * Models are called directly with the project's GEMINI_API_KEY when present,
+ * with the Rork Toolkit proxy (Vercel AI Gateway) as fallback.
  */
+/** Strips markdown code fences a model may wrap around JSON output. */
+function stripFences(s: string): string {
+  return s.replace(/```[a-z]*\s*/gi, "").replace(/```/g, "");
+}
+
+/** Unescapes JSON string escapes (\n, \", \\uXXXX) in extracted text. */
+function unescapeJsonText(s: string): string {
+  try {
+    return JSON.parse(`"${s}"`) as string;
+  } catch {
+    return s;
+  }
+}
+
+/**
+ * Extracts the human-readable translation from raw model output that may be
+ * JSON ("translation": "...") possibly wrapped in code fences — or plain text.
+ * Handles partially-streamed JSON so it works on every delta.
+ */
+function extractDisplayText(raw: string): string {
+  const s = stripFences(raw).trim();
+  const complete = s.match(/"translation"\s*:\s*"((?:[^"\\]|\\.)*)"/s);
+  if (complete) return unescapeJsonText(complete[1]);
+  const partial = s.match(/"translation"\s*:\s*"((?:[^"\\]|\\.)*)/s);
+  if (partial) return unescapeJsonText(partial[1]);
+  // Not JSON output — plain text, minus any trailing incomplete JSON tail.
+  const cut = s.search(/\s*[,}]?\s*"(confidence|model)"\s*:/);
+  return (cut === -1 ? s : s.slice(0, cut)).trim();
+}
+
+/** Extracts a confidence value from JSON model output, if present. */
+function extractConfidence(raw: string): number | null {
+  const m = stripFences(raw).match(/"confidence"\s*:\s*(\d+(?:\.\d+)?)/);
+  if (!m) return null;
+  return Math.max(0, Math.min(100, Math.round(Number(m[1]))));
+}
+
 app.post("/translate/stream", async (c) => {
   let body: {
     text?: string;
@@ -116,7 +162,8 @@ app.post("/translate/stream", async (c) => {
   const extraGlossary =
     body.extraGlossary && typeof body.extraGlossary === 'object' ? body.extraGlossary : {};
   if (!text) return c.json({ error: "missing_text" }, 400);
-  if (!aiProxyConfigured()) return c.json({ error: "ai_proxy_unavailable" }, 500);
+  if (!aiProxyConfigured() && !geminiConfigured())
+    return c.json({ error: "ai_unavailable" }, 500);
 
   const targetLang = target === "zomi" ? "Tedim Zomi (CTD, ISO 639-3: ctd)" : target;
   const mergedGlossary: Record<string, string> = { ...ZOMI_GLOSSARY, ...extraGlossary };
@@ -131,18 +178,34 @@ app.post("/translate/stream", async (c) => {
   ].join("\n");
 
   return streamSSE(c, async (stream) => {
-    // Model chain (newest → oldest), served via the Rork AI proxy.
-    const models = [
-      "google/gemini-3.1-pro-preview",
-      "google/gemini-3.7-flash",
-      "google/gemini-3.6-flash",
-      "google/gemini-2.5-pro",
-      "google/gemini-2.5-flash",
+    // Model chain (newest → oldest). Direct Gemini is preferred when the
+    // project key is configured; the Rork AI proxy is the fallback path.
+    const modelNames = [
+      "gemini-3.1-pro-preview",
+      "gemini-3.7-flash",
+      "gemini-3.6-flash",
+      "gemini-2.5-pro",
+      "gemini-2.5-flash",
     ];
-    for (const model of models) {
+    type Attempt = {
+      model: string;
+      run: (req: ChatRequest, onDelta: (piece: string) => void | Promise<void>) => Promise<string>;
+    };
+    const attempts: Attempt[] = [];
+    if (geminiConfigured()) {
+      for (const m of modelNames) attempts.push({ model: m, run: streamChatCompletionDirect });
+    }
+    if (aiProxyConfigured()) {
+      for (const m of modelNames) attempts.push({ model: `google/${m}`, run: streamChatCompletion });
+    }
+    for (const { model, run } of attempts) {
       try {
         await stream.writeSSE({ event: "start", data: JSON.stringify({ model }) });
-        const full = await streamChatCompletion(
+        // Models may emit JSON ("translation": "...") despite the plain-text
+        // instruction; deltas are filtered so users only ever see the words.
+        let full = "";
+        let emitted = "";
+        const raw = await run(
           {
             model,
             maxTokens: 8192,
@@ -152,14 +215,22 @@ app.post("/translate/stream", async (c) => {
             ],
           },
           async (piece) => {
-            await stream.writeSSE({ event: "delta", data: JSON.stringify({ text: piece }) });
+            full += piece;
+            const display = extractDisplayText(full);
+            const newPart = display.slice(emitted.length);
+            if (newPart) {
+              emitted = display;
+              await stream.writeSSE({ event: "delta", data: JSON.stringify({ text: newPart }) });
+            }
           }
         );
-        // Estimate a confidence based on output stability heuristics.
-        // (A best-effort proxy for true model confidence in streaming mode.)
-        const trimmed = full.trim();
-        const looksClean = trimmed.length > 0 && !/\b(sorry|cannot|unable)\b/i.test(trimmed);
-        const confidence = looksClean ? Math.min(98, 88 + Math.min(10, Math.floor(trimmed.length / 80))) : 60;
+        const trimmed = extractDisplayText(raw) || emitted;
+        const jsonConfidence = extractConfidence(raw);
+        const confidence =
+          jsonConfidence ??
+          (trimmed.length > 0 && !/\b(sorry|cannot|unable)\b/i.test(trimmed)
+            ? Math.min(98, 88 + Math.min(10, Math.floor(trimmed.length / 80)))
+            : 60);
         await stream.writeSSE({
           event: "confidence",
           data: JSON.stringify({ confidence }),
