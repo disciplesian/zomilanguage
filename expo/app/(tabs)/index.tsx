@@ -36,7 +36,6 @@ import {
   BookOpen,
   Mic2,
   Lightbulb,
-  MessageCircle,
   BadgeCheck,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
@@ -61,7 +60,6 @@ import { useGlossary } from '@/contexts/GlossaryContext';
 import { useAuth } from '@/contexts/AuthContext';
 import SignInGate from '@/components/SignInGate';
 import { exportTranslation, ExportFormat, TranslationData } from '@/lib/exportUtils';
-import { SUGGESTED_PHRASES, SuggestedPhrase } from '@/constants/suggestedPhrases';
 
 export default function TranslatorScreen() {
   const [inputText, setInputText] = useState('');
@@ -746,17 +744,6 @@ export default function TranslatorScreen() {
     }
   }, [speak, stopSpeaking, isSpeaking, currentSpeed]);
 
-  const handlePhraseTap = useCallback(
-    (phrase: SuggestedPhrase) => {
-      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      const text = isZomiToEnglish ? phrase.zomi : phrase.english;
-      setInputText(text);
-      lastTranslatedText.current = '';
-      translate(text, isZomiToEnglish);
-    },
-    [isZomiToEnglish, translate]
-  );
-
   const formatDuration = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -1168,35 +1155,6 @@ export default function TranslatorScreen() {
             <SignInGate />
           )}
 
-          <GlassCard variant="cyan" style={styles.suggestedCard}>
-            <View style={styles.suggestedHeader}>
-              <MessageCircle size={16} color={Colors.accent} />
-              <Text style={styles.suggestedTitle}>Suggested Phrases</Text>
-            </View>
-            <Text style={styles.suggestedSubtitle}>
-              Common Zomi greetings and expressions — tap one to translate it
-            </Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.suggestedList}
-            >
-              {SUGGESTED_PHRASES.map((phrase) => (
-                <TouchableOpacity
-                  key={phrase.id}
-                  style={styles.suggestedChip}
-                  activeOpacity={0.85}
-                  onPress={() => handlePhraseTap(phrase)}
-                  accessibilityLabel={`${phrase.zomi}, ${phrase.english}`}
-                >
-                  <Text style={styles.suggestedChipZomi}>{phrase.zomi}</Text>
-                  <Text style={styles.suggestedChipEn}>{phrase.english}</Text>
-                  <Text style={styles.suggestedChipPron}>{phrase.pronunciation}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </GlassCard>
-
 
         </Animated.View>
       </ScrollView>
@@ -1528,55 +1486,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     color: Colors.textSecondary,
-  },
-  suggestedCard: {
-    marginBottom: 12,
-  },
-  suggestedHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 6,
-  },
-  suggestedTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: Colors.text,
-  },
-  suggestedSubtitle: {
-    fontSize: 12,
-    color: Colors.textMuted,
-    marginBottom: 12,
-  },
-  suggestedList: {
-    paddingVertical: 2,
-    gap: 10,
-  },
-  suggestedChip: {
-    backgroundColor: 'rgba(0, 240, 255, 0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(0, 240, 255, 0.2)',
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    minWidth: 130,
-    maxWidth: 200,
-  },
-  suggestedChipZomi: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.accent,
-    marginBottom: 2,
-  },
-  suggestedChipEn: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-  },
-  suggestedChipPron: {
-    fontSize: 10,
-    color: Colors.textMuted,
-    marginTop: 4,
-    fontStyle: 'italic',
   },
   glossaryHighlight: {
     backgroundColor: 'rgba(255, 181, 71, 0.18)',
