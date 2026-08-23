@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -211,12 +212,40 @@ fun TranslateScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        targetLabel.uppercase(),
-                        color = PortalColors.Cyan,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            targetLabel.uppercase(),
+                            color = PortalColors.Cyan,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        if (state.output.isNotEmpty() && !state.isTranslating) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .background(PortalColors.Blue.copy(alpha = 0.16f), RoundedCornerShape(50))
+                                    .border(1.dp, PortalColors.Blue.copy(alpha = 0.35f), RoundedCornerShape(50))
+                                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                            ) {
+                                Icon(
+                                    Icons.Filled.Verified,
+                                    contentDescription = null,
+                                    tint = Color(0xFF63C0FF),
+                                    modifier = Modifier.size(11.dp)
+                                )
+                                Spacer(Modifier.size(3.dp))
+                                Text(
+                                    "Official",
+                                    color = Color(0xFF63C0FF),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                        }
+                    }
                     if (state.confidence > 0) {
                         Text(
                             "${state.confidence}% confidence",

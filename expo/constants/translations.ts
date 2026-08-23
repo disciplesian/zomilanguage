@@ -56,6 +56,7 @@ export interface ContributedWord {
   example?: string;
   contributorName: string;
   contributorId: string;
+  contributorVerified?: boolean;
   status: 'pending' | 'approved' | 'rejected';
   votes: number;
   createdAt: string;
@@ -349,6 +350,7 @@ export const CONTRIBUTED_WORDS: ContributedWord[] = [
     example: 'Ka lungnopna a lian',
     contributorName: 'NativeSpeaker',
     contributorId: 'user3',
+    contributorVerified: true,
     status: 'approved',
     votes: 15,
     createdAt: '2025-01-10T12:00:00Z',
@@ -361,6 +363,7 @@ export const CONTRIBUTED_WORDS: ContributedWord[] = [
     example: 'Hi thilsiam a mawi',
     contributorName: 'ZomiArtist',
     contributorId: 'user5',
+    contributorVerified: false,
     status: 'pending',
     votes: 8,
     createdAt: '2025-01-11T09:30:00Z',

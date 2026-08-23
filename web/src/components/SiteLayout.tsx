@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
-import { Languages, Menu, X, Shield, LogOut, UserRound } from 'lucide-react';
+import { Languages, Menu, X, Shield, LogOut, UserRound, BadgeCheck } from 'lucide-react';
 
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/utils';
@@ -246,9 +246,11 @@ export function RoleBadge({ role, verified }: { role: string; verified: boolean 
         {role === 'user' ? 'Member' : role}
       </span>
       {verified && (
-        <span className="inline-flex items-center gap-1 rounded-full border border-[#1d9bf0]/40 bg-[#1d9bf0]/15 px-2 py-0.5 text-[11px] font-semibold text-[#63c0ff]">
-          <Shield className="h-3 w-3" />
-          Verified
+        <span
+          className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-[#1d9bf0]/40 bg-[#1d9bf0]/15"
+          title="Verified contributor"
+        >
+          <BadgeCheck className="h-3 w-3 text-[#63c0ff]" />
         </span>
       )}
     </span>

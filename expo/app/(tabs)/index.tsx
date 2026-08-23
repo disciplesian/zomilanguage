@@ -37,6 +37,7 @@ import {
   Mic2,
   Lightbulb,
   MessageCircle,
+  BadgeCheck,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
@@ -956,9 +957,17 @@ export default function TranslatorScreen() {
 
           <GlassCard variant="green" glow style={styles.outputCard}>
             <View style={styles.outputHeader}>
-              <Text style={styles.inputLabel}>
-                {isZomiToEnglish ? 'English' : 'Zomi'}
-              </Text>
+              <View style={styles.outputLabelRow}>
+                <Text style={styles.inputLabel}>
+                  {isZomiToEnglish ? 'English' : 'Zomi'}
+                </Text>
+                {!!outputText && !isTranslating && !stream.isStreaming && !outputText.startsWith('Translation') && !outputText.startsWith('Service') && !outputText.startsWith('Error:') && !outputText.startsWith('Invalid') && !outputText.startsWith('API') && !outputText.startsWith('Network') && !outputText.startsWith('Authentication') && !outputText.startsWith('Sign in') && !outputText.startsWith('Your session') && !outputText.startsWith('Request timed') && (
+                  <View style={styles.officialBadge}>
+                    <BadgeCheck size={12} color="#63C0FF" />
+                    <Text style={styles.officialBadgeText}>Official</Text>
+                  </View>
+                )}
+              </View>
               <View style={styles.outputActions}>
                 <TouchableOpacity onPress={handleFavorite} style={styles.actionButton}>
                   <Star 
@@ -1402,6 +1411,29 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 14,
+  },
+  outputLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  officialBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 20,
+    backgroundColor: 'rgba(29, 155, 240, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(29, 155, 240, 0.35)',
+  },
+  officialBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#63C0FF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   outputActions: {
     flexDirection: 'row',

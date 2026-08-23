@@ -135,10 +135,18 @@ struct AccountCard: View {
                     }
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(user.name ?? "Signed in")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(colors.text)
-                        .lineLimit(1)
+                    HStack(spacing: 5) {
+                        Text(user.name ?? "Signed in")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(colors.text)
+                            .lineLimit(1)
+                        if user.verified {
+                            Image(systemName: "checkmark.seal.fill")
+                                .font(.system(size: 12))
+                                .foregroundStyle(Color(red: 0.39, green: 0.75, blue: 1.0))
+                                .accessibilityLabel("Verified contributor")
+                        }
+                    }
                     Text(user.email.isEmpty ? "Account linked" : user.email)
                         .font(.system(size: 12))
                         .foregroundStyle(colors.textMuted)

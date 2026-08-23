@@ -8,6 +8,7 @@ import {
   AlertCircle,
   Sparkles,
   Volume2,
+  BadgeCheck,
 } from 'lucide-react';
 
 import { SiteLayout, GlassCard } from '@/components/SiteLayout';
@@ -201,8 +202,14 @@ const Translate = () => {
           {/* Output */}
           <GlassCard className="flex flex-col p-0">
             <div className="flex items-center justify-between border-b border-white/10 px-5 py-3">
-              <span className="text-xs font-semibold uppercase tracking-wider text-[#00f0ff]">
+              <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[#00f0ff]">
                 {targetLabel}
+                {output && !isTranslating && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-[#1d9bf0]/40 bg-[#1d9bf0]/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#63c0ff]">
+                    <BadgeCheck className="h-3 w-3" />
+                    Official
+                  </span>
+                )}
               </span>
               {confidence > 0 && (
                 <span className="rounded-full border border-[#00ff88]/30 bg-[#00ff88]/10 px-2 py-0.5 text-[11px] font-semibold text-[#7dffc0]">

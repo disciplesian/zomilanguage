@@ -40,6 +40,7 @@ import {
   Lightbulb,
   BookPlus,
   MessageSquare,
+  BadgeCheck,
 
   LogIn,
   Lock,
@@ -299,7 +300,9 @@ export default function LearnCommunityScreen() {
             <View style={styles.userRow}>
               <Text style={styles.userName}>{post.userName}</Text>
               {post.isVerified && (
-                <CheckCircle size={14} color={Colors.success} fill={Colors.success} />
+                <View style={styles.verifiedIconBadge}>
+                  <BadgeCheck size={13} color="#63C0FF" />
+                </View>
               )}
             </View>
             <Text style={styles.postDate}>{formatDate(post.createdAt)}</Text>
@@ -368,7 +371,14 @@ export default function LearnCommunityScreen() {
         )}
         
         <View style={styles.wordFooter}>
-          <Text style={styles.contributorText}>by {word.contributorName}</Text>
+          <View style={styles.contributorRow}>
+            <Text style={styles.contributorText}>by {word.contributorName}</Text>
+            {word.contributorVerified && (
+              <View style={styles.verifiedIconBadge}>
+                <BadgeCheck size={12} color="#63C0FF" />
+              </View>
+            )}
+          </View>
           <TouchableOpacity 
             style={[styles.voteBtn, isVoted && styles.voteBtnActive]}
             onPress={() => handleVoteWord(word.id)}
@@ -1388,6 +1398,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: Colors.text,
+  },
+  verifiedIconBadge: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: 'rgba(29, 155, 240, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(29, 155, 240, 0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  contributorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
   },
   postDate: {
     fontSize: 12,

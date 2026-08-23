@@ -91,21 +91,16 @@ fun RoleBadge(role: String, verified: Boolean, modifier: Modifier = Modifier) {
         )
         if (verified) {
             Spacer(Modifier.size(6.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
+            Icon(
+                Icons.Filled.Verified,
+                contentDescription = "Verified contributor",
+                tint = Color(0xFF63C0FF),
                 modifier = Modifier
-                    .background(PortalColors.Blue.copy(alpha = 0.16f), RoundedCornerShape(50))
-                    .padding(horizontal = 8.dp, vertical = 3.dp)
-            ) {
-                Icon(
-                    Icons.Filled.Verified,
-                    contentDescription = null,
-                    tint = Color(0xFF63C0FF),
-                    modifier = Modifier.size(11.dp)
-                )
-                Spacer(Modifier.size(3.dp))
-                Text("VERIFIED", color = Color(0xFF63C0FF), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-            }
+                    .size(18.dp)
+                    .background(PortalColors.Blue.copy(alpha = 0.16f), RoundedCornerShape(9.dp))
+                    .border(1.dp, PortalColors.Blue.copy(alpha = 0.35f), RoundedCornerShape(9.dp))
+                    .padding(2.5.dp)
+            )
         }
     }
 }

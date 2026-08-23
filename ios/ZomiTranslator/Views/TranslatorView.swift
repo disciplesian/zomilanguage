@@ -363,9 +363,30 @@ struct TranslatorView: View {
         GlassCard(variant: .green, glow: true, colors: colors, isDark: theme.isDark) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Text(viewModel.isZomiToEnglish ? "English" : "Zomi")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(colors.text)
+                    HStack(spacing: 8) {
+                        Text(viewModel.isZomiToEnglish ? "English" : "Zomi")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(colors.text)
+
+                        if !viewModel.outputText.isEmpty && !viewModel.isTranslating && !viewModel.isStreaming {
+                            HStack(spacing: 3) {
+                                Image(systemName: "checkmark.seal.fill")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(Color(red: 0.39, green: 0.75, blue: 1.0))
+                                Text("Official")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(Color(red: 0.39, green: 0.75, blue: 1.0))
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Color(red: 0.114, green: 0.608, blue: 0.941).opacity(0.15))
+                            .clipShape(.rect(cornerRadius: 20))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 20)
+                                    .stroke(Color(red: 0.114, green: 0.608, blue: 0.941).opacity(0.35), lineWidth: 1)
+                            }
+                        }
+                    }
                     Spacer()
                     HStack(spacing: 4) {
                         actionIcon(isFavorite ? "star.fill" : "star", tint: isFavorite ? colors.accent : nil) {

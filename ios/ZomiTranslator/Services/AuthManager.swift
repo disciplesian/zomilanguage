@@ -11,6 +11,7 @@ final class AuthManager {
         let email: String
         let name: String?
         let picture: String?
+        let verified: Bool
     }
 
     private(set) var user: User?
@@ -89,7 +90,7 @@ final class AuthManager {
 
         guard let payload = try? JSONDecoder().decode(JWTPayload.self, from: data) else { return nil }
         if let exp = payload.exp, Date(timeIntervalSince1970: exp) < Date() { return nil }
-        return User(id: payload.sub, email: payload.email ?? "", name: payload.name, picture: payload.picture)
+        return User(id: payload.sub, email: payload.email ?? "", name: payload.name, picture: payload.picture, verified: payload.verified ?? false)
     }
 
     /// Refresh token from UserDefaults (simulator-injected) first, then Keychain.
@@ -338,6 +339,7 @@ nonisolated private struct JWTPayload: Codable {
     let email: String?
     let name: String?
     let picture: String?
+    let verified: Bool?
     let exp: TimeInterval?
 }
 
