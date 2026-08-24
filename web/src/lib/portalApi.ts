@@ -68,6 +68,10 @@ async function fetchWithRetry(
       return res;
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
+      // Never retry an explicit abort — the caller already cancelled.
+      if (lastError.name === 'AbortError' || (init?.signal?.aborted ?? false)) {
+        throw lastError;
+      }
       if (attempt < retries) {
         await new Promise((r) => setTimeout(r, 800 * 2 ** attempt));
       }
@@ -405,7 +409,7 @@ export async function streamTranslation(
 ): Promise<TranslationResult> {
   let res: Response;
   try {
-    res = await fetch(`${API_BASE_URL}/api/translate/stream`, {
+    res = await fetchWithRetry(`${API_BASE_URL}/api/translate/stream`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
