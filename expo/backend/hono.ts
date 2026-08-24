@@ -100,17 +100,21 @@ function unescapeJsonText(s: string): string {
 /**
  * Extracts the human-readable translation from raw model output that may be
  * JSON ("translation": "...") possibly wrapped in code fences — or plain text.
- * Handles partially-streamed JSON so it works on every delta.
+ * Only returns text once the translation value is fully quoted, so partial
+ * JSON braces/quotes are never streamed to the user as words.
  */
-function extractDisplayText(raw: string): string {
+function extractDisplayText(raw: string): string | null {
   const s = stripFences(raw).trim();
   const complete = s.match(/"translation"\s*:\s*"((?:[^"\\]|\\.)*)"/s);
   if (complete) return unescapeJsonText(complete[1]);
-  const partial = s.match(/"translation"\s*:\s*"((?:[^"\\]|\\.)*)/s);
-  if (partial) return unescapeJsonText(partial[1]);
+  // If we can see the key but not the closing quote, the value is incomplete.
+  if (/"translation"\s*:\s*"?$/s.test(s) || /"translation"\s*:\s*"(?:[^"\\]|\\.)*$/s.test(s)) {
+    return null;
+  }
   // Not JSON output — plain text, minus any trailing incomplete JSON tail.
   const cut = s.search(/\s*[,}]?\s*"(confidence|model)"\s*:/);
-  return (cut === -1 ? s : s.slice(0, cut)).trim();
+  const trimmed = (cut === -1 ? s : s.slice(0, cut)).trim();
+  return trimmed || null;
 }
 
 /** Extracts a confidence value from JSON model output, if present. */
@@ -217,6 +221,7 @@ app.post("/translate/stream", async (c) => {
           async (piece) => {
             full += piece;
             const display = extractDisplayText(full);
+            if (display === null) return;
             const newPart = display.slice(emitted.length);
             if (newPart) {
               emitted = display;
