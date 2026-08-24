@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,6 +42,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -48,6 +50,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import com.rork.zomilanguageportal.data.DictionaryEntry
+import com.rork.zomilanguageportal.data.Suggestion
 import com.rork.zomilanguageportal.ui.components.GlassCard
 import com.rork.zomilanguageportal.ui.theme.PortalColors
 
@@ -166,6 +169,12 @@ fun DictionaryScreen(viewModel: DictionaryViewModel = viewModel()) {
             }
         }
 
+        if (state.query.trim().isNotEmpty() && state.suggestions.isNotEmpty()) {
+            item {
+                SuggestionPanel(state.suggestions) { viewModel.onQueryChange(it) }
+            }
+        }
+
         item {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -222,6 +231,61 @@ fun DictionaryScreen(viewModel: DictionaryViewModel = viewModel()) {
         }
 
         item { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
+/** Real-time search suggestions under the search bar; tapping one completes
+ *  the query and re-runs the verified dictionary search. */
+@Composable
+private fun SuggestionPanel(suggestions: List<Suggestion>, onPick: (String) -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp)
+            .background(PortalColors.GlassFill, RoundedCornerShape(14.dp))
+            .border(1.dp, PortalColors.GlassBorder, RoundedCornerShape(14.dp)),
+    ) {
+        suggestions.forEachIndexed { i, s ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onPick(s.text) }
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+            ) {
+                Icon(
+                    Icons.Filled.Search,
+                    contentDescription = null,
+                    tint = PortalColors.TextMuted,
+                    modifier = Modifier.size(14.dp),
+                )
+                Text(
+                    s.text,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = PortalColors.TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                Spacer(Modifier.weight(1f))
+                Text(
+                    s.hint,
+                    fontSize = 12.sp,
+                    color = Color(0xFF80F7FF),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+            }
+            if (i < suggestions.lastIndex) {
+                HorizontalDivider(
+                    color = PortalColors.GlassBorder,
+                    modifier = Modifier.padding(start = 36.dp),
+                )
+            }
+        }
     }
 }
 

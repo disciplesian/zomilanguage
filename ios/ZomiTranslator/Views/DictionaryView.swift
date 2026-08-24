@@ -19,6 +19,9 @@ struct DictionaryView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     header
                     searchField
+                    if !model.trimmedQuery.isEmpty && !model.suggestions.isEmpty {
+                        suggestionPanel
+                    }
                     directionToggle
 
                     if !model.trimmedQuery.isEmpty && !model.results.isEmpty {
@@ -124,6 +127,55 @@ struct DictionaryView: View {
             }
         }
         .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(colors.surface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .strokeBorder(colors.glassBorder)
+                )
+        )
+    }
+
+    // MARK: Real-time suggestions
+
+    private var suggestionPanel: some View {
+        VStack(spacing: 0) {
+            ForEach(model.suggestions) { suggestion in
+                Button {
+                    model.query = suggestion.text
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 13))
+                            .foregroundStyle(colors.textMuted)
+                        Text(suggestion.text)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(colors.text)
+                            .lineLimit(1)
+                        Spacer(minLength: 8)
+                        Text(suggestion.hint)
+                            .font(.system(size: 12))
+                            .foregroundStyle(colors.primaryLight)
+                            .lineLimit(1)
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 11))
+                            .foregroundStyle(colors.textMuted)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Search for \(suggestion.text)")
+
+                if suggestion.id != model.suggestions.last?.id {
+                    Divider()
+                        .overlay(colors.glassBorder)
+                        .padding(.leading, 34)
+                }
+            }
+        }
         .background(
             RoundedRectangle(cornerRadius: 14)
                 .fill(colors.surface)

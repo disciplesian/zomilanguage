@@ -27,6 +27,7 @@ import {
   loadCachedDictionary,
   posLabel,
   searchDictionary,
+  suggestTerms,
   type DictionaryEntry,
 } from '@/lib/dictionary';
 
@@ -58,6 +59,8 @@ export default function Dictionary() {
 
   const trimmed = query.trim();
   const results = useMemo(() => searchDictionary(query, 60), [query, datasetVersion]);
+  // Real-time completions for the search bar (works fully offline).
+  const suggestions = useMemo(() => suggestTerms(query, 8), [query, datasetVersion]);
   const needsAI = trimmed.length >= 2 && results.length === 0 && !hasExactMatch(trimmed);
 
   // Offline browsing: with no query, list entries alphabetically by letter.
@@ -187,24 +190,47 @@ export default function Dictionary() {
         </div>
 
         {/* Search */}
-        <div className="mt-6 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 backdrop-blur-md focus-within:border-[#00f0ff]/40">
-          <Search className="h-5 w-5 shrink-0 text-white/40" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search English or Zomi..."
-            className="w-full bg-transparent text-base text-white placeholder:text-white/35 focus:outline-none"
-            autoComplete="off"
-            spellCheck={false}
-          />
-          {query && (
-            <button
-              onClick={() => setQuery('')}
-              aria-label="Clear search"
-              className="shrink-0 rounded-full p-1 text-white/40 transition hover:bg-white/10 hover:text-white/70"
-            >
-              <X className="h-4 w-4" />
-            </button>
+        <div className="relative mt-6">
+          <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 backdrop-blur-md focus-within:border-[#00f0ff]/40">
+            <Search className="h-5 w-5 shrink-0 text-white/40" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search English or Zomi..."
+              className="w-full bg-transparent text-base text-white placeholder:text-white/35 focus:outline-none"
+              autoComplete="off"
+              spellCheck={false}
+            />
+            {query && (
+              <button
+                onClick={() => setQuery('')}
+                aria-label="Clear search"
+                className="shrink-0 rounded-full p-1 text-white/40 transition hover:bg-white/10 hover:text-white/70"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
+          {/* Real-time suggestions */}
+          {suggestions.length > 0 && (
+            <div className="absolute inset-x-0 top-full z-20 mt-2 overflow-hidden rounded-2xl border border-white/10 bg-[#1b2036]/95 shadow-2xl shadow-black/50 backdrop-blur-xl">
+              {suggestions.map((s) => (
+                <button
+                  key={`${s.lang}-${s.text}`}
+                  type="button"
+                  onClick={() => setQuery(s.text)}
+                  aria-label={`Search for ${s.text}`}
+                  className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left transition hover:bg-white/[0.06]"
+                >
+                  <Search className="h-3.5 w-3.5 shrink-0 text-white/30" />
+                  <span className="truncate text-sm font-semibold text-white">{s.text}</span>
+                  <span className="ml-auto max-w-[45%] truncate text-xs text-[#80f7ff]">
+                    {s.hint}
+                  </span>
+                </button>
+              ))}
+            </div>
           )}
         </div>
 

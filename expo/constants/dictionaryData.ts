@@ -160,6 +160,47 @@ export function hasExactMatch(query: string): boolean {
   );
 }
 
+export interface SearchSuggestion {
+  /** Full headword that completes the query. */
+  text: string;
+  /** The other language's translation, shown beside the headword. */
+  hint: string;
+  /** Language of the matched headword: 'en' or 'zo'. */
+  lang: 'en' | 'zo';
+}
+
+/**
+ * Real-time completions for the search bar, ranked: exact English → exact
+ * Zomi → English prefix → Zomi prefix → English contains → Zomi contains.
+ * Headwords equal to the typed query are skipped so every suggestion
+ * advances the query toward a full word.
+ */
+export function suggestTerms(query: string, limit = 8): SearchSuggestion[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const best = new Map<string, { s: SearchSuggestion; score: number; index: number }>();
+  for (let i = 0; i < activeEntries.length; i++) {
+    const e = activeEntries[i];
+    const en = e.english.toLowerCase();
+    const zo = e.zomi.toLowerCase();
+    const candidates: [string, string, 'en' | 'zo', number][] = [
+      [e.english, e.zomi, 'en', en === q ? 0 : en.startsWith(q) ? 2 : en.includes(q) ? 4 : -1],
+      [e.zomi, e.english, 'zo', zo === q ? 1 : zo.startsWith(q) ? 3 : zo.includes(q) ? 5 : -1],
+    ];
+    for (const [text, hint, lang, score] of candidates) {
+      if (score < 0 || text.toLowerCase() === q) continue;
+      const key = text.toLowerCase();
+      const prev = best.get(key);
+      if (prev && prev.score <= score) continue;
+      best.set(key, { s: { text, hint, lang }, score, index: i });
+    }
+  }
+  return Array.from(best.values())
+    .sort((a, b) => a.score - b.score || a.index - b.index)
+    .slice(0, limit)
+    .map((m) => m.s);
+}
+
 export interface BrowseSection {
   letter: string;
   entries: DictionaryEntry[];

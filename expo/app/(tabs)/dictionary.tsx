@@ -31,6 +31,7 @@ import {
   CATEGORY_COLORS,
   categoryLabel,
   searchDictionary,
+  suggestTerms,
   hasExactMatch,
   browseLetters,
   entriesForLetter,
@@ -63,6 +64,8 @@ export default function DictionaryScreen() {
 
   // Instant local search over the verified dataset.
   const results = useMemo(() => searchDictionary(query, 60), [query, datasetVersion]);
+  // Real-time completions for the search bar (works fully offline).
+  const suggestions = useMemo(() => suggestTerms(query, 8), [query, datasetVersion]);
   const hasMatches = results.length > 0;
   const needsAi = query.trim().length >= 2 && !hasMatches && !hasExactMatch(query);
 
@@ -240,6 +243,31 @@ export default function DictionaryScreen() {
               ) : null}
             </GlassCard>
 
+            {suggestions.length > 0 && (
+              <View style={styles.suggestionCard}>
+                {suggestions.map((s) => (
+                  <TouchableOpacity
+                    key={`${s.lang}-${s.text}`}
+                    style={styles.suggestionItem}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      setQuery(s.text);
+                      Haptics.selectionAsync();
+                    }}
+                  >
+                    <Search size={15} color={Colors.textMuted} />
+                    <Text style={styles.suggestionText} numberOfLines={1}>
+                      {s.text}
+                    </Text>
+                    <Text style={styles.suggestionHint} numberOfLines={1}>
+                      {s.hint}
+                    </Text>
+                    <ArrowRight size={14} color={Colors.textMuted} />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
             <View style={styles.directionRow}>
               {(['en-zo', 'zo-en'] as const).map((dir) => (
                 <TouchableOpacity
@@ -406,6 +434,35 @@ const styles = StyleSheet.create({
     color: Colors.text,
     paddingVertical: 8,
   },
+  suggestionCard: {
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.glassBorder,
+    borderRadius: 14,
+    paddingVertical: 4,
+    marginBottom: 12,
+  },
+  suggestionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  suggestionText: {
+    flexShrink: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  suggestionHint: {
+    flexShrink: 1,
+    marginLeft: 'auto',
+    paddingLeft: 12,
+    fontSize: 12,
+    color: Colors.primaryLight,
+    textAlign: 'right',
+  },
   directionRow: {
     flexDirection: 'row',
     gap: 10,
@@ -530,44 +587,6 @@ const styles = StyleSheet.create({
   },
   copyIcon: {
     padding: 8,
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 40,
-    gap: 8,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: Colors.text,
-    marginTop: 12,
-  },
-  emptySubtitle: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 19,
-    maxWidth: 280,
-  },
-  suggestionRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    justifyContent: 'center',
-    marginTop: 16,
-  },
-  suggestionChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.glassBorder,
-  },
-  suggestionText: {
-    fontSize: 13,
-    color: Colors.primary,
-    fontWeight: '600',
   },
   aiCard: {
     backgroundColor: Colors.surface,

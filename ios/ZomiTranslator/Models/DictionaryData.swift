@@ -95,6 +95,52 @@ nonisolated enum DictionaryData {
         }
     }
 
+    /// One real-time completion for the search bar.
+    nonisolated struct Suggestion: Identifiable, Hashable {
+        /// Full headword that completes the query.
+        let text: String
+        /// The other language's translation, shown beside the headword.
+        let hint: String
+        /// Language of the matched headword: "en" or "zo".
+        let lang: String
+
+        var id: String { "\(lang)|\(text)" }
+    }
+
+    /// Real-time completions for the search bar, ranked: exact English →
+    /// exact Zomi → English prefix → Zomi prefix → English contains →
+    /// Zomi contains. Headwords equal to the typed query are skipped so every
+    /// suggestion advances the query toward a full word.
+    static func suggest(_ query: String, limit: Int = 8) -> [Suggestion] {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !q.isEmpty else { return [] }
+        struct Scored {
+            let suggestion: Suggestion
+            let score: Int
+            let index: Int
+        }
+        var best: [String: Scored] = [:]
+        for (i, e) in load().enumerated() {
+            let en = e.english.lowercased()
+            let zo = e.zomi.lowercased()
+            let enScore = en == q ? 0 : en.hasPrefix(q) ? 2 : en.contains(q) ? 4 : -1
+            let zoScore = zo == q ? 1 : zo.hasPrefix(q) ? 3 : zo.contains(q) ? 5 : -1
+            let candidates: [(Suggestion, Int)] = [
+                (Suggestion(text: e.english, hint: e.zomi, lang: "en"), enScore),
+                (Suggestion(text: e.zomi, hint: e.english, lang: "zo"), zoScore),
+            ]
+            for (candidate, score) in candidates where score >= 0 && candidate.text.lowercased() != q {
+                let key = candidate.text.lowercased()
+                if let prev = best[key], prev.score <= score { continue }
+                best[key] = Scored(suggestion: candidate, score: score, index: i)
+            }
+        }
+        return best.values
+            .sorted { $0.score != $1.score ? $0.score < $1.score : $0.index < $1.index }
+            .prefix(limit)
+            .map(\.suggestion)
+    }
+
     // MARK: Offline browsing (A–Z index)
 
     struct BrowseSection {

@@ -45,6 +45,16 @@ data class BrowseSection(
     val entries: List<DictionaryEntry>,
 )
 
+/** One real-time completion for the search bar. */
+data class Suggestion(
+    /** Full headword that completes the query. */
+    val text: String,
+    /** The other language's translation, shown beside the headword. */
+    val hint: String,
+    /** Language of the matched headword: "en" or "zo". */
+    val lang: String,
+)
+
 /** Loads and searches the bundled dictionary asset (dictionary.json), and
  *  applies newer datasets published on the server over the air. */
 object DictionaryRepository {
@@ -166,6 +176,53 @@ object DictionaryRepository {
         val q = query.trim().lowercase()
         if (q.isEmpty()) return true
         return all.any { it.english.lowercase() == q || it.zomi.lowercase() == q }
+    }
+
+    /**
+     * Real-time completions for the search bar, ranked: exact English →
+     * exact Zomi → English prefix → Zomi prefix → English contains →
+     * Zomi contains. Headwords equal to the typed query are skipped so every
+     * suggestion advances the query toward a full word.
+     */
+    fun suggest(query: String, limit: Int = 8): List<Suggestion> {
+        val all = entries ?: return emptyList()
+        val q = query.trim().lowercase()
+        if (q.isEmpty()) return emptyList()
+
+        data class Scored(val suggestion: Suggestion, val score: Int, val index: Int)
+
+        val best = HashMap<String, Scored>()
+        for ((i, e) in all.withIndex()) {
+            val en = e.english.lowercase()
+            val zo = e.zomi.lowercase()
+            val enScore = when {
+                en == q -> 0
+                en.startsWith(q) -> 2
+                en.contains(q) -> 4
+                else -> -1
+            }
+            val zoScore = when {
+                zo == q -> 1
+                zo.startsWith(q) -> 3
+                zo.contains(q) -> 5
+                else -> -1
+            }
+            listOf(
+                Suggestion(e.english, e.zomi, "en") to enScore,
+                Suggestion(e.zomi, e.english, "zo") to zoScore,
+            ).forEach { (candidate, score) ->
+                if (score < 0 || candidate.text.lowercase() == q) return@forEach
+                val key = candidate.text.lowercase()
+                val prev = best[key]
+                if (prev == null || prev.score > score) {
+                    best[key] = Scored(candidate, score, i)
+                }
+            }
+        }
+        return best.values
+            .sortedWith(compareBy({ it.score }, { it.index }))
+            .take(limit)
+            .map { it.suggestion }
     }
 
     // MARK: Offline browsing (A–Z index)

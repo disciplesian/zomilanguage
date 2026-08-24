@@ -16,6 +16,8 @@ final class DictionaryViewModel {
     var selectedLetter = "A"
 
     private(set) var results: [DictionaryEntry] = []
+    /** Real-time completions for the search bar (offline, from the verified dataset). */
+    private(set) var suggestions: [DictionaryData.Suggestion] = []
     private(set) var entriesLoaded = false
     private(set) var totalCount = 0
 
@@ -78,6 +80,7 @@ final class DictionaryViewModel {
 
     private func refreshResults() {
         results = DictionaryData.search(trimmedQuery, limit: 60)
+        suggestions = DictionaryData.suggest(trimmedQuery)
     }
 
     private func refreshBrowse() {

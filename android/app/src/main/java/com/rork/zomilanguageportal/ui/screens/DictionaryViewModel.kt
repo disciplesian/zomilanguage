@@ -8,6 +8,7 @@ import com.rork.zomilanguageportal.data.DictionaryEntry
 import com.rork.zomilanguageportal.data.DictionaryRepository
 import com.rork.zomilanguageportal.data.PortalApi
 import com.rork.zomilanguageportal.data.SessionExpiredException
+import com.rork.zomilanguageportal.data.Suggestion
 import com.rork.zomilanguageportal.data.WordLimitException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -25,6 +26,8 @@ data class DictionaryUiState(
     /** AI fallback direction: true = English → Zomi, false = Zomi → English. */
     val englishToZomi: Boolean = true,
     val results: List<DictionaryEntry> = emptyList(),
+    /** Real-time completions for the search bar (offline, from the verified dataset). */
+    val suggestions: List<Suggestion> = emptyList(),
     val totalCount: Int = 0,
     /** Query has no verified match — the AI answers these. */
     val needsAI: Boolean = false,
@@ -117,12 +120,15 @@ class DictionaryViewModel(application: Application) : AndroidViewModel(applicati
             val results = withContext(Dispatchers.Default) {
                 DictionaryRepository.search(value)
             }
+            val suggestions = withContext(Dispatchers.Default) {
+                DictionaryRepository.suggest(value)
+            }
             if (_uiState.value.query != value) return@launch
             val trimmed = value.trim()
             val needsAI = withContext(Dispatchers.Default) {
                 trimmed.length >= 2 && results.isEmpty() && !DictionaryRepository.hasExactMatch(trimmed)
             }
-            _uiState.update { it.copy(results = results, needsAI = needsAI) }
+            _uiState.update { it.copy(results = results, suggestions = suggestions, needsAI = needsAI) }
             if (needsAI) scheduleAI(trimmed)
         }
     }
