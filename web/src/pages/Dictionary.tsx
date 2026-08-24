@@ -14,13 +14,17 @@ import {
 import { SiteLayout, GlassCard } from '@/components/SiteLayout';
 import { useAuth } from '@/lib/auth';
 import { getAnonymousId } from '@/lib/anonymousId';
-import { streamTranslation, WORD_LIMIT_ERROR } from '@/lib/portalApi';
+import { streamTranslation, WORD_LIMIT_ERROR, fetchLatestDictionary } from '@/lib/portalApi';
 import {
   CATEGORY_COLORS,
-  DICTIONARY_COUNT,
+  activeDictionaryCount,
+  activeDictionaryVersion,
+  applyRemoteDataset,
   browseLetters,
+  cacheDictionary,
   entriesForLetter,
   hasExactMatch,
+  loadCachedDictionary,
   posLabel,
   searchDictionary,
   type DictionaryEntry,
@@ -43,6 +47,9 @@ export default function Dictionary() {
   const [aiError, setAiError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [selectedLetter, setSelectedLetter] = useState<string>('A');
+  /** Bumped when an over-the-air dataset update is applied, so the search and
+   *  browse memos recompute against the refreshed dictionary. */
+  const [datasetVersion, setDatasetVersion] = useState<number>(() => activeDictionaryVersion());
 
   const { user, getAccessToken } = useAuth();
   const abortRef = useRef<AbortController | null>(null);
@@ -50,16 +57,34 @@ export default function Dictionary() {
   queryRef.current = query;
 
   const trimmed = query.trim();
-  const results = useMemo(() => searchDictionary(query, 60), [query]);
+  const results = useMemo(() => searchDictionary(query, 60), [query, datasetVersion]);
   const needsAI = trimmed.length >= 2 && results.length === 0 && !hasExactMatch(trimmed);
 
   // Offline browsing: with no query, list entries alphabetically by letter.
   const isBrowsing = trimmed.length === 0;
-  const letters = useMemo(() => browseLetters(), []);
+  const letters = useMemo(() => browseLetters(), [datasetVersion]);
   const browseData = useMemo(
     () => (isBrowsing ? entriesForLetter(selectedLetter) : []),
-    [isBrowsing, selectedLetter]
+    [isBrowsing, selectedLetter, datasetVersion]
   );
+
+  // Over-the-air dataset update: apply the cached copy first (works offline),
+  // then check /api/dictionary/latest for a newer published version.
+  useEffect(() => {
+    loadCachedDictionary();
+    setDatasetVersion(activeDictionaryVersion());
+    let cancelled = false;
+    void fetchLatestDictionary().then((latest) => {
+      if (cancelled || !latest) return;
+      if (applyRemoteDataset(latest.version, latest.entries)) {
+        cacheDictionary();
+        setDatasetVersion(activeDictionaryVersion());
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Debounced AI fallback when the word is not in the verified dictionary.
   useEffect(() => {
@@ -153,7 +178,7 @@ export default function Dictionary() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-white">Zomi Dictionary</h1>
             <p className="text-sm text-white/60">
-              {DICTIONARY_COUNT.toLocaleString()} verified entries · English ⇄ Zomi
+              {activeDictionaryCount().toLocaleString()} verified entries · English ⇄ Zomi
             </p>
           </div>
           <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-[#ffb84d]/35 bg-[#ffb84d]/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-[#ffb84d]">

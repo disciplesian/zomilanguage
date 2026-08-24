@@ -27,7 +27,7 @@ import GlassCard from '@/components/GlassCard';
 import TypingDots from '@/components/TypingDots';
 import Colors from '@/constants/colors';
 import {
-  DICTIONARY_COUNT,
+  activeDictionaryCount,
   CATEGORY_COLORS,
   categoryLabel,
   searchDictionary,
@@ -36,6 +36,7 @@ import {
   entriesForLetter,
   type DictionaryEntry,
 } from '@/constants/dictionaryData';
+import { checkDictionaryUpdate } from '@/lib/dictionaryUpdate';
 import { useStreamingTranslation } from '@/hooks/useStreamingTranslation';
 import { useAuth } from '@/contexts/AuthContext';
 import { getAnonymousId } from '@/lib/anonymousId';
@@ -51,6 +52,9 @@ export default function DictionaryScreen() {
   const [aiError, setAiError] = useState<string | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [selectedLetter, setSelectedLetter] = useState('A');
+  /** Bumped when an over-the-air dataset update is applied, so the search and
+   *  browse memos recompute against the refreshed dictionary. */
+  const [datasetVersion, setDatasetVersion] = useState(0);
 
   const stream = useStreamingTranslation();
   const { getAccessToken } = useAuth();
@@ -58,17 +62,29 @@ export default function DictionaryScreen() {
   queryRef.current = query;
 
   // Instant local search over the verified dataset.
-  const results = useMemo(() => searchDictionary(query, 60), [query]);
+  const results = useMemo(() => searchDictionary(query, 60), [query, datasetVersion]);
   const hasMatches = results.length > 0;
   const needsAi = query.trim().length >= 2 && !hasMatches && !hasExactMatch(query);
 
   // Offline browsing: with no query, list entries alphabetically by letter.
   const isBrowsing = query.trim().length === 0;
-  const letters = useMemo(() => browseLetters(), []);
+  const letters = useMemo(() => browseLetters(), [datasetVersion]);
   const browseData = useMemo(
     () => (isBrowsing ? entriesForLetter(selectedLetter) : []),
-    [isBrowsing, selectedLetter]
+    [isBrowsing, selectedLetter, datasetVersion]
   );
+
+  // Over-the-air dataset update: cached copy first (offline-safe), then a
+  // fresh check of /api/dictionary/latest for a newer published version.
+  useEffect(() => {
+    let cancelled = false;
+    void checkDictionaryUpdate().then((version) => {
+      if (!cancelled) setDatasetVersion(version);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Debounced AI fallback when the word is not in the verified dictionary.
   useEffect(() => {
@@ -191,7 +207,7 @@ export default function DictionaryScreen() {
               <View>
                 <Text style={styles.headerTitle}>Dictionary</Text>
                 <Text style={styles.headerSubtitle}>
-                  {DICTIONARY_COUNT.toLocaleString()} verified entries · English ⇄ Zomi
+                  {activeDictionaryCount().toLocaleString()} verified entries · English ⇄ Zomi
                 </Text>
               </View>
               <View style={styles.offlineBadge}>

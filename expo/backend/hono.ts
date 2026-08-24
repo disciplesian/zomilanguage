@@ -882,6 +882,7 @@ app.post("/admin/dictionary/import", async (c) => {
       note,
       totalRows: entries.length,
       status: "completed",
+      kind: "upload",
       createdBy: guard.auth.email,
       createdAt: now,
     });
@@ -919,6 +920,251 @@ app.post("/admin/dictionary/export", async (c) => {
   return c.json({ success: true });
 });
 
+function entryKey(row: string[]): string {
+  return `${row[0].toLowerCase()}|${row[1].toLowerCase()}|${row[2].toLowerCase()}`;
+}
+
+/** Validates one [english, pos, zomi, category] row or returns an error code. */
+function validateEntryRow(row: unknown): { ok: true; entry: string[] } | { ok: false; code: string } {
+  if (!Array.isArray(row) || row.length < 3) return { ok: false, code: "invalid_row_format" };
+  const clean = row.map((cell: unknown) => (typeof cell === "string" ? cell : ""));
+  const english = clean[0].trim();
+  const pos = (clean[1] ?? "").trim();
+  const zomi = clean[2].trim();
+  const category = clean.length >= 4 && clean[3].trim() ? clean[3].trim() : "other";
+  if (!english || !zomi) return { ok: false, code: "invalid_row_content" };
+  if ([english, pos, zomi, category].some((v) => v.length > MAX_DICTIONARY_CELL)) {
+    return { ok: false, code: "row_too_long" };
+  }
+  return { ok: true, entry: [english, pos, zomi, category] };
+}
+
+/** Loads the published dataset payload as a parsed entries array. */
+async function loadPublishedDataset(
+  db: Surreal
+): Promise<{ version: number; entries: string[][] } | null> {
+  const res = await db.query<[{ version?: number; payload?: string }[]]>(
+    "SELECT version, payload FROM dictionary_dataset:latest"
+  );
+  const row = res[0]?.[0];
+  if (!row || typeof row.payload !== "string") return null;
+  let parsed: { entries?: unknown };
+  try {
+    parsed = JSON.parse(row.payload);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(parsed.entries)) return null;
+  const entries = parsed.entries.map((row: unknown) =>
+    Array.isArray(row) ? row.map((cell: unknown) => (typeof cell === "string" ? cell : "")) : []
+  );
+  return { version: Number(row.version ?? 0), entries };
+}
+
+/** Persists a mutated dataset as the next version, records it in the version
+ *  history and the audit trail. kind: "upload" | "edit" | "add" | "delete". */
+async function saveDatasetVersion(
+  db: Surreal,
+  auth: AuthInfo,
+  entries: string[][],
+  kind: string,
+  note: string,
+  fileName: string
+): Promise<number> {
+  const prevRes = await db.query<[{ version?: number }[]]>(
+    "SELECT version FROM dictionary_dataset:latest"
+  );
+  const version = Number(prevRes[0]?.[0]?.version ?? 0) + 1;
+  const now = new Date().toISOString();
+  const payload = JSON.stringify({ version: 1, count: entries.length, entries });
+  await db.update("dictionary_dataset:latest", {
+    version,
+    count: entries.length,
+    payload,
+    updatedAt: now,
+    updatedBy: auth.email,
+    note,
+    fileName,
+  });
+  await db.create("dictionary_imports", {
+    version,
+    fileName,
+    note,
+    totalRows: entries.length,
+    status: "completed",
+    kind,
+    createdBy: auth.email,
+    createdAt: now,
+  });
+  await writeAuditEvent(db, auth, `dictionary.${kind}`, {
+    version,
+    count: entries.length,
+    fileName,
+    note,
+  });
+  return version;
+}
+
+/** Admin: full published dataset entries (source of truth for entry editing). */
+app.get("/admin/dictionary/entries", async (c) => {
+  const guard = await requireAdmin(c);
+  if (!guard.ok) return guard.response;
+  try {
+    const dataset = await loadPublishedDataset(guard.db);
+    if (!dataset) return c.json({ available: false });
+    return c.json({
+      available: true,
+      version: dataset.version,
+      count: dataset.entries.length,
+      entries: dataset.entries,
+    });
+  } catch (err) {
+    console.error("[admin] dictionary entries failed", err);
+    return c.json({ error: "dictionary_entries_failed" }, 500);
+  }
+});
+
+/** Admin: version history — every upload and entry mutation, newest first. */
+app.get("/admin/dictionary/history", async (c) => {
+  const guard = await requireAdmin(c);
+  if (!guard.ok) return guard.response;
+  try {
+    const res = await guard.db.query<[Record<string, unknown>[]]>(
+      "SELECT version, kind, fileName, note, totalRows, createdBy, createdAt FROM dictionary_imports ORDER BY createdAt DESC LIMIT 100"
+    );
+    const versions = (res[0] ?? []).map((r) => ({
+      version: Number(r.version ?? 0),
+      kind: String(r.kind ?? "upload"),
+      fileName: (r.fileName as string | null) || "",
+      note: (r.note as string | null) || "",
+      totalRows: Number(r.totalRows ?? 0),
+      createdBy: String(r.createdBy ?? ""),
+      createdAt: String(r.createdAt ?? ""),
+    }));
+    return c.json({ versions });
+  } catch (err) {
+    console.error("[admin] dictionary history failed", err);
+    return c.json({ error: "dictionary_history_failed" }, 500);
+  }
+});
+
+/** Admin: add one entry to the published dataset.
+ *  Body: { entry: [english, pos, zomi, category] }. */
+app.post("/admin/dictionary/entry", async (c) => {
+  const guard = await requireAdmin(c);
+  if (!guard.ok) return guard.response;
+  let body: { entry?: unknown } = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_json" }, 400);
+  }
+  const validated = validateEntryRow(body.entry);
+  if (!validated.ok) return c.json({ error: validated.code }, 400);
+
+  try {
+    const dataset = await loadPublishedDataset(guard.db);
+    if (!dataset) return c.json({ error: "dataset_not_published" }, 409);
+    if (dataset.entries.some((row) => entryKey(row) === entryKey(validated.entry))) {
+      return c.json({ error: "duplicate_entry" }, 409);
+    }
+    dataset.entries.push(validated.entry);
+    const version = await saveDatasetVersion(
+      guard.db,
+      guard.auth,
+      dataset.entries,
+      "add",
+      `Added "${validated.entry[0]}"`,
+      ""
+    );
+    return c.json({ success: true, version, count: dataset.entries.length });
+  } catch (err) {
+    console.error("[admin] dictionary entry add failed", err);
+    return c.json({ error: "entry_add_failed" }, 500);
+  }
+});
+
+/** Admin: edit one entry in the published dataset.
+ *  Body: { original: [english, pos, zomi], entry: [english, pos, zomi, category] }. */
+app.put("/admin/dictionary/entry", async (c) => {
+  const guard = await requireAdmin(c);
+  if (!guard.ok) return guard.response;
+  let body: { original?: unknown; entry?: unknown } = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_json" }, 400);
+  }
+  const validated = validateEntryRow(body.entry);
+  if (!validated.ok) return c.json({ error: validated.code }, 400);
+  if (!Array.isArray(body.original) || body.original.length < 3) {
+    return c.json({ error: "invalid_row_format" }, 400);
+  }
+  const originalKey = entryKey(body.original.map((v) => String(v ?? "")));
+
+  try {
+    const dataset = await loadPublishedDataset(guard.db);
+    if (!dataset) return c.json({ error: "dataset_not_published" }, 409);
+    const index = dataset.entries.findIndex((row) => entryKey(row) === originalKey);
+    if (index < 0) return c.json({ error: "entry_not_found" }, 404);
+    if (dataset.entries.some((row, i) => i !== index && entryKey(row) === entryKey(validated.entry))) {
+      return c.json({ error: "duplicate_entry" }, 409);
+    }
+    dataset.entries[index] = validated.entry;
+    const version = await saveDatasetVersion(
+      guard.db,
+      guard.auth,
+      dataset.entries,
+      "edit",
+      `Edited "${validated.entry[0]}"`,
+      ""
+    );
+    return c.json({ success: true, version, count: dataset.entries.length });
+  } catch (err) {
+    console.error("[admin] dictionary entry edit failed", err);
+    return c.json({ error: "entry_edit_failed" }, 500);
+  }
+});
+
+/** Admin: delete one entry from the published dataset.
+ *  Body: { original: [english, pos, zomi] }. */
+app.delete("/admin/dictionary/entry", async (c) => {
+  const guard = await requireAdmin(c);
+  if (!guard.ok) return guard.response;
+  let body: { original?: unknown } = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_json" }, 400);
+  }
+  if (!Array.isArray(body.original) || body.original.length < 3) {
+    return c.json({ error: "invalid_row_format" }, 400);
+  }
+  const originalKey = entryKey(body.original.map((v) => String(v ?? "")));
+
+  try {
+    const dataset = await loadPublishedDataset(guard.db);
+    if (!dataset) return c.json({ error: "dataset_not_published" }, 409);
+    const index = dataset.entries.findIndex((row) => entryKey(row) === originalKey);
+    if (index < 0) return c.json({ error: "entry_not_found" }, 404);
+    if (dataset.entries.length <= 1) return c.json({ error: "last_entry" }, 409);
+    const removed = dataset.entries[index];
+    dataset.entries.splice(index, 1);
+    const version = await saveDatasetVersion(
+      guard.db,
+      guard.auth,
+      dataset.entries,
+      "delete",
+      `Deleted "${removed[0]}"`,
+      ""
+    );
+    return c.json({ success: true, version, count: dataset.entries.length });
+  } catch (err) {
+    console.error("[admin] dictionary entry delete failed", err);
+    return c.json({ error: "entry_delete_failed" }, 500);
+  }
+});
+
 /** Admin: central audit log — recent admin actions across the portal. */
 app.get("/admin/audit-log", async (c) => {
   const guard = await requireAdmin(c);
@@ -943,7 +1189,8 @@ app.get("/admin/audit-log", async (c) => {
 });
 
 /** Public: latest published dictionary dataset, so app builds can pick up
- *  updates published from the admin dashboard without re-importing by hand. */
+ *  updates published from the admin dashboard without re-importing by hand.
+ *  Also used by the apps at startup to refresh their local dictionary cache. */
 app.get("/dictionary/latest", async (c) => {
   try {
     const db = await getDB();

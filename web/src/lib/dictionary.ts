@@ -41,6 +41,70 @@ export const DICTIONARY_ENTRIES: DictionaryEntry[] = data.entries.map(
 
 export const DICTIONARY_COUNT: number = data.count;
 
+/** The dataset actually used for search at runtime: starts as the bundled
+ *  entries and is replaced when a newer version arrives from
+ *  /api/dictionary/latest (over-the-air dictionary updates). */
+let activeEntries: DictionaryEntry[] = DICTIONARY_ENTRIES;
+let activeVersion: number = data.version;
+
+export function activeDictionaryCount(): number {
+  return activeEntries.length;
+}
+
+export function activeDictionaryVersion(): number {
+  return activeVersion;
+}
+
+/** Replaces the active dataset when the remote version is newer than the
+ *  current one. Returns true when the dataset was applied. */
+export function applyRemoteDataset(version: number, entries: unknown): boolean {
+  if (!Array.isArray(entries) || entries.length === 0 || version <= activeVersion) return false;
+  const mapped: DictionaryEntry[] = [];
+  for (const row of entries) {
+    if (!Array.isArray(row) || row.length < 3) continue;
+    mapped.push({
+      english: String(row[0]),
+      pos: String(row[1] ?? ''),
+      zomi: String(row[2]),
+      category: (typeof row[3] === 'string' ? row[3] : 'other') as DictionaryCategory,
+    });
+  }
+  if (mapped.length === 0) return false;
+  activeEntries = mapped;
+  activeVersion = version;
+  browseCache = null;
+  return true;
+}
+
+const CACHE_KEY = 'zomi-dictionary-dataset-v1';
+
+/** Applies the dataset cached by a previous update check (works offline). */
+export function loadCachedDictionary(): boolean {
+  try {
+    const raw = window.localStorage.getItem(CACHE_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw) as { version?: number; entries?: unknown };
+    return applyRemoteDataset(Number(parsed.version ?? 0), parsed.entries);
+  } catch {
+    return false;
+  }
+}
+
+/** Persists the active dataset so the next visit starts up-to-date offline. */
+export function cacheDictionary(): void {
+  try {
+    window.localStorage.setItem(
+      CACHE_KEY,
+      JSON.stringify({
+        version: activeVersion,
+        entries: activeEntries.map((e) => [e.english, e.pos, e.zomi, e.category]),
+      })
+    );
+  } catch {
+    // Storage quota exceeded — the in-memory dataset still works.
+  }
+}
+
 /** Chip color per category, tuned for the dark portal theme. */
 export const CATEGORY_COLORS: Record<DictionaryCategory, string> = {
   noun: '#63C0FF',
@@ -71,8 +135,8 @@ export function searchDictionary(query: string, limit = 60): DictionaryEntry[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];
   const scored: { entry: DictionaryEntry; score: number; index: number }[] = [];
-  for (let i = 0; i < DICTIONARY_ENTRIES.length; i++) {
-    const e = DICTIONARY_ENTRIES[i];
+  for (let i = 0; i < activeEntries.length; i++) {
+    const e = activeEntries[i];
     const en = e.english.toLowerCase();
     const zo = e.zomi.toLowerCase();
     let score = -1;
@@ -92,7 +156,7 @@ export function searchDictionary(query: string, limit = 60): DictionaryEntry[] {
 export function hasExactMatch(query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
-  return DICTIONARY_ENTRIES.some(
+  return activeEntries.some(
     (e) => e.english.toLowerCase() === q || e.zomi.toLowerCase() === q
   );
 }
@@ -111,7 +175,7 @@ let browseCache: BrowseSection[] | null = null;
 export function browseSections(): BrowseSection[] {
   if (browseCache) return browseCache;
   const buckets = new Map<string, DictionaryEntry[]>();
-  for (const e of DICTIONARY_ENTRIES) {
+  for (const e of activeEntries) {
     const first = e.english.trim().toLowerCase();
     const letter = first && /[a-z]/.test(first[0]) ? first[0].toUpperCase() : '#';
     const bucket = buckets.get(letter);

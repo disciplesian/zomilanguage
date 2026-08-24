@@ -23,6 +23,28 @@ nonisolated enum DictionaryData {
     nonisolated(unsafe) private static var cached: [DictionaryEntry]?
     private static let lock = NSLock()
 
+    /// Version of the dataset currently in use (the bundled asset is version 1).
+    nonisolated(unsafe) private static var activeVersionValue: Int = 1
+
+    static func activeVersion() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return activeVersionValue
+    }
+
+    /// Replaces the search index with a newer dataset published on the server
+    /// (/api/dictionary/latest). Returns true when the dataset was applied.
+    @discardableResult
+    static func applyRemote(_ entries: [DictionaryEntry], version: Int) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !entries.isEmpty, version > activeVersionValue else { return false }
+        activeVersionValue = version
+        cached = entries
+        browseCache = nil
+        return true
+    }
+
     static func load() -> [DictionaryEntry] {
         lock.lock()
         defer { lock.unlock() }

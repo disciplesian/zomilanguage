@@ -67,6 +67,25 @@ class DictionaryViewModel(application: Application) : AndroidViewModel(applicati
                     isBrowsing = true,
                 )
             }
+
+            // Over-the-air dataset update: cached copy first (offline-safe),
+            // then a fresh check of /api/dictionary/latest.
+            DictionaryRepository.refreshFromServer(application)
+            if (_uiState.value.totalCount != DictionaryRepository.load(application).size) {
+                val updatedLetters = withContext(Dispatchers.Default) {
+                    DictionaryRepository.browseLetters()
+                }
+                val updatedBrowse = withContext(Dispatchers.Default) {
+                    DictionaryRepository.entriesForLetter(_uiState.value.selectedLetter)
+                }
+                _uiState.update {
+                    it.copy(
+                        totalCount = DictionaryRepository.load(application).size,
+                        browseLetters = updatedLetters,
+                        browseEntries = updatedBrowse,
+                    )
+                }
+            }
         }
     }
 

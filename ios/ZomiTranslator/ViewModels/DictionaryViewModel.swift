@@ -52,6 +52,14 @@ final class DictionaryViewModel {
             self?.browseLetters = DictionaryData.browseLetters()
             self?.refreshBrowse()
             self?.refreshResults()
+
+            // Over-the-air dataset update: cached copy first (offline-safe),
+            // then a fresh check of /api/dictionary/latest.
+            await DictionaryUpdateService.shared.refreshIfNeeded()
+            self?.totalCount = DictionaryData.load().count
+            self?.browseLetters = DictionaryData.browseLetters()
+            self?.refreshBrowse()
+            self?.refreshResults()
         }
     }
 

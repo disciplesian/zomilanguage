@@ -209,6 +209,102 @@ export async function fetchAuditLog(token: string): Promise<AuditEvent[]> {
   return Array.isArray(body.events) ? (body.events as AuditEvent[]) : [];
 }
 
+export interface DictionaryVersion {
+  version: number;
+  kind: string;
+  fileName: string;
+  note: string;
+  totalRows: number;
+  createdBy: string;
+  createdAt: string;
+}
+
+/** Admin: version history — every upload and entry mutation, newest first. */
+export async function fetchDictionaryHistory(token: string): Promise<DictionaryVersion[]> {
+  const body = await portalFetch('/api/admin/dictionary/history', token);
+  return Array.isArray(body.versions) ? (body.versions as DictionaryVersion[]) : [];
+}
+
+export interface PublishedDictionary {
+  available: boolean;
+  version: number;
+  count: number;
+  entries: string[][];
+}
+
+/** Admin: the full published dataset (source of truth for entry editing). */
+export async function fetchAdminDictionaryEntries(token: string): Promise<PublishedDictionary> {
+  const body = await portalFetch('/api/admin/dictionary/entries', token);
+  if (body.available !== true) {
+    return { available: false, version: 0, count: 0, entries: [] };
+  }
+  return {
+    available: true,
+    version: Number(body.version ?? 0),
+    count: Number(body.count ?? 0),
+    entries: Array.isArray(body.entries) ? (body.entries as string[][]) : [],
+  };
+}
+
+/** Admin: add one entry to the published dataset. */
+export async function addDictionaryEntry(token: string, entry: string[]): Promise<void> {
+  await portalFetch('/api/admin/dictionary/entry', token, {
+    method: 'POST',
+    body: JSON.stringify({ entry }),
+  });
+}
+
+/** Admin: edit one entry (original identifies the row to replace). */
+export async function editDictionaryEntry(
+  token: string,
+  original: string[],
+  entry: string[]
+): Promise<void> {
+  await portalFetch('/api/admin/dictionary/entry', token, {
+    method: 'PUT',
+    body: JSON.stringify({ original, entry }),
+  });
+}
+
+/** Admin: delete one entry from the published dataset. */
+export async function deleteDictionaryEntry(token: string, original: string[]): Promise<void> {
+  await portalFetch('/api/admin/dictionary/entry', token, {
+    method: 'DELETE',
+    body: JSON.stringify({ original }),
+  });
+}
+
+export interface LatestDictionary {
+  version: number;
+  count: number;
+  entries: unknown;
+}
+
+/** Public: the latest published dictionary dataset (no auth). Used by the
+ *  Dictionary page at startup to refresh the local dataset over the air. */
+export async function fetchLatestDictionary(): Promise<LatestDictionary | null> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/dictionary/latest`);
+    if (!res.ok) return null;
+    const body = (await res.json()) as {
+      available?: boolean;
+      version?: number;
+      count?: number;
+      payload?: string;
+    };
+    if (body.available !== true || typeof body.payload !== 'string') return null;
+    const parsed = JSON.parse(body.payload) as { entries?: unknown };
+    if (!Array.isArray(parsed.entries) || parsed.entries.length === 0) return null;
+    return {
+      version: Number(body.version ?? 0),
+      count: Number(body.count ?? 0),
+      entries: parsed.entries,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export interface TranslationResult {
   text: string;
   model: string | null;
