@@ -58,6 +58,9 @@ import com.rork.zomilanguageportal.data.Suggestion
 import com.rork.zomilanguageportal.ui.components.GlassCard
 import com.rork.zomilanguageportal.ui.theme.PortalColors
 
+/** Entries shown per letter in browse mode before the user expands the list. */
+private const val BROWSE_PREVIEW_COUNT = 4
+
 /** Chip color per part-of-speech category, tuned for the dark portal theme. */
 private fun categoryColor(category: String): Color = when (category) {
     "noun" -> Color(0xFF63C0FF)
@@ -227,11 +230,39 @@ fun DictionaryScreen(viewModel: DictionaryViewModel = viewModel()) {
                     modifier = Modifier.padding(bottom = 8.dp),
                 )
             }
+            val visibleEntries =
+                if (state.browseExpanded) state.browseEntries else state.browseEntries.take(BROWSE_PREVIEW_COUNT)
             items(
-                state.browseEntries.size,
-                key = { i -> "$i|${state.browseEntries[i].english}|${state.browseEntries[i].zomi}" },
+                visibleEntries.size,
+                key = { i -> "$i|${visibleEntries[i].english}|${visibleEntries[i].zomi}" },
             ) { i ->
-                EntryRow(state.browseEntries[i]) { viewModel.openDetail(it) }
+                EntryRow(visibleEntries[i]) { viewModel.openDetail(it) }
+            }
+            if (state.browseEntries.size > BROWSE_PREVIEW_COUNT) {
+                item {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            if (state.browseExpanded) {
+                                "Show fewer entries"
+                            } else {
+                                "Show all ${"%,d".format(state.browseEntries.size)} entries"
+                            },
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = PortalColors.Cyan,
+                            modifier = Modifier
+                                .background(PortalColors.GlassFill, RoundedCornerShape(20.dp))
+                                .border(1.dp, PortalColors.GlassBorder, RoundedCornerShape(20.dp))
+                                .clickable { viewModel.onToggleBrowse() }
+                                .padding(horizontal = 18.dp, vertical = 10.dp),
+                        )
+                    }
+                }
             }
         } else {
             items(state.results.size, key = { i -> "${state.results[i].english}|${state.results[i].pos}|${state.results[i].zomi}" }) { i ->

@@ -44,6 +44,9 @@ type Direction = 'en-zo' | 'zo-en';
 
 const AI_DEBOUNCE_MS = 700;
 
+/** Entries shown per letter in browse mode before the user expands the list. */
+const BROWSE_PREVIEW_COUNT = 4;
+
 const OFFLINE_MESSAGE =
   'You appear to be offline. The verified dictionary still works — reconnect for AI answers.';
 
@@ -57,6 +60,9 @@ export default function Dictionary() {
   const [aiError, setAiError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [selectedLetter, setSelectedLetter] = useState<string>('A');
+  /** Whether the browse list shows every entry for the selected letter.
+   *  Collapsed by default so the page shows a clean 4-entry preview. */
+  const [browseExpanded, setBrowseExpanded] = useState<boolean>(false);
   /** Bumped when an over-the-air dataset update is applied, so the search and
    *  browse memos recompute against the refreshed dictionary. */
   const [datasetVersion, setDatasetVersion] = useState<number>(() => activeDictionaryVersion());
@@ -83,9 +89,13 @@ export default function Dictionary() {
   // Offline browsing: with no query, list entries alphabetically by letter.
   const isBrowsing = trimmed.length === 0;
   const letters = useMemo(() => browseLetters(), [datasetVersion]);
-  const browseData = useMemo(
+  const fullBrowseData = useMemo(
     () => (isBrowsing ? entriesForLetter(selectedLetter) : []),
     [isBrowsing, selectedLetter, datasetVersion]
+  );
+  const browseData = useMemo(
+    () => (browseExpanded ? fullBrowseData : fullBrowseData.slice(0, BROWSE_PREVIEW_COUNT)),
+    [fullBrowseData, browseExpanded]
   );
 
   // Over-the-air dataset update: apply the cached copy first (works offline),
@@ -351,7 +361,10 @@ export default function Dictionary() {
               {letters.map((letter) => (
                 <button
                   key={letter}
-                  onClick={() => setSelectedLetter(letter)}
+                  onClick={() => {
+                    setSelectedLetter(letter);
+                    setBrowseExpanded(false);
+                  }}
                   aria-label={`Browse entries under ${letter}`}
                   className={`h-9 w-9 shrink-0 rounded-xl border text-sm font-bold transition ${
                     selectedLetter === letter
@@ -364,8 +377,9 @@ export default function Dictionary() {
               ))}
             </div>
             <p className="mt-3 text-xs text-white/40">
-              {browseData.length.toLocaleString()} {browseData.length === 1 ? 'entry' : 'entries'}{' '}
-              under &ldquo;{selectedLetter}&rdquo;
+              {fullBrowseData.length.toLocaleString()}{' '}
+              {fullBrowseData.length === 1 ? 'entry' : 'entries'} under
+              &ldquo;{selectedLetter}&rdquo;
             </p>
           </div>
         )}
@@ -391,6 +405,19 @@ export default function Dictionary() {
               />
             ))}
           </div>
+        )}
+
+        {/* Browse expansion toggle — the page stays light with a 4-entry preview */}
+        {isBrowsing && fullBrowseData.length > BROWSE_PREVIEW_COUNT && (
+          <button
+            type="button"
+            onClick={() => setBrowseExpanded((v) => !v)}
+            className="mx-auto mt-4 block rounded-full border border-white/10 bg-white/5 px-5 py-2 text-[13px] font-semibold text-[#80f7ff] transition hover:border-[#00f0ff]/30 hover:text-white"
+          >
+            {browseExpanded
+              ? 'Show fewer entries'
+              : `Show all ${fullBrowseData.length.toLocaleString()} entries`}
+          </button>
         )}
 
         {/* AI fallback */}

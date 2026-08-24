@@ -50,6 +50,8 @@ import { getAnonymousId } from '@/lib/anonymousId';
 type Direction = 'en-zo' | 'zo-en';
 
 const AI_DEBOUNCE_MS = 700;
+/** Entries shown per letter in browse mode before the user expands the list. */
+const BROWSE_PREVIEW_COUNT = 4;
 
 export default function DictionaryScreen() {
   const [query, setQuery] = useState('');
@@ -58,6 +60,9 @@ export default function DictionaryScreen() {
   const [aiError, setAiError] = useState<string | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [selectedLetter, setSelectedLetter] = useState('A');
+  /** Whether the browse list shows every entry for the selected letter.
+   *  Collapsed by default so the page shows a clean 4-entry preview. */
+  const [browseExpanded, setBrowseExpanded] = useState(false);
   /** Bumped when an over-the-air dataset update is applied, so the search and
    *  browse memos recompute against the refreshed dictionary. */
   const [datasetVersion, setDatasetVersion] = useState(0);
@@ -85,9 +90,13 @@ export default function DictionaryScreen() {
   // Offline browsing: with no query, list entries alphabetically by letter.
   const isBrowsing = query.trim().length === 0;
   const letters = useMemo(() => browseLetters(), [datasetVersion]);
-  const browseData = useMemo(
+  const fullBrowseData = useMemo(
     () => (isBrowsing ? entriesForLetter(selectedLetter) : []),
     [isBrowsing, selectedLetter, datasetVersion]
+  );
+  const browseData = useMemo(
+    () => (browseExpanded ? fullBrowseData : fullBrowseData.slice(0, BROWSE_PREVIEW_COUNT)),
+    [fullBrowseData, browseExpanded]
   );
 
   /** Immediate OTA dictionary update check. Used at startup and on pull-to-refresh. */
@@ -386,6 +395,7 @@ export default function DictionaryScreen() {
                       ]}
                       onPress={() => {
                         setSelectedLetter(letter);
+                        setBrowseExpanded(false);
                         Haptics.selectionAsync();
                       }}
                     >
@@ -401,8 +411,8 @@ export default function DictionaryScreen() {
                   ))}
                 </ScrollView>
                 <Text style={styles.resultCount}>
-                  {browseData.length.toLocaleString()} {browseData.length === 1 ? 'entry' : 'entries'}{' '}
-                  under “{selectedLetter}”
+                  {fullBrowseData.length.toLocaleString()}{' '}
+                  {fullBrowseData.length === 1 ? 'entry' : 'entries'} under “{selectedLetter}”
                 </Text>
               </View>
             )}
@@ -449,7 +459,27 @@ export default function DictionaryScreen() {
             </View>
           ) : null
         }
-        ListFooterComponent={<View style={{ height: 24 }} />}
+        ListFooterComponent={
+          <>
+            {isBrowsing && fullBrowseData.length > BROWSE_PREVIEW_COUNT && (
+              <TouchableOpacity
+                style={styles.showAllButton}
+                activeOpacity={0.7}
+                onPress={() => {
+                  setBrowseExpanded(!browseExpanded);
+                  Haptics.selectionAsync();
+                }}
+              >
+                <Text style={styles.showAllText}>
+                  {browseExpanded
+                    ? 'Show fewer entries'
+                    : `Show all ${fullBrowseData.length.toLocaleString()} entries`}
+                </Text>
+              </TouchableOpacity>
+            )}
+            <View style={{ height: 24 }} />
+          </>
+        }
       />
 
       {/* Expanded entry detail: definition, grammatical category, AI example
@@ -907,6 +937,21 @@ const styles = StyleSheet.create({
   },
   copyIcon: {
     padding: 8,
+  },
+  showAllButton: {
+    alignSelf: 'center',
+    marginTop: 4,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.glassBorder,
+  },
+  showAllText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.primaryLight,
   },
   aiCard: {
     backgroundColor: Colors.surface,

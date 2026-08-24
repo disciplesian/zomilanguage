@@ -39,6 +39,9 @@ data class DictionaryUiState(
     val selectedLetter: String = "A",
     val browseLetters: List<String> = emptyList(),
     val browseEntries: List<DictionaryEntry> = emptyList(),
+    /** Whether the browse list shows every entry for the selected letter.
+     *  Collapsed by default so the page shows a clean 4-entry preview. */
+    val browseExpanded: Boolean = false,
     /** No query typed — show the A–Z index instead of search results. */
     val isBrowsing: Boolean = true,
     // Expanded entry detail view
@@ -105,7 +108,7 @@ class DictionaryViewModel(application: Application) : AndroidViewModel(applicati
 
     /** Selects a browse letter (offline A–Z index). */
     fun onLetterSelect(letter: String) {
-        _uiState.update { it.copy(selectedLetter = letter) }
+        _uiState.update { it.copy(selectedLetter = letter, browseExpanded = false) }
         viewModelScope.launch {
             val browse = withContext(Dispatchers.Default) {
                 DictionaryRepository.entriesForLetter(letter)
@@ -114,6 +117,11 @@ class DictionaryViewModel(application: Application) : AndroidViewModel(applicati
                 _uiState.update { it.copy(browseEntries = browse) }
             }
         }
+    }
+
+    /** Expands/collapses the browse list for the selected letter. */
+    fun onToggleBrowse() {
+        _uiState.update { it.copy(browseExpanded = !it.browseExpanded) }
     }
 
     fun onQueryChange(value: String) {

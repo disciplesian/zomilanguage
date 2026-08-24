@@ -15,6 +15,10 @@ final class DictionaryViewModel {
     /// Selected A–Z browse letter (offline browsing mode).
     var selectedLetter = "A"
 
+    /// Whether the browse list shows every entry for the selected letter.
+    /// Collapsed by default so the page shows a clean 4-entry preview.
+    var browseExpanded = false
+
     private(set) var results: [DictionaryEntry] = []
     /** Real-time completions for the search bar (offline, from the verified dataset). */
     private(set) var suggestions: [DictionaryData.Suggestion] = []
@@ -178,6 +182,7 @@ final class DictionaryViewModel {
 
     func selectLetter(_ letter: String) {
         selectedLetter = letter
+        browseExpanded = false
         refreshBrowse()
     }
 

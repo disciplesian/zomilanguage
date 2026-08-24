@@ -12,6 +12,9 @@ struct DictionaryView: View {
 
     private var colors: ThemeColors { theme.colors }
 
+    /// Entries shown per letter in browse mode before the user expands the list.
+    private let browsePreviewCount = 4
+
     var body: some View {
         ZStack {
             AppBackground(colors: colors, isDark: theme.isDark)
@@ -38,8 +41,11 @@ struct DictionaryView: View {
                             .font(.system(size: 12))
                             .foregroundStyle(colors.textMuted)
                             .padding(.bottom, 2)
-                        ForEach(model.browseEntries) { entry in
+                        ForEach(model.browseExpanded ? model.browseEntries : Array(model.browseEntries.prefix(browsePreviewCount))) { entry in
                             entryRow(entry)
+                        }
+                        if model.browseEntries.count > browsePreviewCount {
+                            browseToggle
                         }
                     } else {
                         ForEach(model.results) { entry in
@@ -226,6 +232,34 @@ struct DictionaryView: View {
     }
 
     // MARK: Offline A–Z browse index
+
+    /// Expands/collapses the browse list for the selected letter. The page
+    /// opens with a clean 4-entry preview instead of hundreds of rows.
+    private var browseToggle: some View {
+        Button {
+            Haptics.selection()
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                model.browseExpanded.toggle()
+            }
+        } label: {
+            Text(
+                model.browseExpanded
+                    ? "Show fewer entries"
+                    : "Show all \(model.browseEntries.count.formatted()) entries"
+            )
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(colors.primaryLight)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 10)
+            .background(colors.surface)
+            .clipShape(Capsule())
+            .overlay {
+                Capsule().strokeBorder(colors.glassBorder, lineWidth: 1)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 2)
+    }
 
     private var letterIndex: some View {
         ScrollView(.horizontal, showsIndicators: false) {
