@@ -395,6 +395,91 @@ app.post("/sync/pull", async (c) => {
   }
 });
 
+/** Public share links: a completed translation can be posted and viewed by
+ * anyone with the link (e.g. https://zomi.me/t/<shareId>). */
+const SHARE_ID_ALPHABET = "abcdefghijkmnopqrstuvwxyz23456789";
+
+function generateShareId(length = 10): string {
+  let id = "";
+  for (let i = 0; i < length; i++) {
+    id += SHARE_ID_ALPHABET[Math.floor(Math.random() * SHARE_ID_ALPHABET.length)];
+  }
+  return id;
+}
+
+/** Creates a public share link for a completed translation. No account needed. */
+app.post("/share", async (c) => {
+  let body: {
+    sourceText?: string;
+    translatedText?: string;
+    sourceLanguage?: string;
+    targetLanguage?: string;
+    confidence?: number;
+    model?: string;
+  } = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_json" }, 400);
+  }
+
+  const lang = (v: unknown): "zomi" | "english" =>
+    v === "zomi" || v === "english" ? v : "english";
+  const sourceText = sanitizeString(body.sourceText, 5000).trim();
+  const translatedText = sanitizeString(body.translatedText, 5000).trim();
+  if (!sourceText || !translatedText) {
+    return c.json({ error: "missing_text" }, 400);
+  }
+
+  const shareId = generateShareId();
+  try {
+    const db = await getDB();
+    await db.create("shared_translations", {
+      shareId,
+      sourceText,
+      translatedText,
+      sourceLanguage: lang(body.sourceLanguage),
+      targetLanguage: lang(body.targetLanguage),
+      confidence:
+        typeof body.confidence === "number" ? Math.round(body.confidence) : 0,
+      model: sanitizeString(body.model, 64) || null,
+      createdAt: new Date().toISOString(),
+    });
+    return c.json({ shareId });
+  } catch (err) {
+    console.error("[share] create failed", err);
+    return c.json({ error: "share_failed" }, 500);
+  }
+});
+
+/** Public read of a shared translation by its share id. */
+app.get("/share/:id", async (c) => {
+  const shareId = (c.req.param("id") ?? "").trim().slice(0, 64);
+  if (!shareId) return c.json({ error: "missing_id" }, 400);
+  try {
+    const db = await getDB();
+    const result = await db.query<[Record<string, unknown>[]]>(
+      "SELECT * FROM shared_translations WHERE shareId = $shareId LIMIT 1",
+      { shareId }
+    );
+    const row = result[0]?.[0];
+    if (!row) return c.json({ error: "not_found" }, 404);
+    return c.json({
+      shareId: String(row.shareId ?? shareId),
+      sourceText: String(row.sourceText ?? ""),
+      translatedText: String(row.translatedText ?? ""),
+      sourceLanguage: row.sourceLanguage === "zomi" ? "zomi" : "english",
+      targetLanguage: row.targetLanguage === "zomi" ? "zomi" : "english",
+      confidence: Number(row.confidence ?? 0),
+      model: (row.model as string | null) ?? null,
+      createdAt: String(row.createdAt ?? ""),
+    });
+  } catch (err) {
+    console.error("[share] read failed", err);
+    return c.json({ error: "share_failed" }, 500);
+  }
+});
+
 /** Delete the signed-in user's account and all associated data (App Store 5.1.1(v)). */
 app.delete("/portal/me", async (c) => {
   const auth = await authFromRequest(c.req.header("authorization"));

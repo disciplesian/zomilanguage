@@ -60,6 +60,7 @@ import { useGlossary } from '@/contexts/GlossaryContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { getAnonymousId } from '@/lib/anonymousId';
 import { exportTranslation, ExportFormat, TranslationData } from '@/lib/exportUtils';
+import { createShareLink } from '@/lib/share';
 
 export default function TranslatorScreen() {
   const [inputText, setInputText] = useState('');
@@ -74,6 +75,7 @@ export default function TranslatorScreen() {
 
   const [showExportOptions, setShowExportOptions] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isCreatingShareLink, setIsCreatingShareLink] = useState(false);
   
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -508,7 +510,33 @@ export default function TranslatorScreen() {
       return;
     }
 
-    const message = `${isZomiToEnglish ? 'Zomi' : 'English'}: ${inputText}\n\n${isZomiToEnglish ? 'English' : 'Zomi'}: ${outputText}\n\nTranslated with Zomi Translator`;
+    // Generate a unique public link for this translation (zomi.me/t/<id>);
+    // fall back to sharing plain text if the backend is unreachable.
+    setIsCreatingShareLink(true);
+    let shareUrl: string | null = null;
+    try {
+      shareUrl = await createShareLink({
+        sourceText: inputText,
+        translatedText: outputText,
+        sourceLanguage: isZomiToEnglish ? 'zomi' : 'english',
+        targetLanguage: isZomiToEnglish ? 'english' : 'zomi',
+        confidence: translationQuality,
+        model: null,
+      });
+    } finally {
+      setIsCreatingShareLink(false);
+    }
+
+    const message = [
+      `${isZomiToEnglish ? 'Zomi' : 'English'}: ${inputText}`,
+      ``,
+      `${isZomiToEnglish ? 'English' : 'Zomi'}: ${outputText}`,
+      ``,
+      shareUrl ? `View this translation: ${shareUrl}` : '',
+      `Translated with Zomi Translator`,
+    ]
+      .filter(Boolean)
+      .join('\n');
       
     if (Platform.OS === 'web') {
       // Try Web Share API first (works on mobile browsers and some desktop browsers)
@@ -517,6 +545,7 @@ export default function TranslatorScreen() {
           await navigator.share({
             title: 'Zomi Translation',
             text: message,
+            url: shareUrl ?? undefined,
           });
           return;
         } catch (shareError: any) {
@@ -549,6 +578,7 @@ export default function TranslatorScreen() {
         const result = await Share.share({
           message,
           title: 'Zomi Translation',
+          ...(shareUrl ? { url: shareUrl } : {}),
         });
         if (result.action === Share.sharedAction) {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -565,7 +595,7 @@ export default function TranslatorScreen() {
         }
       }
     }
-  }, [inputText, outputText, isZomiToEnglish]);
+  }, [inputText, outputText, isZomiToEnglish, translationQuality]);
 
   const handleExport = useCallback(async (format: ExportFormat) => {
     if (!outputText || outputText.startsWith('Translation') || outputText.startsWith('Service')) {
@@ -974,8 +1004,12 @@ export default function TranslatorScreen() {
                     fill={isFavorite ? Colors.accent : 'transparent'}
                   />
                 </TouchableOpacity>
-                <TouchableOpacity onPress={handleShare} style={styles.actionButton}>
-                  <ShareIcon size={18} color={Colors.textSecondary} />
+                <TouchableOpacity onPress={handleShare} style={styles.actionButton} disabled={isCreatingShareLink}>
+                  {isCreatingShareLink ? (
+                    <ActivityIndicator size="small" color={Colors.accent} />
+                  ) : (
+                    <ShareIcon size={18} color={Colors.textSecondary} />
+                  )}
                 </TouchableOpacity>
                 <TouchableOpacity 
                   onPress={() => setShowExportOptions(!showExportOptions)} 

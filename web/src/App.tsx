@@ -12,6 +12,7 @@ import Admin from "./pages/Admin";
 import Support from "./pages/Support";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
+import SharedTranslation from "./pages/SharedTranslation";
 import PrivacyChoices from "./pages/PrivacyChoices";
 import NotFound from "./pages/NotFound";
 
@@ -36,6 +37,7 @@ const App = () => (
             <Route path="/privacy" element={<Privacy />} />
             <Route path="/terms" element={<Terms />} />
             <Route path="/privacy-choices" element={<PrivacyChoices />} />
+            <Route path="/t/:id" element={<SharedTranslation />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
