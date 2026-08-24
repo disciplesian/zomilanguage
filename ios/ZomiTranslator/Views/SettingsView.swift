@@ -160,7 +160,7 @@ struct SettingsView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .padding(.horizontal, 20)
-                .padding(.bottom, 24)
+                .padding(.bottom, 90)
             }
         }
         .confirmationDialog("Reset App Data", isPresented: $showResetConfirm, titleVisibility: .visible) {

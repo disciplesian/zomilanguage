@@ -19,7 +19,7 @@ private struct InfoPageScaffold<Content: View>: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
-                .padding(.bottom, 24)
+                .padding(.bottom, 90)
             }
             .scrollDismissesKeyboard(.interactively)
         }

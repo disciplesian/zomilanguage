@@ -58,7 +58,7 @@ struct HistoryView: View {
                     }
                 }
                 .padding(.horizontal, 20)
-                .padding(.bottom, 24)
+                .padding(.bottom, 90)
             }
             .scrollDismissesKeyboard(.interactively)
         }
