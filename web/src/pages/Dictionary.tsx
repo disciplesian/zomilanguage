@@ -5,6 +5,7 @@ import {
   Check,
   Copy,
   Loader2,
+  RefreshCw,
   Search,
   Sparkles,
   WifiOff,
@@ -62,6 +63,7 @@ export default function Dictionary() {
 
   // Expanded entry detail view.
   const [detail, setDetail] = useState<DictionaryEntry | null>(null);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
   const [detailExamples, setDetailExamples] = useState<EntryExample[]>([]);
   const [examplesPhase, setExamplesPhase] = useState<'loading' | 'ready' | 'error'>('loading');
   /** Example sentences cached per English headword for this session. */
@@ -92,17 +94,29 @@ export default function Dictionary() {
     loadCachedDictionary();
     setDatasetVersion(activeDictionaryVersion());
     let cancelled = false;
-    void fetchLatestDictionary().then((latest) => {
-      if (cancelled || !latest) return;
-      if (applyRemoteDataset(latest.version, latest.entries)) {
-        cacheDictionary();
-        setDatasetVersion(activeDictionaryVersion());
-      }
+    void refreshDictionary(false).then(() => {
+      if (cancelled) return;
     });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  /** Immediate OTA dictionary update check. Used at startup and via pull/refresh. */
+  async function refreshDictionary(showSpinner = true): Promise<void> {
+    if (showSpinner) setRefreshing(true);
+    try {
+      const latest = await fetchLatestDictionary();
+      if (latest && applyRemoteDataset(latest.version, latest.entries)) {
+        cacheDictionary();
+        setDatasetVersion(activeDictionaryVersion());
+      }
+    } catch {
+      // Offline or backend unreachable — the bundled/cached dictionary still works.
+    } finally {
+      if (showSpinner) setRefreshing(false);
+    }
+  }
 
   // Debounced AI fallback when the word is not in the verified dictionary.
   useEffect(() => {
@@ -248,6 +262,19 @@ export default function Dictionary() {
           <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-[#ffb84d]/35 bg-[#ffb84d]/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-[#ffb84d]">
             <WifiOff className="h-3 w-3" /> Offline ready
           </span>
+          <button
+            type="button"
+            disabled={refreshing}
+            onClick={() => void refreshDictionary()}
+            aria-label="Check for dictionary updates"
+            className="ml-2 inline-flex items-center rounded-full border border-white/15 bg-white/5 p-2 text-white/70 transition-colors hover:border-white/30 hover:text-white disabled:opacity-50"
+          >
+            {refreshing ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+          </button>
         </div>
 
         {/* Search */}

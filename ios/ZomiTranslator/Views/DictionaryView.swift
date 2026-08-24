@@ -56,6 +56,9 @@ struct DictionaryView: View {
                 .padding(.bottom, 24)
             }
             .scrollDismissesKeyboard(.interactively)
+        .refreshable {
+            await model.refreshDictionary()
+        }
         }
         .navigationTitle("Dictionary")
         .navigationBarTitleDisplayMode(.inline)

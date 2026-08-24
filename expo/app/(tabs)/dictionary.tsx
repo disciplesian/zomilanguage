@@ -9,6 +9,7 @@ import {
   Platform,
   ScrollView,
   Modal,
+  RefreshControl,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -63,6 +64,7 @@ export default function DictionaryScreen() {
 
   // Expanded entry detail view.
   const [detail, setDetail] = useState<DictionaryEntry | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [detailExamples, setDetailExamples] = useState<EntryExample[]>([]);
   const [examplesPhase, setExamplesPhase] = useState<'loading' | 'ready' | 'error'>('loading');
   /** Example sentences cached per English headword for this session. */
@@ -88,17 +90,30 @@ export default function DictionaryScreen() {
     [isBrowsing, selectedLetter, datasetVersion]
   );
 
+  /** Immediate OTA dictionary update check. Used at startup and on pull-to-refresh. */
+  const refreshDictionary = useCallback(async (): Promise<void> => {
+    setRefreshing(true);
+    try {
+      const version = await checkDictionaryUpdate();
+      setDatasetVersion(version);
+    } catch {
+      // Offline or backend unreachable — the bundled/cached dictionary still works.
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
+
   // Over-the-air dataset update: cached copy first (offline-safe), then a
   // fresh check of /api/dictionary/latest for a newer published version.
   useEffect(() => {
     let cancelled = false;
-    void checkDictionaryUpdate().then((version) => {
-      if (!cancelled) setDatasetVersion(version);
+    void refreshDictionary().then(() => {
+      if (cancelled) return;
     });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshDictionary]);
 
   // Debounced AI fallback when the word is not in the verified dictionary.
   useEffect(() => {
@@ -265,6 +280,15 @@ export default function DictionaryScreen() {
         data={isBrowsing ? browseData : results}
         keyExtractor={(item, i) => `${item.english}-${item.pos}-${i}`}
         renderItem={renderEntry}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={refreshDictionary}
+            tintColor={Colors.primary}
+            colors={[Colors.primary]}
+            progressBackgroundColor={Colors.surface}
+          />
+        }
         ListHeaderComponent={
           <View style={styles.header}>
             <View style={styles.headerTop}>

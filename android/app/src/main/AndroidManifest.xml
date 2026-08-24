@@ -7,7 +7,7 @@
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
-        android:label="Zomi Language Portal"
+        android:label="Zomi AI Translator"
         android:supportsRtl="true"
         android:theme="@style/Theme.RorkApp">
         <activity

@@ -43,6 +43,8 @@ final class DictionaryViewModel {
         set { UserDefaults.standard.set(newValue, forKey: "dictionary_ai_consent_given") }
     }
 
+    var isRefreshing = false
+
     var trimmedQuery: String {
         query.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -65,12 +67,21 @@ final class DictionaryViewModel {
 
             // Over-the-air dataset update: cached copy first (offline-safe),
             // then a fresh check of /api/dictionary/latest.
-            await DictionaryUpdateService.shared.refreshIfNeeded()
-            self?.totalCount = DictionaryData.load().count
-            self?.browseLetters = DictionaryData.browseLetters()
-            self?.refreshBrowse()
-            self?.refreshResults()
+            await self?.refreshDictionary()
         }
+    }
+
+    /// Immediate OTA dictionary update check. Used at startup and on pull-to-refresh.
+    @MainActor
+    func refreshDictionary() async {
+        isRefreshing = true
+        await DictionaryUpdateService.shared.refreshIfNeeded()
+        let all = DictionaryData.load()
+        totalCount = all.count
+        browseLetters = DictionaryData.browseLetters()
+        refreshBrowse()
+        refreshResults()
+        isRefreshing = false
     }
 
     private func queryChanged() {

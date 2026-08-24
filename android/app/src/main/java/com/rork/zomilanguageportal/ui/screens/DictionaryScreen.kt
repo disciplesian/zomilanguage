@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -103,6 +104,15 @@ fun DictionaryScreen(viewModel: DictionaryViewModel = viewModel()) {
                         color = PortalColors.TextPrimary,
                     )
                     Spacer(Modifier.weight(1f))
+                    Icon(
+                        imageVector = Icons.Filled.Refresh,
+                        contentDescription = "Check for dictionary updates",
+                        tint = if (state.isRefreshing) PortalColors.Cyan else PortalColors.TextMuted,
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clickable(enabled = !state.isRefreshing) { viewModel.refreshDictionary() },
+                    )
+                    Spacer(Modifier.width(8.dp))
                     Text(
                         "Offline ready",
                         fontSize = 10.sp,

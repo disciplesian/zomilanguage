@@ -145,6 +145,7 @@ export default function DictionaryManager({ token }: { token: () => Promise<stri
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [editorError, setEditorError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<EditorState | null>(null);
 
   const invalidateAll = (): void => {
     for (const key of ['admin-dictionary-entries', 'admin-dictionary', 'admin-audit-log', 'admin-dictionary-history']) {
@@ -218,6 +219,7 @@ export default function DictionaryManager({ token }: { token: () => Promise<stri
     mutationFn: async (original: string[]) => deleteDictionaryEntry(await token(), original),
     onSuccess: () => {
       setEditor(null);
+      setConfirmDelete(null);
       setEditorError(null);
       invalidateAll();
     },
@@ -894,7 +896,7 @@ export default function DictionaryManager({ token }: { token: () => Promise<stri
                 <button
                   type="button"
                   disabled={deleteEntryMutation.isPending}
-                  onClick={() => deleteEntryMutation.mutate(editor.original)}
+                  onClick={() => setConfirmDelete(editor)}
                   className="inline-flex items-center gap-1.5 rounded-xl border border-[#ff5e5e]/40 px-3.5 py-2 text-xs font-semibold text-[#ff8a8a] transition-colors hover:bg-[#ff5e5e]/10 disabled:opacity-50"
                 >
                   {deleteEntryMutation.isPending ? (
@@ -929,6 +931,42 @@ export default function DictionaryManager({ token }: { token: () => Promise<stri
                   {editor.mode === 'add' ? 'Add entry' : 'Save changes'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-white/15 bg-[#1c2035] p-6 shadow-2xl">
+            <h3 className="text-lg font-semibold text-white">Delete dictionary entry?</h3>
+            <p className="mt-2 text-sm text-white/70">
+              This will permanently remove the entry for{' '}
+              <span className="font-semibold text-white">“{confirmDelete.english}”</span>{' '}
+              ({confirmDelete.zomi}). This cannot be undone.
+            </p>
+            <div className="mt-5 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                disabled={deleteEntryMutation.isPending}
+                onClick={() => setConfirmDelete(null)}
+                className="rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold text-white/70 transition-colors hover:border-white/35 hover:text-white disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deleteEntryMutation.isPending}
+                onClick={() => deleteEntryMutation.mutate(confirmDelete.original)}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#ff5e5e] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#ff7b7b] disabled:opacity-50"
+              >
+                {deleteEntryMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+                Delete
+              </button>
             </div>
           </div>
         </div>

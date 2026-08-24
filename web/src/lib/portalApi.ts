@@ -50,12 +50,38 @@ export interface AdminOverview {
   }[];
 }
 
+/** Retries a fetch on transient network errors with exponential backoff. */
+async function fetchWithRetry(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+  retries = 2
+): Promise<Response> {
+  let lastError: Error | undefined;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(input, init);
+      // Retry on 5xx / 0-ish network errors, but not on 4xx (auth/bad request).
+      if (res.status >= 500 && res.status < 600 && attempt < retries) {
+        await new Promise((r) => setTimeout(r, 800 * 2 ** attempt));
+        continue;
+      }
+      return res;
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      if (attempt < retries) {
+        await new Promise((r) => setTimeout(r, 800 * 2 ** attempt));
+      }
+    }
+  }
+  throw lastError ?? new Error('Network request failed');
+}
+
 async function portalFetch(
   path: string,
   token: string,
   init?: RequestInit
 ): Promise<Record<string, unknown>> {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+  const res = await fetchWithRetry(`${API_BASE_URL}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
@@ -284,7 +310,7 @@ export interface LatestDictionary {
  *  Dictionary page at startup to refresh the local dataset over the air. */
 export async function fetchLatestDictionary(): Promise<LatestDictionary | null> {
   try {
-    const res = await fetch(`${API_BASE_URL}/api/dictionary/latest`);
+    const res = await fetchWithRetry(`${API_BASE_URL}/api/dictionary/latest`);
     if (!res.ok) return null;
     const body = (await res.json()) as {
       available?: boolean;
@@ -321,7 +347,7 @@ export async function fetchEntryExamples(
 ): Promise<EntryExample[]> {
   let res: Response;
   try {
-    res = await fetch(`${API_BASE_URL}/api/dictionary/examples`, {
+    res = await fetchWithRetry(`${API_BASE_URL}/api/dictionary/examples`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -47,6 +47,7 @@ data class DictionaryUiState(
     val detailExamples: List<EntryExample> = emptyList(),
     val detailExamplesLoading: Boolean = false,
     val detailExamplesError: Boolean = false,
+    val isRefreshing: Boolean = false,
 )
 
 /** State for the Dictionary tab: instant local search over the verified
@@ -200,6 +201,32 @@ class DictionaryViewModel(application: Application) : AndroidViewModel(applicati
     /** Closes the expanded entry detail view. */
     fun closeDetail() {
         _uiState.update { it.copy(detailEntry = null) }
+    }
+
+    /** Immediate OTA dictionary update check. Used at startup and on refresh. */
+    fun refreshDictionary() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRefreshing = true) }
+            try {
+                DictionaryRepository.refreshFromServer(getApplication())
+                val entries = withContext(Dispatchers.IO) { DictionaryRepository.load(getApplication()) }
+                val letters = withContext(Dispatchers.Default) { DictionaryRepository.browseLetters() }
+                val browse = withContext(Dispatchers.Default) {
+                    DictionaryRepository.entriesForLetter(_uiState.value.selectedLetter)
+                }
+                _uiState.update {
+                    it.copy(
+                        totalCount = entries.size,
+                        browseLetters = letters,
+                        browseEntries = browse,
+                    )
+                }
+            } catch (_: Exception) {
+                // Offline or backend unreachable — the bundled/cached dictionary still works.
+            } finally {
+                _uiState.update { it.copy(isRefreshing = false) }
+            }
+        }
     }
 
     fun onDirectionChange(englishToZomi: Boolean) {
