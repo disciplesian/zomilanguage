@@ -480,16 +480,17 @@ struct ToolsView: View {
         isTranslatingDocument = true
         defer { isTranslatingDocument = false }
         do {
-            let source = docToZomi ? "English" : "Tedim Zomi (CTD)"
-            let target = docToZomi ? "Tedim Zomi (CTD)" : "English"
+            let source = docToZomi ? "English" : "Zomi (ISO 639-3: ctd)"
+            let target = docToZomi ? "Zomi (ISO 639-3: ctd)" : "English"
             let prompt = """
-            You are an expert Tedim Zomi (ISO 639-3: ctd) linguist and translator.
+            You are an expert Zomi (ISO 639-3: ctd) linguist and translator.
 
             Task: Translate the following text from \(source) to \(target).
 
             **ABSOLUTE DIALECT RULE:**
-            - Use EXCLUSIVELY the Tedim (CTD) dialect vocabulary and grammar.
-            - NEVER use words from Paite, Mizo (Lushai), Hakha Chin, Falam Chin, or any other Kuki-Chin dialect.
+            - Use EXCLUSIVELY standard Zomi (ISO 639-3: ctd) vocabulary and grammar.
+            - NEVER use words from Paite, Mizo (Lushai), Hakha Chin, Falam Chin, or any other Kuki-Chin variety.
+            - Translate meaning, not words. Never omit or add content.
             - Preserve the original formatting, paragraphs, and structure as much as possible.
             - Return ONLY the translation, nothing else.
 
@@ -628,9 +629,9 @@ struct ToolsView: View {
         defer { isComparing = false }
         do {
             let prompt = """
-            Compare these two translations (in Zomi/Tedim and/or English) and provide a brief analysis of differences in meaning, tone, and accuracy.
+            Compare these two translations (in Zomi and/or English) and provide a brief analysis of differences in meaning, tone, and accuracy.
 
-            Context: The target language is Tedim Zomi (ISO 639-3: ctd).
+            Context: The target language is Zomi (ISO 639-3: ctd).
 
             Text 1: "\(comparisonText1)"
 
@@ -638,8 +639,8 @@ struct ToolsView: View {
 
             Provide a concise comparison highlighting:
             1. Semantic differences
-            2. Tone/register differences (Formal/Informal Tedim)
-            3. Which might be more accurate according to standard Tedim usage
+            2. Tone/register differences (Formal/Informal Zomi)
+            3. Which might be more accurate according to standard Zomi usage
             Keep it brief and practical.
             """
             comparisonResult = try await ToolkitService.shared.generateText(prompt: prompt)
@@ -735,11 +736,11 @@ struct ToolsView: View {
         defer { isGeneratingFlashcards = false }
         do {
             let prompt = """
-            Generate flashcards for learning Zomi (Tedim dialect) - English vocabulary.
+            Generate flashcards for learning Zomi (ISO 639-3: ctd) - English vocabulary.
 
-            **CRITICAL:** Use ONLY Tedim dialect vocabulary. Do not use Paite/Mizo terms.
+            **CRITICAL:** Use ONLY standard Zomi (ISO 639-3: ctd) vocabulary. Do not use Paite/Mizo terms.
 
-            For each word/phrase provided, create a flashcard with the Zomi (Tedim) word on front and English translation on back (or vice versa if English is provided).
+            For each word/phrase provided, create a flashcard with the Zomi word on front and English translation on back (or vice versa if English is provided).
 
             Input: "\(flashcardInput)"
 

@@ -80,14 +80,14 @@ struct AboutView: View {
                 title: "Our Mission",
                 systemImage: "target",
                 variant: .cyan,
-                body_: "Zomi Translator bridges the gap between the Zomi (Tedim) language and English using modern AI. We are dedicated to preserving and promoting the Zomi language for future generations, making accurate translation accessible to everyone."
+                body_: "Zomi Translator bridges the gap between the Zomi language and English using modern AI. We are dedicated to preserving and promoting the Zomi language for future generations, making accurate translation accessible to everyone."
             )
 
             InfoSection(
-                title: "The Tedim Dialect",
+                title: "Standard Written Zomi",
                 systemImage: "book",
                 variant: .purple,
-                body_: "This app exclusively uses the Tedim dialect of Zomi (ISO 639-3: ctd), spoken primarily in Chin State, Myanmar, and by Zomi communities worldwide. Our AI is carefully instructed to avoid mixing vocabulary from other Kuki-Chin dialects."
+                body_: "This app exclusively uses standard written Zomi (ISO 639-3: ctd) — the form used in the Zomi Bible, the Zomi hymnal, and modern Zomi publications, spoken primarily in Chin State, Myanmar, and by Zomi communities worldwide. Our AI is carefully instructed to avoid mixing vocabulary from related Kuki-Chin varieties."
             )
 
             InfoSection(
@@ -267,7 +267,7 @@ struct ContactView: View {
                 title: "Suggest a Word",
                 systemImage: "text.badge.plus",
                 variant: .yellow,
-                body_: "Know a Tedim word the translator gets wrong? Add it to My Glossary in Settings — it is applied instantly to your translations — and send it to us here so everyone benefits."
+                body_: "Know a Zomi word the translator gets wrong? Add it to My Glossary in Settings — it is applied instantly to your translations — and send it to us here so everyone benefits."
             )
         }
         .alert("Mail Unavailable", isPresented: $showMailUnavailable) {

@@ -154,9 +154,9 @@ export default function ToolsScreen() {
         messages: [
           {
             role: 'user',
-            content: `Compare these two translations (in Zomi/Tedim and/or English) and provide a brief analysis of differences in meaning, tone, and accuracy.
+            content: `Compare these two translations (in Zomi and/or English) and provide a brief analysis of differences in meaning, tone, and accuracy.
 
-Context: The target language is Tedim Zomi (ISO 639-3: ctd).
+Context: The target language is Zomi (ISO 639-3: ctd).
 
 Text 1: "${comparisonText1}"
 
@@ -164,8 +164,8 @@ Text 2: "${comparisonText2}"
 
 Provide a concise comparison highlighting:
 1. Semantic differences
-2. Tone/register differences (Formal/Informal Tedim)
-3. Which might be more accurate according to standard Tedim usage
+2. Tone/register differences (Formal/Informal Zomi)
+3. Which might be more accurate according to standard Zomi usage
 Keep it brief and practical.`,
           },
         ],
@@ -196,11 +196,11 @@ Keep it brief and practical.`,
         messages: [
           {
             role: 'user',
-            content: `Generate flashcards for learning Zomi (Tedim dialect) - English vocabulary.
+            content: `Generate flashcards for learning Zomi (ISO 639-3: ctd) - English vocabulary.
             
-**CRITICAL:** Use ONLY Tedim dialect vocabulary. Do not use Paite/Mizo terms.
+**CRITICAL:** Use ONLY standard Zomi (ISO 639-3: ctd) vocabulary. Do not use Paite/Mizo terms.
 
-For each word/phrase provided, create a flashcard with the Zomi (Tedim) word on front and English translation on back (or vice versa if English is provided).
+For each word/phrase provided, create a flashcard with the Zomi word on front and English translation on back (or vice versa if English is provided).
 
 Input: "${flashcardInput}"
 
@@ -275,20 +275,21 @@ Generate 5-10 useful flashcards based on the input.`,
 
     setIsTranslatingDocument(true);
     try {
-      const sourceLanguage = translationDirection === 'en-zomi' ? 'English' : 'Tedim Zomi (CTD)';
-      const targetLanguage = translationDirection === 'en-zomi' ? 'Tedim Zomi (CTD)' : 'English';
+      const sourceLanguage = translationDirection === 'en-zomi' ? 'English' : 'Zomi (ISO 639-3: ctd)';
+      const targetLanguage = translationDirection === 'en-zomi' ? 'Zomi (ISO 639-3: ctd)' : 'English';
       
       const result = await generateText({
         messages: [
           {
             role: 'user',
-            content: `You are an expert Tedim Zomi (ISO 639-3: ctd) linguist and translator.
+            content: `You are an expert Zomi (ISO 639-3: ctd) linguist and translator.
 
 Task: Translate the following text from ${sourceLanguage} to ${targetLanguage}.
 
 **ABSOLUTE DIALECT RULE:**
-- Use EXCLUSIVELY the Tedim (CTD) dialect vocabulary and grammar.
-- NEVER use words from Paite, Mizo (Lushai), Hakha Chin, Falam Chin, or any other Kuki-Chin dialect.
+- Use EXCLUSIVELY standard Zomi (ISO 639-3: ctd) vocabulary and grammar.
+- NEVER use words from Paite, Mizo (Lushai), Hakha Chin, Falam Chin, or any other Kuki-Chin variety.
+- Translate meaning, not words. Never omit or add content.
 - Preserve the original formatting, paragraphs, and structure as much as possible.
 - Return ONLY the translation, nothing else.
 

@@ -243,7 +243,7 @@ fun AccountScreen(
                             ) {
                                 if (state.reason.isEmpty()) {
                                     Text(
-                                        "For example: I am a pastor in Tedim and I translate " +
+                                        "For example: I am a pastor and I translate " +
                                             "scripture for our congregation each week…",
                                         color = PortalColors.TextFaint,
                                         fontSize = 14.sp,

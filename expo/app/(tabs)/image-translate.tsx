@@ -137,18 +137,19 @@ INSTRUCTIONS:
         messages: [
           {
             role: 'user',
-            content: `You are an expert Tedim Zomi (ISO 639-3: ctd) linguist and translator.
+            content: `You are an expert Zomi (ISO 639-3: ctd) linguist and translator.
 
-TASK: Translate the following text using EXCLUSIVELY the Tedim (CTD) dialect.
+TASK: Translate the following text using EXCLUSIVELY standard Zomi (ISO 639-3: ctd).
 
 CRITICAL DIALECT RULE:
-- Use ONLY Tedim (CTD) vocabulary, grammar, and phonology.
+- Use ONLY standard Zomi (ISO 639-3: ctd) vocabulary, grammar, and phonology.
 - NEVER use words from Paite, Mizo (Lushai), Hakha Chin, Falam Chin, or any other Kuki-Chin language.
+- Translate meaning, not words. Never omit or add content.
 
 RULES:
-1. If text is already in Tedim Zomi (CTD), translate it to English
-2. If text is in English or another language, translate to Tedim Zomi (CTD)
-3. Use ONLY authentic Tedim CTD vocabulary:
+1. If text is already in Zomi, translate it to English
+2. If text is in English or another language, translate to Zomi
+3. Use ONLY authentic standard Zomi vocabulary:
    - "Lungdam" = Thank you
    - "Pasian" = God
    - "Kham" = suffering
@@ -161,7 +162,7 @@ RULES:
    - "Pai" = go, "Hong" = come
    - "Ne" = eat, "Thei" = know
    - "It" = love, "Lau" = fear
-4. Follow Tedim grammar: SOV (Subject-Object-Verb) order
+4. Follow Zomi grammar: SOV (Subject-Object-Verb) order
 5. Use proper negation: verb + "kei" or "lo"
 6. Pronouns: ka (I/my), na (you/your), a (he/she), kan (we), nan (you all), an (they)
 7. Return ONLY the translation, no explanations

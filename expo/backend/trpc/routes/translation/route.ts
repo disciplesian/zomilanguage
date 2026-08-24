@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, publicProcedure } from '../../create-context';
 import { chatCompletion, aiProxyConfigured, type ChatMessage, type ChatRequest } from '../../../aiProxy';
-import { chatCompletionDirect, geminiConfigured } from '../../../geminiDirect';
+import { chatCompletionDirect, geminiConfigured, translationModelChain } from '../../../geminiDirect';
 import { authFromRequest, logTranslation, FREE_WORD_LIMIT, anonymousWordsUsed, countWords, recordAnonymousWords } from '../../../portal';
 import { getDB } from '../../../db/client';
 import {
@@ -12,28 +12,24 @@ import {
 } from '../../../../constants/zomiPrompt';
 
 /**
- * Model chain (newest → oldest, as of August 2026). Called directly with the
- * project's GEMINI_API_KEY when configured, with the Rork Toolkit proxy
- * (Vercel AI Gateway) as fallback.
+ * Model chain: auto-discovered hourly from the Gemini ListModels endpoint
+ * (newest capable models first, so new releases are picked up automatically)
+ * with a static fallback. Called directly with the project's GEMINI_API_KEY
+ * when configured, with the Rork Toolkit proxy (Vercel AI Gateway) as
+ * fallback.
  */
-const MODEL_NAMES: readonly string[] = [
-  'gemini-3.1-pro-preview',
-  'gemini-3.7-flash',
-  'gemini-3.6-flash',
-  'gemini-2.5-pro',
-  'gemini-2.5-flash',
-];
 
 /** One provider attempt: a model id plus a completion function. */
 type Attempt = { model: string; run: (req: ChatRequest) => Promise<string> };
 
-function buildAttempts(): Attempt[] {
+async function buildAttempts(): Promise<Attempt[]> {
   const attempts: Attempt[] = [];
+  const modelNames = await translationModelChain();
   if (geminiConfigured()) {
-    for (const m of MODEL_NAMES) attempts.push({ model: m, run: chatCompletionDirect });
+    for (const m of modelNames) attempts.push({ model: m, run: chatCompletionDirect });
   }
   if (aiProxyConfigured()) {
-    for (const m of MODEL_NAMES) attempts.push({ model: `google/${m}`, run: chatCompletion });
+    for (const m of modelNames) attempts.push({ model: `google/${m}`, run: chatCompletion });
   }
   return attempts;
 }
@@ -42,9 +38,9 @@ function buildAttempts(): Attempt[] {
 async function completeWithFallback(
   model: string,
   messages: ChatMessage[],
-  opts: { maxTokens?: number; temperature?: number } = {}
+  opts: { maxTokens?: number } = {}
 ): Promise<string> {
-  const attempts = buildAttempts();
+  const attempts = await buildAttempts();
   const preferred = attempts.find((a) => a.model === model);
   const ordered = preferred ? [preferred, ...attempts.filter((a) => a !== preferred)] : attempts;
   let lastError: unknown = null;
@@ -145,8 +141,8 @@ function buildMessages(
     {
       role: 'user',
       content: `Translate the following text into ${targetLang}.
-Use EXCLUSIVELY the Tedim dialect (CTD). No other Zomi dialect is acceptable.
-Ensure the grammar of ${targetLang} is perfect.
+Use EXCLUSIVELY standard ${targetLang === 'Zomi (ISO 639-3: ctd)' ? 'Zomi (ISO 639-3: ctd) — no related variety' : targetLang}. No related variety is acceptable.
+Ensure the grammar and natural idiom of ${targetLang} are perfect. Translate meaning, not words.
 Return JSON {"translation": string, "confidence": number 0-100}.
 
 GLOSSARY_DATA_JSON:
@@ -192,8 +188,8 @@ async function refineTranslation(
       { role: 'system', content: ZOMI_SYSTEM_INSTRUCTION },
       {
         role: 'user',
-        content: `You are an expert Tedim Zomi (CTD) translation reviewer.
-A draft translation into ${targetLang} is provided below. Compare it against the source and correct ANY error in meaning, grammar, dialect purity (Tedim CTD only), or natural phrasing. Pay special attention to idioms, politeness particles and register.
+        content: `You are an expert Zomi (ISO 639-3: ctd) translation reviewer.
+A draft translation into ${targetLang} is provided below. Compare it against the source and correct ANY error in meaning, grammar, dialect purity (standard Zomi only), or natural phrasing. Pay special attention to idioms, politeness particles and register.
 If the draft is already correct, return it unchanged.
 Return JSON {"translation": string, "confidence": number 0-100}.
 
@@ -204,7 +200,7 @@ DRAFT_TRANSLATION:
 "${draft}"`,
       },
     ],
-    { maxTokens: 8192, temperature: 0.1 }
+    { maxTokens: 8192 }
   );
   const parsed = parseTranslation(raw);
   return parsed.translation ? parsed : null;
@@ -216,13 +212,13 @@ export async function runTranslation(
   targetLanguage: string,
   extraGlossary?: Record<string, string>
 ): Promise<CacheEntry & { cached: boolean; refined: boolean }> {
-  const attempts = buildAttempts();
+  const attempts = await buildAttempts();
   if (attempts.length === 0) {
     throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'No AI provider configured.' });
   }
 
   const targetLang =
-    targetLanguage === 'zomi' ? 'Tedim Zomi (CTD, ISO 639-3: ctd)' : targetLanguage;
+    targetLanguage === 'zomi' ? 'Zomi (ISO 639-3: ctd)' : targetLanguage;
 
   const key = cacheKey(text, targetLang);
   const cached = cacheGet(key);
@@ -239,7 +235,7 @@ export async function runTranslation(
   for (const { model, run } of attempts) {
     const modelStart = Date.now();
     try {
-      const raw = await run({ model, maxTokens: 8192, temperature: 0.1, messages });
+      const raw = await run({ model, maxTokens: 8192, messages });
       const parsed = parseTranslation(raw);
       if (!parsed.translation) throw new Error('Empty translation from model');
 

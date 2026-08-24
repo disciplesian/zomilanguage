@@ -30,7 +30,9 @@ export function geminiConfigured(): boolean {
 interface GeminiPayload {
   systemInstruction?: { parts: { text: string }[] };
   contents: { role: string; parts: { text: string }[] }[];
-  generationConfig: { maxOutputTokens: number; temperature?: number };
+  // NOTE: sampling params (temperature/top_p/top_k) were deprecated by the
+  // Gemini API in July 2026 and are intentionally not sent.
+  generationConfig: { maxOutputTokens: number };
 }
 
 function toPayload(req: ChatRequest): GeminiPayload {
@@ -43,7 +45,6 @@ function toPayload(req: ChatRequest): GeminiPayload {
     contents,
     generationConfig: {
       maxOutputTokens: req.maxTokens ?? 8192,
-      ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
     },
   };
 }
@@ -58,6 +59,87 @@ function frameText(frame: unknown): string {
 async function proxyError(res: Response): Promise<Error> {
   const text = await res.text().catch(() => "");
   return new Error(`Gemini error ${res.status}: ${text.slice(0, 300)}`);
+}
+
+/**
+ * Static fallback model chain (newest first, August 2026). Used until the
+ * ListModels auto-discovery below completes, and whenever it is unavailable.
+ * Accuracy first: Pro tier leads, then the newest Flash generations.
+ */
+export const FALLBACK_TRANSLATION_MODELS: readonly string[] = [
+  "gemini-3.1-pro-preview",
+  "gemini-3.7-flash",
+  "gemini-3.6-flash",
+  "gemini-3.5-flash",
+  "gemini-2.5-flash",
+];
+
+/** Lists every model this API key can call that supports generateContent. */
+async function listAvailableModels(): Promise<string[]> {
+  const res = await fetch(`${API_BASE}/models?pageSize=1000`, {
+    headers: { "x-goog-api-key": apiKey() },
+  });
+  if (!res.ok) throw await proxyError(res);
+  const payload = (await res.json()) as {
+    models?: { name?: string; supportedGenerationMethods?: string[] }[];
+  };
+  return (payload.models ?? [])
+    .filter((m) => (m.supportedGenerationMethods ?? []).includes("generateContent"))
+    .map((m) => (m.name ?? "").replace(/^models\//, ""))
+    .filter((name) => /^gemini-\d/.test(name))
+    .filter((name) => !/(embedding|imagen|aqa|live|native-audio|tts|omni)/.test(name));
+}
+
+/**
+ * Ranks discovered chat models for translation quality: Pro tier first, then
+ * Flash, then Flash-Lite; within a tier newer versions win. Thinking-preview
+ * and experimental builds rank below their stable siblings.
+ */
+function rankModels(models: string[]): string[] {
+  const score = (id: string): number => {
+    const version = Number(id.match(/^gemini-(\d+(?:\.\d+)?)/)?.[1] ?? 0) * 10;
+    let tier = 0;
+    if (/pro/.test(id)) tier = 300;
+    else if (/flash-lite/.test(id)) tier = 100;
+    else if (/flash/.test(id)) tier = 200;
+    let penalty = 0;
+    if (/exp|deprecated|thinking/.test(id)) penalty = 5;
+    else if (/preview/.test(id)) penalty = 1;
+    return version + tier - penalty;
+  };
+  return [...models].sort((a, b) => score(b) - score(a));
+}
+
+const MODEL_LIST_TTL_MS = 60 * 60 * 1000; // re-discover hourly
+let modelListCache: { models: string[]; fetchedAt: number } | null = null;
+let modelListPromise: Promise<string[]> | null = null;
+
+/**
+ * The translation model chain, kept up to date automatically: the live model
+ * list is fetched from the Gemini ListModels endpoint and cached for an hour,
+ * so newly released models are picked up without a code change. Falls back to
+ * FALLBACK_TRANSLATION_MODELS when the key is missing or discovery fails.
+ */
+export async function translationModelChain(): Promise<string[]> {
+  if (modelListCache && Date.now() - modelListCache.fetchedAt < MODEL_LIST_TTL_MS) {
+    return modelListCache.models;
+  }
+  if (modelListPromise) return modelListPromise;
+  modelListPromise = (async () => {
+    try {
+      const ranked = rankModels(await listAvailableModels()).slice(0, 6);
+      if (ranked.length > 0) {
+        modelListCache = { models: ranked, fetchedAt: Date.now() };
+        return ranked;
+      }
+    } catch (err) {
+      console.warn("[gemini] model auto-discovery failed, using static chain", err);
+    } finally {
+      modelListPromise = null;
+    }
+    return [...FALLBACK_TRANSLATION_MODELS];
+  })();
+  return modelListPromise;
 }
 
 /** Non-streaming completion. Returns the assistant text. */

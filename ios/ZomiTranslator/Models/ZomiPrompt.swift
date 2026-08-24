@@ -1,6 +1,6 @@
 import Foundation
 
-/// Shared Tedim Zomi (CTD) translation prompt + glossary.
+/// Shared Zomi translation prompt + glossary.
 /// Mirrors expo/constants/zomiPrompt.ts so both clients cannot drift apart.
 nonisolated enum ZomiPrompt {
     static let glossary: [String: String] = [
@@ -57,12 +57,12 @@ nonisolated enum ZomiPrompt {
 
         if !toZomi {
             return """
-            You are a Tedim Zomi (ISO 639-3: ctd) to English translator.
-            Use EXCLUSIVELY the Tedim (CTD) dialect. No other Zomi dialect.
-            Direct translation only.
-            STYLE: Match the register of the input — dictionary word, everyday sentence, song lyrics, news, scripture/theology, prayer/religious, or poetry — and mirror it in English. Use terminology consistent with the Tedim (CTD) Bible for religious text. Preserve line breaks for songs and poetry.
+            You are a professional Zomi (ISO 639-3: ctd) to English translator.
+            Use EXCLUSIVELY standard Zomi (ISO 639-3: ctd). No related variety (Paite, Mizo, Hakha, Falam, Lai, Mara).
+            Translate meaning, not words. Never omit, add, or explain.
+            STYLE: Match the register of the input — dictionary word, everyday sentence, song lyrics, news, scripture/theology, prayer/religious, or poetry — and mirror it in English. Use terminology consistent with the Zomi Bible for religious text. Preserve line breaks for songs and poetry.
 
-            TEDIM CTD GLOSSARY:
+            ZOMI GLOSSARY:
             \(glossaryLines)
 
             EXAMPLES:
@@ -75,21 +75,22 @@ nonisolated enum ZomiPrompt {
         }
 
         return """
-        You are an English to Tedim Zomi (ISO 639-3: ctd) translator.
-        Use EXCLUSIVELY the Tedim (CTD) dialect. NEVER use Paite, Mizo, Hakha Chin, Falam, or any other dialect.
+        You are a professional English to Zomi (ISO 639-3: ctd) translator.
+        Use EXCLUSIVELY standard Zomi (ISO 639-3: ctd). NEVER use Paite, Mizo, Hakha Chin, Falam, or any other related variety.
+        Translate meaning, not words. Never omit, add, or explain.
 
-        TEDIM CTD GLOSSARY:
+        ZOMI GLOSSARY:
         \(glossaryLines)
 
-        GRAMMAR: SOV word order (Subject-Object-Verb)
-        STYLE: Detect the register of the input — dictionary word, everyday sentence, song lyrics, news, scripture/theology, prayer/religious, or poetry — and match it in Tedim. Use terminology consistent with the Tedim (CTD) Bible and hymnal for religious text. Preserve line breaks for songs and poetry.
+        GRAMMAR: SOV word order (Subject-Object-Verb); negation with "kei"/"lo" after the verb; future "ding", past "zo", progressive "lai"; questions end with "hiam"/"maw".
+        STYLE: Detect the register of the input — dictionary word, everyday sentence, song lyrics, news, scripture/theology, prayer/religious, or poetry — and match it in Zomi. Use terminology consistent with the Zomi Bible and hymnal for religious text. Preserve line breaks for songs and poetry.
 
         EXAMPLES:
         \(exampleLines)
 
         Translate: "\(text)"
 
-        Output ONLY the Tedim Zomi (CTD) translation:
+        Output ONLY the Zomi translation:
         """
     }
 }

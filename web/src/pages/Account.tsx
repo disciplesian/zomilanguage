@@ -232,7 +232,7 @@ const Account = () => {
                     value={reason}
                     onChange={(e) => setReason(e.target.value.slice(0, MAX_REASON))}
                     rows={4}
-                    placeholder="For example: I am a pastor in Tedim and I translate scripture for our congregation each week…"
+                    placeholder="For example: I am a pastor and I translate scripture for our congregation each week…"
                     className="mt-4 w-full resize-none rounded-xl border border-white/15 bg-white/[0.04] px-4 py-3 text-[15px] leading-relaxed text-white placeholder:text-white/30 focus:border-[#00f0ff]/50 focus:outline-none"
                   />
                   <div className="mt-2 flex items-center justify-between">

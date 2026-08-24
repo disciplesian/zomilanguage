@@ -9,8 +9,8 @@ const FAQS = [
     a: 'The Zomi Language Portal is a members-only service. Accounts let us keep the translation service accountable, save your history and glossary across devices, and give verified community members recognition. Signing up is free with Google or Apple.',
   },
   {
-    q: 'Which Zomi dialect does the translator use?',
-    a: 'Translations use the Tedim (CTD) variety of Zomi, and the translator supports seven registers — from everyday conversation to formal and scriptural language — so results match the context you need.',
+    q: 'Which form of Zomi does the translator use?',
+    a: 'Translations use standard written Zomi — the form used in the Zomi Bible, hymnal, and modern publications — and the translator supports seven registers, from everyday conversation to formal and scriptural language, so results match the context you need.',
   },
   {
     q: 'How do I get the blue verification badge?',

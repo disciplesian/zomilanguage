@@ -15,6 +15,7 @@ import {
 import {
   streamChatCompletionDirect,
   geminiConfigured,
+  translationModelChain,
 } from "./geminiDirect";
 import {
   FREE_WORD_LIMIT,
@@ -112,6 +113,9 @@ function extractDisplayText(raw: string): string | null {
   if (/"translation"\s*:\s*"?$/s.test(s) || /"translation"\s*:\s*"(?:[^"\\]|\\.)*$/s.test(s)) {
     return null;
   }
+  // JSON is still arriving (e.g. `{"` or `{\"translati` — hold until the value
+  // is complete so braces and key names never leak into the displayed words.
+  if (s.startsWith("{")) return null;
   // Not JSON output — plain text, minus any trailing incomplete JSON tail.
   const cut = s.search(/\s*[,}]?\s*"(confidence|model)"\s*:/);
   const trimmed = (cut === -1 ? s : s.slice(0, cut)).trim();
@@ -170,12 +174,14 @@ app.post("/translate/stream", async (c) => {
   if (!aiProxyConfigured() && !geminiConfigured())
     return c.json({ error: "ai_unavailable" }, 500);
 
-  const targetLang = target === "zomi" ? "Tedim Zomi (CTD, ISO 639-3: ctd)" : target;
+  const targetLang = target === "zomi" ? "Zomi (ISO 639-3: ctd)" : target;
   const mergedGlossary: Record<string, string> = { ...ZOMI_GLOSSARY, ...extraGlossary };
   const glossaryJson = JSON.stringify({ glossary: mergedGlossary, examples: ZOMI_EXAMPLES });
   const prompt = [
     `Translate the following text into ${targetLang}.`,
-    "Use EXCLUSIVELY the Tedim dialect (CTD). Output plain translated text only.",
+    `Use EXCLUSIVELY standard ${targetLang === "Zomi (ISO 639-3: ctd)" ? "Zomi (ISO 639-3: ctd) — no related variety" : targetLang}.`,
+    `Ensure the grammar and natural idiom of ${targetLang} are perfect. Translate meaning, not words.`,
+    `Return JSON {"translation": string, "confidence": number 0-100}.`,
     "",
     `GLOSSARY_DATA_JSON:\n${glossaryJson}`,
     "",
@@ -183,15 +189,11 @@ app.post("/translate/stream", async (c) => {
   ].join("\n");
 
   return streamSSE(c, async (stream) => {
-    // Model chain (newest → oldest). Direct Gemini is preferred when the
-    // project key is configured; the Rork AI proxy is the fallback path.
-    const modelNames = [
-      "gemini-3.1-pro-preview",
-      "gemini-3.7-flash",
-      "gemini-3.6-flash",
-      "gemini-2.5-pro",
-      "gemini-2.5-flash",
-    ];
+    // Model chain: auto-discovered from the Gemini ListModels endpoint (newest
+    // capable models first, refreshed hourly) with a static fallback. Direct
+    // Gemini is preferred when the project key is configured; the Rork AI
+    // proxy is the fallback path.
+    const modelNames = await translationModelChain();
     type Attempt = {
       model: string;
       run: (req: ChatRequest, onDelta: (piece: string) => void | Promise<void>) => Promise<string>;
