@@ -12,6 +12,13 @@ final class TranslatorViewModel {
     var isZomiToEnglish = true {
         didSet { scheduleTranslation() }
     }
+    /// Catalog code of the selected target language ("english", "zomi", "burmese", …).
+    var targetLanguageCode = "english" {
+        didSet {
+            guard oldValue != targetLanguageCode else { return }
+            scheduleTranslation()
+        }
+    }
 
     private(set) var outputText = ""
     private(set) var isTranslating = false
@@ -48,10 +55,15 @@ final class TranslatorViewModel {
     private var streamTask: Task<Void, Never>?
     private var requestId = 0
     private var lastTranslatedText = ""
-    private var lastDirection = true
+    private var lastDirection = "zomi→english"
 
-    var targetLanguage: Language { isZomiToEnglish ? .english : .zomi }
-    var sourceLanguage: Language { isZomiToEnglish ? .zomi : .english }
+    /// Catalog codes for the current translation direction.
+    var targetLanguage: String { targetLanguageCode }
+    var sourceLanguage: String { isZomiToEnglish ? "zomi" : "english" }
+
+    /// Display names for the current direction.
+    var sourceLabel: String { isZomiToEnglish ? "Zomi" : "English" }
+    var targetLabel: String { LanguageCatalog.label(targetLanguageCode) }
 
     var wordCount: Int {
         let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -61,17 +73,51 @@ final class TranslatorViewModel {
     func swapLanguages() {
         let previousOutput = outputText
         let previousInput = inputText
-        isZomiToEnglish.toggle()
+        let previousTarget = targetLanguageCode
+        let previousSource = sourceLanguage
 
-        if !previousOutput.isEmpty, errorText == nil {
-            lastTranslatedText = previousOutput.trimmingCharacters(in: .whitespacesAndNewlines)
-            lastDirection = isZomiToEnglish
-            inputText = previousOutput
-            outputText = previousInput
+        if LanguageCatalog.isPrimary(previousTarget) {
+            // Full reversal: source and target trade places.
+            isZomiToEnglish = (previousTarget == "zomi")
+            targetLanguageCode = previousSource
+
+            if !previousOutput.isEmpty, errorText == nil {
+                lastTranslatedText = previousOutput.trimmingCharacters(in: .whitespacesAndNewlines)
+                lastDirection = "\(sourceLanguage)→\(targetLanguageCode)"
+                inputText = previousOutput
+                outputText = previousInput
+            } else {
+                lastTranslatedText = ""
+                outputText = ""
+            }
         } else {
+            // Custom target: only the source alternates — the previous output
+            // was in the target language, so it cannot become the new input.
+            isZomiToEnglish.toggle()
             lastTranslatedText = ""
             outputText = ""
+            quality = 0
         }
+    }
+
+    /// Taps the source chip: flips Zomi ⇄ English, keeping source and target distinct.
+    func toggleSource() {
+        let newSource = sourceLanguage == "zomi" ? "english" : "zomi"
+        isZomiToEnglish.toggle()
+        if targetLanguageCode == newSource {
+            targetLanguageCode = newSource == "zomi" ? "english" : "zomi"
+        }
+    }
+
+    /// Picks a new target language from the picker sheet.
+    func selectTargetLanguage(_ code: String) {
+        if code == sourceLanguage {
+            // Keep source and target distinct — flip the source.
+            isZomiToEnglish.toggle()
+        }
+        targetLanguageCode = code
+        outputText = ""
+        quality = 0
     }
 
     func clear() {
@@ -89,7 +135,7 @@ final class TranslatorViewModel {
 
     func retry() {
         lastTranslatedText = ""
-        translate(text: inputText, direction: isZomiToEnglish)
+        translate(text: inputText)
     }
 
     /// Records a completed translation in the current session log, replacing
@@ -102,7 +148,6 @@ final class TranslatorViewModel {
     private func scheduleTranslation() {
         debounceTask?.cancel()
         let text = inputText
-        let direction = isZomiToEnglish
 
         guard aiConsentGiven else {
             errorText = "Please agree to AI translation processing to continue."
@@ -123,11 +168,11 @@ final class TranslatorViewModel {
         debounceTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(600))
             guard !Task.isCancelled else { return }
-            self?.translate(text: text, direction: direction)
+            self?.translate(text: text)
         }
     }
 
-    func translate(text: String, direction: Bool) {
+    func translate(text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
@@ -143,17 +188,18 @@ final class TranslatorViewModel {
         }
 
         // Skip identical re-translations (prevents flicker on refocus).
-        if trimmed == lastTranslatedText && direction == lastDirection { return }
+        let directionKey = "\(sourceLanguage)→\(targetLanguageCode)"
+        if trimmed == lastTranslatedText && directionKey == lastDirection { return }
 
         requestId += 1
         let currentRequest = requestId
         lastTranslatedText = trimmed
-        lastDirection = direction
+        lastDirection = directionKey
         errorText = nil
         hasStreamedText = false
 
-        let target: Language = direction ? .english : .zomi
-        let source: Language = direction ? .zomi : .english
+        let target = targetLanguageCode
+        let source = sourceLanguage
 
         // Offline / instant cache hit.
         if let hit = translationStore?.lookup(text: trimmed, target: target) {
@@ -244,7 +290,8 @@ final class TranslatorViewModel {
             do {
                 let fallback = try await TranslationService.shared.fallbackTranslate(
                     text: trimmed,
-                    toZomi: !direction
+                    sourceLanguage: source,
+                    targetLanguage: target
                 )
                 guard currentRequest == self.requestId else { return }
                 self.outputText = fallback

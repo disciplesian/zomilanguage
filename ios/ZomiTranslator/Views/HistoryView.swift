@@ -27,8 +27,8 @@ struct HistoryView: View {
         switch filter {
         case .all: break
         case .favorites: items = items.filter { $0.isFavorite }
-        case .toEnglish: items = items.filter { $0.targetLanguage == .english }
-        case .toZomi: items = items.filter { $0.targetLanguage == .zomi }
+        case .toEnglish: items = items.filter { $0.targetLanguage == "english" }
+        case .toZomi: items = items.filter { $0.targetLanguage == "zomi" }
         }
         let query = searchQuery.trimmingCharacters(in: .whitespaces).lowercased()
         if !query.isEmpty {
@@ -196,7 +196,7 @@ struct HistoryView: View {
                         Image(systemName: "textformat")
                             .font(.system(size: 14))
                             .foregroundStyle(colors.accent)
-                        Text(item.sourceLanguage == .zomi ? "Zomi → English" : "English → Zomi")
+                        Text("\(LanguageCatalog.label(item.sourceLanguage)) → \(LanguageCatalog.label(item.targetLanguage))")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(colors.textSecondary)
                     }

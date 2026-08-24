@@ -25,6 +25,7 @@ struct TranslatorView: View {
     @State private var alertMessage: String?
     @State private var showAIConsent = false
     @State private var showAudioConsent = false
+    @State private var showLanguagePicker = false
 
     private var colors: ThemeColors { theme.colors }
 
@@ -72,6 +73,17 @@ struct TranslatorView: View {
         }
         .sheet(item: $pdfExport) { item in
             ShareSheet(items: [item.url])
+        }
+        .sheet(isPresented: $showLanguagePicker) {
+            LanguagePickerSheet(
+                selectedCode: viewModel.targetLanguageCode,
+                onSelect: { code in
+                    Haptics.selection()
+                    viewModel.selectTargetLanguage(code)
+                    showLanguagePicker = false
+                }
+            )
+            .presentationDetents([.medium, .large])
         }
         .alert("Zomi Translator", isPresented: Binding(
             get: { alertMessage != nil },
@@ -149,11 +161,9 @@ struct TranslatorView: View {
     private var languageSelector: some View {
         GlassCard(variant: .cyan, glow: true, padding: 10, colors: colors, isDark: theme.isDark) {
             HStack {
-                languageButton(title: "Zomi", isActive: viewModel.isZomiToEnglish) {
-                    if !viewModel.isZomiToEnglish {
-                        Haptics.selection()
-                        viewModel.isZomiToEnglish = true
-                    }
+                languageButton(title: viewModel.sourceLabel, isActive: true) {
+                    Haptics.selection()
+                    viewModel.toggleSource()
                 }
 
                 Button {
@@ -179,14 +189,34 @@ struct TranslatorView: View {
                 .buttonStyle(PressableButtonStyle())
                 .accessibilityLabel("Swap languages")
 
-                languageButton(title: "English", isActive: !viewModel.isZomiToEnglish) {
-                    if viewModel.isZomiToEnglish {
-                        Haptics.selection()
-                        viewModel.isZomiToEnglish = false
-                    }
-                }
+                targetLanguageButton
             }
         }
+    }
+
+    /// Target-language chip — opens the searchable language picker.
+    private var targetLanguageButton: some View {
+        Button {
+            Haptics.selection()
+            showLanguagePicker = true
+        } label: {
+            HStack(spacing: 6) {
+                Text(viewModel.targetLabel)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(colors.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color(hex: 0x00F0FF))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(Color(hex: 0x00F0FF, alpha: theme.isDark ? 0.25 : 0.15))
+            .clipShape(.rect(cornerRadius: 12))
+        }
+        .buttonStyle(PressableButtonStyle())
+        .accessibilityLabel("Choose target language")
     }
 
     private func languageButton(title: String, isActive: Bool, action: @escaping () -> Void) -> some View {
@@ -280,7 +310,7 @@ struct TranslatorView: View {
         GlassCard(variant: .purple, colors: colors, isDark: theme.isDark) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Text(viewModel.isZomiToEnglish ? "Zomi" : "English")
+                    Text(viewModel.sourceLabel)
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(colors.text)
                     Spacer()
@@ -312,7 +342,7 @@ struct TranslatorView: View {
                 }
 
                 TextField(
-                    "Type \(viewModel.isZomiToEnglish ? "Zomi" : "English") text...",
+                    "Type \(viewModel.sourceLabel) text...",
                     text: Binding(get: { viewModel.inputText }, set: { viewModel.inputText = $0 }),
                     axis: .vertical
                 )
@@ -405,7 +435,7 @@ struct TranslatorView: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     HStack(spacing: 8) {
-                        Text(viewModel.isZomiToEnglish ? "English" : "Zomi")
+                        Text(viewModel.targetLabel)
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(colors.text)
 
@@ -533,7 +563,7 @@ struct TranslatorView: View {
             if speech.isSpeaking {
                 speech.stop()
             } else if !viewModel.outputText.isEmpty {
-                speech.speak(viewModel.outputText)
+                speech.speak(viewModel.outputText, language: LanguageCatalog.ttsCode(viewModel.targetLanguageCode))
             }
         } label: {
             Image(systemName: speech.isSpeaking ? "speaker.wave.2.fill" : "speaker.wave.2")
@@ -656,8 +686,8 @@ struct TranslatorView: View {
     }
 
     private var shareMessage: String {
-        let sourceLabel = viewModel.isZomiToEnglish ? "Zomi" : "English"
-        let targetLabel = viewModel.isZomiToEnglish ? "English" : "Zomi"
+        let sourceLabel = viewModel.sourceLabel
+        let targetLabel = viewModel.targetLabel
         return "\(sourceLabel): \(viewModel.inputText)\n\n\(targetLabel): \(viewModel.outputText)\n\nTranslated with Zomi Translator"
     }
 

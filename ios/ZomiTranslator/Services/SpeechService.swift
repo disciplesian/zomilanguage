@@ -17,7 +17,7 @@ final class SpeechService: NSObject {
         synthesizer.delegate = self
     }
 
-    func speak(_ text: String) {
+    func speak(_ text: String, language: String = "en-US") {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
@@ -32,7 +32,8 @@ final class SpeechService: NSObject {
         }
 
         let utterance = AVSpeechUtterance(string: trimmed)
-        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+        // Match the selected target language when a voice is installed.
+        utterance.voice = AVSpeechSynthesisVoice(language: language) ?? AVSpeechSynthesisVoice(language: "en-US")
         // AVSpeechUtteranceDefaultSpeechRate is 0.5; map our 0.5–2.0x scale around it.
         utterance.rate = Float(min(max(AVSpeechUtteranceDefaultSpeechRate * Float(currentSpeed), 0.1), 0.95))
         utterance.pitchMultiplier = 1.0
@@ -49,11 +50,11 @@ final class SpeechService: NSObject {
         isSpeaking = false
     }
 
-    func toggle(_ text: String) {
+    func toggle(_ text: String, language: String = "en-US") {
         if isSpeaking {
             stop()
         } else {
-            speak(text)
+            speak(text, language: language)
         }
     }
 }

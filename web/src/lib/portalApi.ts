@@ -162,7 +162,7 @@ export const WORD_LIMIT_ERROR = 'WORD_LIMIT_REACHED';
 export async function streamTranslation(
   input: {
     text: string;
-    targetLanguage: 'english' | 'zomi';
+    targetLanguage: string;
     token?: string | null;
     anonymousId?: string | null;
   },

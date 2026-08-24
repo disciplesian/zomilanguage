@@ -3,6 +3,7 @@ package com.rork.zomilanguageportal.ui.screens
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rork.zomilanguageportal.data.AuthManager
+import com.rork.zomilanguageportal.data.LanguageCatalog
 import com.rork.zomilanguageportal.data.PortalApi
 import com.rork.zomilanguageportal.data.SessionExpiredException
 import com.rork.zomilanguageportal.data.WordLimitException
@@ -17,6 +18,7 @@ data class TranslateUiState(
     val input: String = "",
     val output: String = "",
     val zomiToEnglish: Boolean = true,
+    val targetLanguage: String = "english",
     val isTranslating: Boolean = false,
     val confidence: Int = 0,
     val error: String? = null,
@@ -34,11 +36,38 @@ class TranslateViewModel : ViewModel() {
     }
 
     fun swapDirection() {
-        _uiState.update {
-            it.copy(
-                zomiToEnglish = !it.zomiToEnglish,
-                input = it.output,
-                output = it.input,
+        _uiState.update { state ->
+            if (LanguageCatalog.isPrimary(state.targetLanguage)) {
+                // Full reversal: the previous output becomes the new input.
+                state.copy(
+                    zomiToEnglish = !state.zomiToEnglish,
+                    input = state.output,
+                    output = state.input,
+                    confidence = 0,
+                    error = null,
+                )
+            } else {
+                // Custom target: only the source alternates — the previous
+                // output was in the target language, so it can't become input.
+                state.copy(
+                    zomiToEnglish = !state.zomiToEnglish,
+                    output = "",
+                    confidence = 0,
+                    error = null,
+                )
+            }
+        }
+    }
+
+    /** Picks a new target language, keeping source and target distinct. */
+    fun selectTargetLanguage(code: String) {
+        _uiState.update { state ->
+            val sourceFlipped = !LanguageCatalog.isPrimary(code) &&
+                ((state.zomiToEnglish && code == "english") || (!state.zomiToEnglish && code == "zomi"))
+            state.copy(
+                targetLanguage = code,
+                zomiToEnglish = if (sourceFlipped) !state.zomiToEnglish else state.zomiToEnglish,
+                output = "",
                 confidence = 0,
                 error = null,
             )
@@ -47,11 +76,16 @@ class TranslateViewModel : ViewModel() {
 
     fun clear() {
         translateJob?.cancel()
-        _uiState.value = TranslateUiState(zomiToEnglish = _uiState.value.zomiToEnglish)
+        _uiState.value = TranslateUiState(
+            zomiToEnglish = _uiState.value.zomiToEnglish,
+            targetLanguage = _uiState.value.targetLanguage,
+        )
     }
 
     fun useSuggestion(phrase: String) {
-        _uiState.update { it.copy(input = phrase, zomiToEnglish = true, error = null) }
+        _uiState.update {
+            it.copy(input = phrase, zomiToEnglish = true, targetLanguage = "english", error = null)
+        }
     }
 
     fun translate() {
@@ -71,7 +105,7 @@ class TranslateViewModel : ViewModel() {
                     token = token,
                     anonymousId = AuthManager.anonymousId(),
                     text = text,
-                    targetLanguage = if (state.zomiToEnglish) "english" else "zomi",
+                    targetLanguage = state.targetLanguage,
                 ) { piece ->
                     _uiState.update { it.copy(output = it.output + piece) }
                 }

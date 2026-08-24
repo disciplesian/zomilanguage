@@ -134,7 +134,7 @@ nonisolated enum PDFExportService {
             SessionEntry(
                 sourceChunks: splitIntoChunks(t.sourceText, attributes: sourceAttributes, maxHeight: maxChunkHeight),
                 targetChunks: splitIntoChunks(t.translatedText, attributes: targetAttributes, maxHeight: maxChunkHeight),
-                direction: "\(t.sourceLanguage.label) → \(t.targetLanguage.label)",
+                direction: "\(LanguageCatalog.label(t.sourceLanguage)) → \(LanguageCatalog.label(t.targetLanguage))",
                 confidence: t.confidence,
                 time: timeFormatter.string(from: t.createdAt)
             )

@@ -44,7 +44,7 @@ nonisolated final class TranslationService: Sendable {
     /// after a `.done` or `.failure` event.
     func stream(
         text: String,
-        targetLanguage: Language,
+        targetLanguage: String,
         extraGlossary: [String: String]
     ) -> AsyncStream<TranslationEvent> {
         AsyncStream { continuation in
@@ -71,7 +71,7 @@ nonisolated final class TranslationService: Sendable {
 
                     let body: [String: Any] = [
                         "text": text,
-                        "targetLanguage": targetLanguage.rawValue,
+                        "targetLanguage": targetLanguage,
                         "extraGlossary": extraGlossary,
                         "anonymousId": guestId,
                     ]
@@ -163,8 +163,8 @@ nonisolated final class TranslationService: Sendable {
 
     /// Non-streaming fallback via the Rork toolkit LLM, mirroring the Expo
     /// client-side generateText fallback.
-    func fallbackTranslate(text: String, toZomi: Bool) async throws -> String {
-        let prompt = ZomiPrompt.fallbackPrompt(text: text, toZomi: toZomi)
+    func fallbackTranslate(text: String, sourceLanguage: String, targetLanguage: String) async throws -> String {
+        let prompt = ZomiPrompt.fallbackPrompt(text: text, sourceLanguage: sourceLanguage, targetLanguage: targetLanguage)
         return try await ToolkitService.shared.generateText(prompt: prompt)
     }
 }

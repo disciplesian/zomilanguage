@@ -77,7 +77,7 @@ final class TranslationStore {
         load()
     }
 
-    func lookup(text: String, target: Language) -> SavedTranslation? {
+    func lookup(text: String, target: String) -> SavedTranslation? {
         let k = SavedTranslation.makeCacheKey(text: text, target: target)
         return entries.first { $0.cacheKey == k }
     }

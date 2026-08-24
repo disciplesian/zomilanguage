@@ -46,16 +46,39 @@ nonisolated enum ZomiPrompt {
     ]
 
     /// Plain-text fallback prompt for the Rork toolkit fallback path.
-    static func fallbackPrompt(text: String, toZomi: Bool) -> String {
+    /// `sourceLanguage`/`targetLanguage` are catalog codes ("zomi", "english",
+    /// "burmese", …).
+    static func fallbackPrompt(text: String, sourceLanguage: String, targetLanguage: String) -> String {
         let glossaryLines = glossary
             .map { "- \"\($0.key)\" = \($0.value)" }
             .sorted()
             .joined(separator: "\n")
         let exampleLines = examples
-            .map { toZomi ? "- \"\($0.source)\" = \"\($0.target)\"" : "- \"\($0.target)\" = \"\($0.source)\"" }
+            .map { "- \"\($0.source)\" = \"\($0.target)\"" }
             .joined(separator: "\n")
 
-        if !toZomi {
+        if targetLanguage == "zomi" {
+            return """
+            You are a professional English to Zomi (ISO 639-3: ctd) translator.
+            Use EXCLUSIVELY standard Zomi (ISO 639-3: ctd). NEVER use Paite, Mizo, Hakha Chin, Falam, or any other related variety.
+            Translate meaning, not words. Never omit, add, or explain.
+
+            ZOMI GLOSSARY:
+            \(glossaryLines)
+
+            GRAMMAR: SOV word order (Subject-Object-Verb); negation with "kei"/"lo" after the verb; future "ding", past "zo", progressive "lai"; questions end with "hiam"/"maw".
+            STYLE: Detect the register of the input — dictionary word, everyday sentence, song lyrics, news, scripture/theology, prayer/religious, or poetry — and match it in Zomi. Use terminology consistent with the Zomi Bible and hymnal for religious text. Preserve line breaks for songs and poetry.
+
+            EXAMPLES:
+            \(exampleLines)
+
+            Translate: "\(text)"
+
+            Output ONLY the Zomi translation:
+            """
+        }
+
+        if targetLanguage == "english" {
             return """
             You are a professional Zomi (ISO 639-3: ctd) to English translator.
             Use EXCLUSIVELY standard Zomi (ISO 639-3: ctd). No related variety (Paite, Mizo, Hakha, Falam, Lai, Mara).
@@ -74,23 +97,17 @@ nonisolated enum ZomiPrompt {
             """
         }
 
+        // Custom target language: name both languages explicitly.
+        let sourceName = sourceLanguage == "zomi" ? "Zomi (ISO 639-3: ctd)" : LanguageCatalog.label(sourceLanguage)
+        let targetName = LanguageCatalog.label(targetLanguage)
         return """
-        You are a professional English to Zomi (ISO 639-3: ctd) translator.
-        Use EXCLUSIVELY standard Zomi (ISO 639-3: ctd). NEVER use Paite, Mizo, Hakha Chin, Falam, or any other related variety.
+        You are a professional \(sourceName) to \(targetName) translator.
         Translate meaning, not words. Never omit, add, or explain.
-
-        ZOMI GLOSSARY:
-        \(glossaryLines)
-
-        GRAMMAR: SOV word order (Subject-Object-Verb); negation with "kei"/"lo" after the verb; future "ding", past "zo", progressive "lai"; questions end with "hiam"/"maw".
-        STYLE: Detect the register of the input — dictionary word, everyday sentence, song lyrics, news, scripture/theology, prayer/religious, or poetry — and match it in Zomi. Use terminology consistent with the Zomi Bible and hymnal for religious text. Preserve line breaks for songs and poetry.
-
-        EXAMPLES:
-        \(exampleLines)
+        STYLE: Match the register of the input — dictionary word, everyday sentence, song lyrics, news, scripture/theology, prayer/religious, or poetry — and mirror it in \(targetName). Preserve line breaks for songs and poetry.
 
         Translate: "\(text)"
 
-        Output ONLY the Zomi translation:
+        Output ONLY the \(targetName) translation:
         """
     }
 }

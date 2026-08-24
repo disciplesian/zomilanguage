@@ -24,25 +24,14 @@ nonisolated struct GlossaryTerm: Identifiable, Codable, Equatable {
     }
 }
 
-nonisolated enum Language: String, Codable {
-    case zomi
-    case english
-
-    var label: String {
-        switch self {
-        case .zomi: return "Zomi"
-        case .english: return "English"
-        }
-    }
-}
-
 /// A saved translation — powers both the offline cache and the History tab.
+/// Language fields are catalog codes ("zomi", "english", "burmese", …).
 nonisolated struct SavedTranslation: Identifiable, Codable, Equatable {
     let id: String
     let sourceText: String
     let translatedText: String
-    let sourceLanguage: Language
-    let targetLanguage: Language
+    let sourceLanguage: String
+    let targetLanguage: String
     let confidence: Int
     let model: String?
     let createdAt: Date
@@ -51,8 +40,8 @@ nonisolated struct SavedTranslation: Identifiable, Codable, Equatable {
     init(
         sourceText: String,
         translatedText: String,
-        sourceLanguage: Language,
-        targetLanguage: Language,
+        sourceLanguage: String,
+        targetLanguage: String,
         confidence: Int,
         model: String?
     ) {
@@ -72,8 +61,8 @@ nonisolated struct SavedTranslation: Identifiable, Codable, Equatable {
         Self.makeCacheKey(text: sourceText, target: targetLanguage)
     }
 
-    static func makeCacheKey(text: String, target: Language) -> String {
-        "\(target.rawValue)::\(text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())"
+    static func makeCacheKey(text: String, target: String) -> String {
+        "\(target)::\(text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())"
     }
 }
 
