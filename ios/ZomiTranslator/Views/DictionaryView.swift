@@ -308,16 +308,24 @@ struct DictionaryView: View {
             HStack(alignment: .center, spacing: 10) {
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(spacing: 8) {
-                        Text(entry.english)
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(colors.text)
+                        highlightedText(
+                            entry.english,
+                            size: 16,
+                            baseWeight: .bold,
+                            baseColor: colors.text,
+                            matchColor: colors.primary
+                        )
                         posChip(entry)
                         verifiedBadge
                     }
-                    Text(entry.zomi)
-                        .font(.system(size: 15))
-                        .foregroundStyle(colors.primaryLight)
-                        .multilineTextAlignment(.leading)
+                    highlightedText(
+                        entry.zomi,
+                        size: 15,
+                        baseWeight: .regular,
+                        baseColor: colors.primaryLight,
+                        matchColor: colors.text
+                    )
+                    .multilineTextAlignment(.leading)
                 }
                 Spacer(minLength: 8)
                 Image(systemName: "doc.on.doc")
@@ -336,6 +344,52 @@ struct DictionaryView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(entry.english), \(entry.pos), \(entry.zomi). Verified. Tap to view details.")
+    }
+
+    /// Renders text with every case-insensitive occurrence of the current
+    /// search query bolded and accented, so the matching substring stands out
+    /// inside the word.
+    private func highlightedText(
+        _ text: String,
+        size: CGFloat,
+        baseWeight: Font.Weight,
+        baseColor: Color,
+        matchColor: Color
+    ) -> Text {
+        func baseSegment(_ s: Substring) -> Text {
+            Text(s).font(.system(size: size, weight: baseWeight)).foregroundStyle(baseColor)
+        }
+        func matchSegment(_ s: Substring) -> Text {
+            Text(s).font(.system(size: size, weight: .heavy)).foregroundStyle(matchColor)
+        }
+
+        let query = model.trimmedQuery
+        guard !query.isEmpty,
+              let first = text.range(of: query, options: .caseInsensitive)
+        else {
+            return Text(text).font(.system(size: size, weight: baseWeight)).foregroundStyle(baseColor)
+        }
+
+        var combined: Text?
+        var start = text.startIndex
+        var range: Range<String.Index>? = first
+        while let r = range {
+            if r.lowerBound > start {
+                let segment = baseSegment(text[start..<r.lowerBound])
+                combined = combined.map { $0 + segment } ?? segment
+            }
+            let match = matchSegment(text[r])
+            combined = combined.map { $0 + match } ?? match
+            start = r.upperBound
+            range = start < text.endIndex
+                ? text.range(of: query, options: .caseInsensitive, range: start..<text.endIndex)
+                : nil
+        }
+        if start < text.endIndex {
+            let segment = baseSegment(text[start...])
+            combined = combined.map { $0 + segment } ?? segment
+        }
+        return combined ?? Text(text).font(.system(size: size, weight: baseWeight)).foregroundStyle(baseColor)
     }
 
     private func posChip(_ entry: DictionaryEntry) -> some View {

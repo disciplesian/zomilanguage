@@ -53,6 +53,25 @@ const AI_DEBOUNCE_MS = 700;
 /** Entries shown per letter in browse mode before the user expands the list. */
 const BROWSE_PREVIEW_COUNT = 4;
 
+/** Splits text into segments so the part matching the current search query can
+ *  be rendered bold/accented inside the word. Case-insclusive. */
+function highlightParts(text: string, query: string): { text: string; match: boolean }[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [{ text, match: false }];
+  const parts: { text: string; match: boolean }[] = [];
+  const lower = text.toLowerCase();
+  let start = 0;
+  let idx = lower.indexOf(q);
+  while (idx !== -1) {
+    if (idx > start) parts.push({ text: text.slice(start, idx), match: false });
+    parts.push({ text: text.slice(idx, idx + q.length), match: true });
+    start = idx + q.length;
+    idx = lower.indexOf(q, start);
+  }
+  if (start < text.length) parts.push({ text: text.slice(start), match: false });
+  return parts.length > 0 ? parts : [{ text, match: false }];
+}
+
 export default function DictionaryScreen() {
   const [query, setQuery] = useState('');
   const [direction, setDirection] = useState<Direction>('en-zo');
@@ -244,7 +263,17 @@ export default function DictionaryScreen() {
       >
         <View style={styles.entryTop}>
           <View style={styles.entryHeadRow}>
-            <Text style={styles.english}>{item.english}</Text>
+            <Text style={styles.english}>
+              {highlightParts(item.english, query).map((part, i) =>
+                part.match ? (
+                  <Text key={i} style={styles.englishMatch}>
+                    {part.text}
+                  </Text>
+                ) : (
+                  <Text key={i}>{part.text}</Text>
+                )
+              )}
+            </Text>
             <View
               style={[
                 styles.posChip,
@@ -260,14 +289,24 @@ export default function DictionaryScreen() {
               <Text style={styles.verifiedText}>Verified</Text>
             </View>
           </View>
-          <Text style={styles.zomi}>{item.zomi}</Text>
+          <Text style={styles.zomi}>
+            {highlightParts(item.zomi, query).map((part, i) =>
+              part.match ? (
+                <Text key={i} style={styles.zomiMatch}>
+                  {part.text}
+                </Text>
+              ) : (
+                <Text key={i}>{part.text}</Text>
+              )
+            )}
+          </Text>
         </View>
         <View style={styles.copyIcon}>
           <ClipboardIcon size={16} color={Colors.textMuted} />
         </View>
       </TouchableOpacity>
     ),
-    [openDetail]
+    [openDetail, query]
   );
 
   const trimmed = query.trim();
@@ -900,6 +939,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.text,
   },
+  englishMatch: {
+    fontWeight: '800',
+    color: Colors.primary,
+  },
   posChip: {
     paddingHorizontal: 8,
     paddingVertical: 2,
@@ -934,6 +977,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.primaryLight,
     lineHeight: 21,
+  },
+  zomiMatch: {
+    fontWeight: '700',
+    color: Colors.text,
   },
   copyIcon: {
     padding: 8,

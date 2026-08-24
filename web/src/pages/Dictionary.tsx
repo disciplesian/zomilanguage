@@ -47,6 +47,25 @@ const AI_DEBOUNCE_MS = 700;
 /** Entries shown per letter in browse mode before the user expands the list. */
 const BROWSE_PREVIEW_COUNT = 4;
 
+/** Splits text into segments so the part matching the current search query can
+ *  be rendered bold/accented inside the word. Case-insensitive. */
+function highlightParts(text: string, query: string): { text: string; match: boolean }[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [{ text, match: false }];
+  const parts: { text: string; match: boolean }[] = [];
+  const lower = text.toLowerCase();
+  let start = 0;
+  let idx = lower.indexOf(q);
+  while (idx !== -1) {
+    if (idx > start) parts.push({ text: text.slice(start, idx), match: false });
+    parts.push({ text: text.slice(idx, idx + q.length), match: true });
+    start = idx + q.length;
+    idx = lower.indexOf(q, start);
+  }
+  if (start < text.length) parts.push({ text: text.slice(start), match: false });
+  return parts.length > 0 ? parts : [{ text, match: false }];
+}
+
 const OFFLINE_MESSAGE =
   'You appear to be offline. The verified dictionary still works — reconnect for AI answers.';
 
@@ -399,6 +418,7 @@ export default function Dictionary() {
               <ResultRow
                 key={`${selectedLetter}-${i}-${entry.english}-${entry.pos}-${entry.zomi}`}
                 entry={entry}
+                query={trimmed}
                 onOpen={setDetail}
                 onCopy={copy}
                 copyIcon={copyIcon(entry.zomi)}
@@ -586,15 +606,29 @@ export default function Dictionary() {
 
 function ResultRow({
   entry,
+  query,
   onOpen,
   onCopy,
   copyIcon,
 }: {
   entry: DictionaryEntry;
+  /** Current search input — matching substrings are rendered bold/accented. */
+  query: string;
   onOpen: (entry: DictionaryEntry) => void;
   onCopy: (text: string) => void;
   copyIcon: React.ReactNode;
 }) {
+  /** Renders text with every occurrence of the query bolded and accented. */
+  const highlight = (text: string, matchClass: string) =>
+    highlightParts(text, query).map((part, i) =>
+      part.match ? (
+        <mark key={i} className={`bg-transparent font-extrabold ${matchClass}`}>
+          {part.text}
+        </mark>
+      ) : (
+        <span key={i}>{part.text}</span>
+      )
+    );
   const color = CATEGORY_COLORS[entry.category] ?? '#9BA3AF';
   return (
     <div
@@ -612,7 +646,7 @@ function ResultRow({
     >
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-base font-bold text-white">{entry.english}</span>
+          <span className="text-base font-bold text-white">{highlight(entry.english, 'text-[#00f0ff]')}</span>
           <span
             className="rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
             style={{ color, borderColor: `${color}55`, backgroundColor: `${color}22` }}
@@ -623,7 +657,7 @@ function ResultRow({
             <BadgeCheck className="h-3 w-3" /> Verified
           </span>
         </div>
-        <p className="mt-1.5 text-[15px] leading-relaxed text-[#80f7ff]">{entry.zomi}</p>
+        <p className="mt-1.5 text-[15px] leading-relaxed text-[#80f7ff]">{highlight(entry.zomi, 'text-white')}</p>
       </div>
       <button
         type="button"

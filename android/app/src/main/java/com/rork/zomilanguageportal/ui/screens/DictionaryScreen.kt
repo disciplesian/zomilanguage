@@ -40,7 +40,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -60,6 +63,26 @@ import com.rork.zomilanguageportal.ui.theme.PortalColors
 
 /** Entries shown per letter in browse mode before the user expands the list. */
 private const val BROWSE_PREVIEW_COUNT = 4
+
+/** Renders text with every occurrence of the query bolded and accented, so the
+ *  matching substring stands out inside the word. Case-insensitive. */
+private fun highlighted(text: String, query: String, matchColor: Color): AnnotatedString {
+    val q = query.trim().lowercase()
+    if (q.isEmpty()) return AnnotatedString(text)
+    return buildAnnotatedString {
+        var start = 0
+        var idx = text.indexOf(q, startIndex = start, ignoreCase = true)
+        while (idx != -1) {
+            if (idx > start) append(text.substring(start, idx))
+            withStyle(SpanStyle(fontWeight = FontWeight.ExtraBold, color = matchColor)) {
+                append(text.substring(idx, idx + q.length))
+            }
+            start = idx + q.length
+            idx = text.indexOf(q, startIndex = start, ignoreCase = true)
+        }
+        if (start < text.length) append(text.substring(start))
+    }
+}
 
 /** Chip color per part-of-speech category, tuned for the dark portal theme. */
 private fun categoryColor(category: String): Color = when (category) {
@@ -236,7 +259,7 @@ fun DictionaryScreen(viewModel: DictionaryViewModel = viewModel()) {
                 visibleEntries.size,
                 key = { i -> "$i|${visibleEntries[i].english}|${visibleEntries[i].zomi}" },
             ) { i ->
-                EntryRow(visibleEntries[i]) { viewModel.openDetail(it) }
+                EntryRow(visibleEntries[i], trimmed) { viewModel.openDetail(it) }
             }
             if (state.browseEntries.size > BROWSE_PREVIEW_COUNT) {
                 item {
@@ -266,7 +289,7 @@ fun DictionaryScreen(viewModel: DictionaryViewModel = viewModel()) {
             }
         } else {
             items(state.results.size, key = { i -> "${state.results[i].english}|${state.results[i].pos}|${state.results[i].zomi}" }) { i ->
-                EntryRow(state.results[i]) { viewModel.openDetail(it) }
+                EntryRow(state.results[i], trimmed) { viewModel.openDetail(it) }
             }
         }
 
@@ -399,7 +422,7 @@ private fun LetterIndex(letters: List<String>, selected: String, onSelect: (Stri
 }
 
 @Composable
-private fun EntryRow(entry: DictionaryEntry, onOpen: (DictionaryEntry) -> Unit) {
+private fun EntryRow(entry: DictionaryEntry, query: String, onOpen: (DictionaryEntry) -> Unit) {
     val posColor = categoryColor(entry.category)
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -416,7 +439,12 @@ private fun EntryRow(entry: DictionaryEntry, onOpen: (DictionaryEntry) -> Unit) 
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(entry.english, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PortalColors.TextPrimary)
+                Text(
+                    highlighted(entry.english, query, PortalColors.Cyan),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = PortalColors.TextPrimary,
+                )
                 Text(
                     entry.pos.ifEmpty { entry.category },
                     fontSize = 10.sp,
@@ -439,7 +467,7 @@ private fun EntryRow(entry: DictionaryEntry, onOpen: (DictionaryEntry) -> Unit) 
                 }
             }
             Text(
-                entry.zomi,
+                highlighted(entry.zomi, query, PortalColors.TextPrimary),
                 fontSize = 15.sp,
                 color = Color(0xFF80F7FF),
                 modifier = Modifier.padding(top = 4.dp),
