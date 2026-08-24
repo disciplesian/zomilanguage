@@ -1,0 +1,75 @@
+import Foundation
+
+/// One row of the bundled English → Zomi dictionary (10,620 human-verified entries).
+nonisolated struct DictionaryEntry: Identifiable, Hashable {
+    let english: String
+    /// Raw part of speech exactly as recorded in the dataset (e.g. "pas. part.").
+    let pos: String
+    let zomi: String
+    let category: String
+
+    var id: String { "\(english)|\(pos)|\(zomi)" }
+}
+
+/// Loader and search index for the bundled dictionary JSON.
+nonisolated enum DictionaryData {
+    struct Payload: Decodable {
+        let version: Int
+        let count: Int
+        let entries: [[String]]
+    }
+
+    /// Cached decoded entries (loaded once per process).
+    nonisolated(unsafe) private static var cached: [DictionaryEntry]?
+    private static let lock = NSLock()
+
+    static func load() -> [DictionaryEntry] {
+        lock.lock()
+        defer { lock.unlock() }
+        if let cached { return cached }
+        guard let url = Bundle.main.url(forResource: "dictionary", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let payload = try? JSONDecoder().decode(Payload.self, from: data)
+        else {
+            return []
+        }
+        let entries: [DictionaryEntry] = payload.entries.compactMap { (row: [String]) -> DictionaryEntry? in
+            guard row.count >= 4 else { return nil }
+            return DictionaryEntry(english: row[0], pos: row[1], zomi: row[2], category: row[3])
+        }
+        cached = entries
+        return entries
+    }
+
+    /// Rank matches: exact English → English prefix → English contains → exact Zomi → Zomi prefix → Zomi contains.
+    static func search(_ query: String, limit: Int = 60) -> [DictionaryEntry] {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !q.isEmpty else { return [] }
+        var scored: [(entry: DictionaryEntry, score: Int, index: Int)] = []
+        let all = load()
+        for (i, e) in all.enumerated() {
+            let en = e.english.lowercased()
+            let zo = e.zomi.lowercased()
+            let score: Int
+            if en == q { score = 0 }
+            else if en.hasPrefix(q) { score = 1 }
+            else if en.contains(q) { score = 2 }
+            else if zo == q { score = 3 }
+            else if zo.hasPrefix(q) { score = 4 }
+            else if zo.contains(q) { score = 5 }
+            else { continue }
+            scored.append((e, score, i))
+        }
+        scored.sort { $0.score != $1.score ? $0.score < $1.score : $0.index < $1.index }
+        return Array(scored.prefix(limit).map(\.entry))
+    }
+
+    /// True when the query matches an entry exactly (gates the AI fallback).
+    static func hasExactMatch(_ query: String) -> Bool {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !q.isEmpty else { return true }
+        return load().contains {
+            $0.english.lowercased() == q || $0.zomi.lowercased() == q
+        }
+    }
+}

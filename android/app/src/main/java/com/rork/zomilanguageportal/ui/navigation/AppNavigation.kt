@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.Icon
@@ -33,6 +34,7 @@ import com.rork.zomilanguageportal.ui.components.SignInPanel
 import com.rork.zomilanguageportal.ui.screens.AboutScreen
 import com.rork.zomilanguageportal.ui.screens.AccountScreen
 import com.rork.zomilanguageportal.ui.screens.AdminScreen
+import com.rork.zomilanguageportal.ui.screens.DictionaryScreen
 import com.rork.zomilanguageportal.ui.screens.TranslateScreen
 import com.rork.zomilanguageportal.ui.theme.PortalColors
 import kotlinx.coroutines.launch
@@ -43,6 +45,7 @@ private data class Destination(val route: String, val label: String, val icon: I
 
 private val DESTINATIONS = listOf(
     Destination("translate", "Translate", Icons.Filled.Translate),
+    Destination("dictionary", "Dictionary", Icons.Filled.MenuBook),
     Destination("account", "Account", Icons.Filled.Person),
     Destination("admin", "Admin", Icons.Filled.AdminPanelSettings),
     Destination("about", "About", Icons.Filled.Info),
@@ -119,6 +122,7 @@ fun AppNavigation() {
                     modifier = Modifier.padding(padding),
                 ) {
                     composable("translate") { TranslateScreen() }
+                    composable("dictionary") { DictionaryScreen() }
                     composable("account") {
                         AccountScreen(onOpenAdmin = { navController.navigate("admin") })
                     }

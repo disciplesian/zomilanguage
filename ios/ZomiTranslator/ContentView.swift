@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Root tab bar — clone of the Expo (tabs) layout:
-/// Translate · Tools · History · Settings.
+/// Translate · Dictionary · Tools · History · Settings.
 struct ContentView: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(\.colorScheme) private var systemColorScheme
@@ -14,6 +14,15 @@ struct ContentView: View {
             }
             .tabItem {
                 Label("Translate", systemImage: "character.bubble")
+            }
+
+            NavigationStack {
+                DictionaryView()
+                    .navigationTitle("Dictionary")
+                    .navigationBarTitleDisplayMode(.inline)
+            }
+            .tabItem {
+                Label("Dictionary", systemImage: "book.fill")
             }
 
             NavigationStack {

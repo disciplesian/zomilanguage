@@ -1,5 +1,5 @@
 import { Tabs } from "expo-router";
-import { Languages, Settings, Wrench, History } from "lucide-react-native";
+import { Languages, Settings, Wrench, History, BookOpen } from "lucide-react-native";
 import React, { useMemo } from "react";
 import { Platform, Dimensions } from "react-native";
 
@@ -70,6 +70,14 @@ export default function TabLayout() {
         options={{
           title: "Translate",
           tabBarIcon: ({ color, size }) => <Languages color={color} size={size} />,
+        }}
+      />
+
+      <Tabs.Screen
+        name="dictionary"
+        options={{
+          title: "Dictionary",
+          tabBarIcon: ({ color, size }) => <BookOpen color={color} size={size} />,
         }}
       />
 

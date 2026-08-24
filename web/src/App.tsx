@@ -7,6 +7,7 @@ import { AuthProvider } from "@/lib/auth";
 
 import Index from "./pages/Index";
 import Translate from "./pages/Translate";
+import Dictionary from "./pages/Dictionary";
 import Account from "./pages/Account";
 import Admin from "./pages/Admin";
 import Support from "./pages/Support";
@@ -31,6 +32,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/translate" element={<Translate />} />
+            <Route path="/dictionary" element={<Dictionary />} />
             <Route path="/account" element={<Account />} />
             <Route path="/admin" element={<Admin />} />
             <Route path="/support" element={<Support />} />
