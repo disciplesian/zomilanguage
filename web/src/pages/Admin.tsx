@@ -18,6 +18,7 @@ import {
 
 import { SiteLayout, GlassCard, RoleBadge } from '@/components/SiteLayout';
 import { SignInPanel } from '@/components/SignInPanel';
+import DictionaryManager from '@/components/admin/DictionaryManager';
 import { useAuth } from '@/lib/auth';
 import {
   fetchAdminOverview,
@@ -335,6 +336,9 @@ const Admin = () => {
             </div>
           )}
         </GlassCard>
+
+        {/* Dictionary dataset manager */}
+        <DictionaryManager token={token} />
 
         {/* Top translators */}
         {overview && overview.topUsers.length > 0 && (

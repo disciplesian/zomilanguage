@@ -756,4 +756,141 @@ app.post("/admin/verification", async (c) => {
   }
 });
 
+/** Admin: status of the published dictionary dataset (light — no payload). */
+app.get("/admin/dictionary", async (c) => {
+  const guard = await requireAdmin(c);
+  if (!guard.ok) return guard.response;
+  try {
+    const res = await guard.db.query<[Record<string, unknown>[]]>(
+      "SELECT version, count, updatedAt, updatedBy, note, fileName FROM dictionary_dataset:latest"
+    );
+    const row = res[0]?.[0];
+    if (!row) {
+      return c.json({ available: false });
+    }
+    return c.json({
+      available: true,
+      version: Number(row.version ?? 0),
+      count: Number(row.count ?? 0),
+      updatedAt: String(row.updatedAt ?? ""),
+      updatedBy: String(row.updatedBy ?? ""),
+      note: (row.note as string | null) || null,
+      fileName: (row.fileName as string | null) || null,
+    });
+  } catch (err) {
+    console.error("[admin] dictionary status failed", err);
+    return c.json({ error: "dictionary_status_failed" }, 500);
+  }
+});
+
+const MAX_DICTIONARY_ENTRIES = 100000;
+const MAX_DICTIONARY_CELL = 1000;
+
+/** Admin: publish a new version of the dictionary dataset.
+ *  Body: { payload: string (JSON with an entries array), fileName?, note? }. */
+app.post("/admin/dictionary/import", async (c) => {
+  const guard = await requireAdmin(c);
+  if (!guard.ok) return guard.response;
+
+  let body: { payload?: unknown; fileName?: unknown; note?: unknown } = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_json" }, 400);
+  }
+  if (typeof body.payload !== "string" || !body.payload.trim()) {
+    return c.json({ error: "missing_payload" }, 400);
+  }
+
+  let parsed: { entries?: unknown };
+  try {
+    parsed = JSON.parse(body.payload);
+  } catch {
+    return c.json({ error: "invalid_payload_json" }, 400);
+  }
+  const rawEntries = parsed.entries;
+  if (!Array.isArray(rawEntries) || rawEntries.length === 0) {
+    return c.json({ error: "invalid_entries" }, 400);
+  }
+  if (rawEntries.length > MAX_DICTIONARY_ENTRIES) {
+    return c.json({ error: "too_many_entries" }, 400);
+  }
+
+  const entries: string[][] = [];
+  for (const row of rawEntries) {
+    if (!Array.isArray(row) || row.length < 3) {
+      return c.json({ error: "invalid_row_format" }, 400);
+    }
+    const clean = row.map((cell: unknown) => (typeof cell === "string" ? cell : ""));
+    const english = clean[0].trim();
+    const pos = (clean[1] ?? "").trim();
+    const zomi = clean[2].trim();
+    const category = clean.length >= 4 && clean[3].trim() ? clean[3].trim() : "other";
+    if (!english || !zomi) {
+      return c.json({ error: "invalid_row_content" }, 400);
+    }
+    if ([english, pos, zomi, category].some((v) => v.length > MAX_DICTIONARY_CELL)) {
+      return c.json({ error: "row_too_long" }, 400);
+    }
+    entries.push([english, pos, zomi, category]);
+  }
+
+  const payload = JSON.stringify({ version: 1, count: entries.length, entries });
+  const now = new Date().toISOString();
+  const fileName = typeof body.fileName === "string" ? body.fileName.slice(0, 200) : "";
+  const note = typeof body.note === "string" ? body.note.slice(0, 500) : "";
+
+  try {
+    const prevRes = await guard.db.query<[{ version?: number }[]]>(
+      "SELECT version FROM dictionary_dataset:latest"
+    );
+    const version = Number(prevRes[0]?.[0]?.version ?? 0) + 1;
+    await guard.db.update("dictionary_dataset:latest", {
+      version,
+      count: entries.length,
+      payload,
+      updatedAt: now,
+      updatedBy: guard.auth.email,
+      note,
+      fileName,
+    });
+    await guard.db.create("dictionary_imports", {
+      version,
+      fileName,
+      note,
+      totalRows: entries.length,
+      status: "completed",
+      createdBy: guard.auth.email,
+      createdAt: now,
+    });
+    return c.json({ success: true, version, count: entries.length });
+  } catch (err) {
+    console.error("[admin] dictionary import failed", err);
+    return c.json({ error: "import_failed" }, 500);
+  }
+});
+
+/** Public: latest published dictionary dataset, so app builds can pick up
+ *  updates published from the admin dashboard without re-importing by hand. */
+app.get("/dictionary/latest", async (c) => {
+  try {
+    const db = await getDB();
+    const res = await db.query<[Record<string, unknown>[]]>(
+      "SELECT version, count, updatedAt, payload FROM dictionary_dataset:latest"
+    );
+    const row = res[0]?.[0];
+    if (!row) return c.json({ available: false });
+    return c.json({
+      available: true,
+      version: Number(row.version ?? 0),
+      count: Number(row.count ?? 0),
+      updatedAt: String(row.updatedAt ?? ""),
+      payload: String(row.payload ?? ""),
+    });
+  } catch (err) {
+    console.error("[public] dictionary latest failed", err);
+    return c.json({ available: false });
+  }
+});
+
 export default app;

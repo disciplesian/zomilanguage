@@ -138,6 +138,48 @@ export async function decideAdminVerification(
   });
 }
 
+export interface DictionaryDatasetStatus {
+  available: boolean;
+  version: number;
+  count: number;
+  updatedAt: string;
+  updatedBy: string;
+  note: string | null;
+  fileName: string | null;
+}
+
+/** Admin: status of the published dictionary dataset (version, count, updated). */
+export async function fetchAdminDictionary(token: string): Promise<DictionaryDatasetStatus> {
+  const body = await portalFetch('/api/admin/dictionary', token);
+  if (body.available !== true) {
+    return { available: false, version: 0, count: 0, updatedAt: '', updatedBy: '', note: null, fileName: null };
+  }
+  return {
+    available: true,
+    version: Number(body.version ?? 0),
+    count: Number(body.count ?? 0),
+    updatedAt: String(body.updatedAt ?? ''),
+    updatedBy: String(body.updatedBy ?? ''),
+    note: (body.note as string | null) || null,
+    fileName: (body.fileName as string | null) || null,
+  };
+}
+
+/** Admin: publish a new dictionary dataset version (payload is the normalized
+ *  dictionary JSON built from the uploaded file). */
+export async function importAdminDictionary(
+  token: string,
+  payload: string,
+  fileName: string,
+  note: string
+): Promise<{ version: number; count: number }> {
+  const body = await portalFetch('/api/admin/dictionary/import', token, {
+    method: 'POST',
+    body: JSON.stringify({ payload, fileName, note }),
+  });
+  return { version: Number(body.version ?? 0), count: Number(body.count ?? 0) };
+}
+
 export interface TranslationResult {
   text: string;
   model: string | null;
