@@ -23,6 +23,10 @@ final class TranslatorViewModel {
     private(set) var quality = 0
     private(set) var errorText: String?
 
+    /// Completed translations from the current app session (chronological,
+    /// newest last) — powers the on-device PDF session report.
+    private(set) var sessionTranslations: [SavedTranslation] = []
+
     var translationStore: TranslationStore?
     var glossaryStore: GlossaryStore?
 
@@ -88,6 +92,13 @@ final class TranslatorViewModel {
         translate(text: inputText, direction: isZomiToEnglish)
     }
 
+    /// Records a completed translation in the current session log, replacing
+    /// any earlier occurrence of the same text so retries don't duplicate.
+    private func recordSession(_ translation: SavedTranslation) {
+        sessionTranslations.removeAll { $0.cacheKey == translation.cacheKey }
+        sessionTranslations.append(translation)
+    }
+
     private func scheduleTranslation() {
         debounceTask?.cancel()
         let text = inputText
@@ -149,6 +160,7 @@ final class TranslatorViewModel {
             outputText = hit.translatedText
             quality = hit.confidence
             isTranslating = false
+            recordSession(hit)
             if hit.confidence >= 90 {
                 isStreaming = false
                 return
@@ -197,6 +209,14 @@ final class TranslatorViewModel {
                         confidence: confidence,
                         model: model
                     ))
+                    self.recordSession(SavedTranslation(
+                        sourceText: trimmed,
+                        translatedText: final,
+                        sourceLanguage: source,
+                        targetLanguage: target,
+                        confidence: confidence,
+                        model: model
+                    ))
                 case .failure(let message):
                     if message == "cancelled" { return }
                     if message == "word_limit_reached" {
@@ -232,6 +252,14 @@ final class TranslatorViewModel {
                 self.isTranslating = false
                 self.isStreaming = false
                 self.translationStore?.save(SavedTranslation(
+                    sourceText: trimmed,
+                    translatedText: fallback,
+                    sourceLanguage: source,
+                    targetLanguage: target,
+                    confidence: 92,
+                    model: "rork-toolkit"
+                ))
+                self.recordSession(SavedTranslation(
                     sourceText: trimmed,
                     translatedText: fallback,
                     sourceLanguage: source,

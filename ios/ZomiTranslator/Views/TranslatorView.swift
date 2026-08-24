@@ -17,6 +17,8 @@ struct TranslatorView: View {
     @State private var isFavorite = false
     @State private var showSpeedOptions = false
     @State private var showShareSheet = false
+    @State private var pdfExport: PDFShareItem?
+    @State private var isExportingPDF = false
     @State private var photoPickerItem: PhotosPickerItem?
     @State private var showCamera = false
     @State private var isExtractingText = false
@@ -67,6 +69,9 @@ struct TranslatorView: View {
         }
         .sheet(isPresented: $showShareSheet) {
             ShareSheet(items: [shareMessage])
+        }
+        .sheet(item: $pdfExport) { item in
+            ShareSheet(items: [item.url])
         }
         .alert("Zomi Translator", isPresented: Binding(
             get: { alertMessage != nil },
@@ -430,6 +435,7 @@ struct TranslatorView: View {
                             isFavorite.toggle()
                         }
                         actionIcon("square.and.arrow.up") { shareTranslation() }
+                        exportPDFButton
                         actionIcon("doc.on.doc", tint: copied ? colors.success : nil) { copyOutput() }
                         speakButton
                     }
@@ -572,6 +578,21 @@ struct TranslatorView: View {
         .clipShape(.rect(cornerRadius: 10))
     }
 
+    /// Exports the current session's translations as a formatted PDF.
+    @ViewBuilder
+    private var exportPDFButton: some View {
+        if isExportingPDF {
+            ProgressView()
+                .tint(colors.accent)
+                .frame(width: 34, height: 34)
+        } else {
+            actionIcon("arrow.down.doc") {
+                exportSessionPDF()
+            }
+            .accessibilityLabel("Export session as PDF")
+        }
+    }
+
     private var qualitySection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -659,6 +680,25 @@ struct TranslatorView: View {
         }
     }
 
+    private func exportSessionPDF() {
+        guard !viewModel.sessionTranslations.isEmpty else {
+            alertMessage = "Nothing to export yet — translate a few phrases first, then export the whole session as a PDF."
+            return
+        }
+        Haptics.light()
+        isExportingPDF = true
+        Task {
+            defer { isExportingPDF = false }
+            do {
+                let url = try PDFExportService.makeSessionPDF(viewModel.sessionTranslations)
+                Haptics.success()
+                pdfExport = PDFShareItem(url: url)
+            } catch {
+                alertMessage = "Could not create the PDF. Please try again."
+            }
+        }
+    }
+
     private func pasteFromClipboard() {
         if let text = UIPasteboard.general.string, !text.isEmpty {
             viewModel.inputText = text
@@ -701,6 +741,12 @@ struct TranslatorView: View {
 
     private func formatDuration(_ seconds: Int) -> String {
         String(format: "%d:%02d", seconds / 60, seconds % 60)
+    }
+
+    /// Identifiable wrapper so a sheet can present the exported PDF file URL.
+    private struct PDFShareItem: Identifiable {
+        let id = UUID()
+        let url: URL
     }
 }
 
