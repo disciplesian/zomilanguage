@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
-import { Languages, Menu, X, Shield, LogOut, UserRound, BadgeCheck } from 'lucide-react';
+import { Menu, X, Shield, LogOut, UserRound, BadgeCheck } from 'lucide-react';
 
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/utils';
@@ -35,12 +35,14 @@ export function SiteLayout({ children }: { children: ReactNode }) {
       <div className="relative flex min-h-screen flex-col">
         <header className="sticky top-0 z-50 border-b border-white/10 bg-[#20243a]/80 backdrop-blur-xl">
           <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-5 py-4">
-            <Link to="/" className="flex items-center gap-2.5" onClick={() => setMenuOpen(false)}>
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#00f0ff] to-[#00a8c8] shadow-[0_0_20px_rgba(0,240,255,0.35)]">
-                <Languages className="h-5 w-5 text-[#10131f]" strokeWidth={2.4} />
-              </span>
+            <Link to="/" className="flex items-center gap-3" onClick={() => setMenuOpen(false)}>
+              <img
+                src="/zomi-logo.png"
+                alt="Zomi AI Translator"
+                className="h-9 w-9 rounded-xl object-cover shadow-[0_0_20px_rgba(0,240,255,0.25)]"
+              />
               <span className="text-[15px] font-semibold tracking-tight">
-                Zomi <span className="text-[#00f0ff]">Language</span>
+                Zomi <span className="text-[#00f0ff]">AI Translator</span>
               </span>
             </Link>
 
@@ -131,11 +133,13 @@ export function SiteLayout({ children }: { children: ReactNode }) {
           <div className="mx-auto w-full max-w-6xl px-5 py-10">
             <div className="flex flex-col gap-8 md:flex-row md:justify-between">
               <div className="max-w-sm">
-                <div className="flex items-center gap-2.5">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[#00f0ff] to-[#00a8c8]">
-                    <Languages className="h-4 w-4 text-[#10131f]" strokeWidth={2.4} />
-                  </span>
-                  <span className="font-semibold">Zomi Language Portal</span>
+                <div className="flex items-center gap-3">
+                  <img
+                    src="/zomi-logo.png"
+                    alt="Zomi AI Translator"
+                    className="h-8 w-8 rounded-lg object-cover"
+                  />
+                  <span className="font-semibold">Zomi AI Translator</span>
                 </div>
                 <p className="mt-3 text-sm leading-relaxed text-white/50">
                   A members-only translation service and community portal dedicated to preserving
@@ -176,7 +180,7 @@ export function SiteLayout({ children }: { children: ReactNode }) {
             </div>
 
             <div className="mt-8 flex flex-col gap-2 border-t border-white/10 pt-6 text-xs text-white/40 sm:flex-row sm:items-center sm:justify-between">
-              <p>© {new Date().getFullYear()} Zomi Language Portal. All rights reserved.</p>
+              <p>© {new Date().getFullYear()} Zomi AI Translator. All rights reserved.</p>
               <p>Available on iOS, Android and the web.</p>
             </div>
           </div>
