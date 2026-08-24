@@ -227,3 +227,14 @@ export async function portalProfileFor(db: Surreal, auth: AuthInfo): Promise<Por
   const translationCount = await translationCountFor(db, auth.userId);
   return { ...profile, translationCount };
 }
+
+/**
+ * Permanently deletes a signed-in user's account and all associated data.
+ * This is required for App Store guideline 5.1.1(v) account deletion.
+ */
+export async function deletePortalUser(db: Surreal, auth: AuthInfo): Promise<void> {
+  await db.query("DELETE FROM portal_users WHERE userId = $userId", { userId: auth.userId });
+  await db.query("DELETE FROM translation_logs WHERE userId = $userId", { userId: auth.userId });
+  await db.query("DELETE FROM user_sync WHERE userId = $userId", { userId: auth.userId });
+  await db.query("DELETE FROM verification_requests WHERE userId = $userId", { userId: auth.userId });
+}

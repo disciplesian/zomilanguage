@@ -70,7 +70,7 @@ struct AboutView: View {
                 Text("Zomi Translator")
                     .font(.system(size: 24, weight: .bold))
                     .foregroundStyle(colors.text)
-                Text("Version 2.3.0")
+                Text("Version 1.0.0")
                     .font(.system(size: 13))
                     .foregroundStyle(colors.textMuted)
             }
@@ -94,7 +94,7 @@ struct AboutView: View {
                 title: "AI-Powered Translation",
                 systemImage: "sparkles",
                 variant: .green,
-                body_: "Translations are powered by state-of-the-art AI language models with a curated Tedim glossary and grammar rules. Zomi is a low-resource language, so results keep improving — your custom glossary terms directly improve accuracy."
+                body_: "Translations are powered by Google Gemini AI. When you tap Translate, your text and any glossary terms are sent securely to Google for processing. By using translation, you consent to this processing."
             )
 
             InfoSection(
@@ -127,14 +127,14 @@ struct PrivacyView: View {
                 title: "Translation Processing",
                 systemImage: "arrow.up.arrow.down.circle",
                 variant: .purple,
-                body_: "Text you translate is sent securely to our AI translation service to generate results. Text is processed transiently and is not used to build a profile about you."
+                body_: "Text you translate is sent securely to Google Gemini AI to generate results. We do not store your translations on our servers, and they are not used to build a profile about you. You may use the app without an account; translations are stored only on your device."
             )
 
             InfoSection(
                 title: "Microphone & Camera",
                 systemImage: "mic",
                 variant: .green,
-                body_: "Voice input records audio only while you hold an active recording, and it is sent solely for transcription. Camera and photo access are used only to extract text from images you choose. Nothing is stored on our servers."
+                body_: "Voice input records audio only while you hold an active recording, and it is sent securely to the Rork AI toolkit solely for transcription. We ask for your explicit consent before the first voice recording. Camera and photo access are used only to extract text from images you choose. Nothing is stored on our servers."
             )
 
             InfoSection(

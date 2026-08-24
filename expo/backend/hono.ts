@@ -21,6 +21,7 @@ import {
   anonymousWordsUsed,
   authFromRequest,
   countWords,
+  deletePortalUser,
   ensurePortalUser,
   portalProfileFor,
   logTranslation,
@@ -391,6 +392,20 @@ app.post("/sync/pull", async (c) => {
   } catch (err) {
     console.error("[sync] pull failed", err);
     return c.json({ error: "sync_failed" }, 500);
+  }
+});
+
+/** Delete the signed-in user's account and all associated data (App Store 5.1.1(v)). */
+app.delete("/portal/me", async (c) => {
+  const auth = await authFromRequest(c.req.header("authorization"));
+  if (!auth) return c.json({ error: "unauthorized" }, 401);
+  try {
+    const db = await getDB();
+    await deletePortalUser(db, auth);
+    return c.json({ success: true });
+  } catch (err) {
+    console.error("[portal] delete account failed", err);
+    return c.json({ error: "delete_failed" }, 500);
   }
 });
 

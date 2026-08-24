@@ -37,8 +37,20 @@ struct ToolsView: View {
     @State private var isExtractingDoc = false
 
     @State private var alertMessage: String?
+    @State private var showToolsAIConsent = false
 
     private var colors: ThemeColors { theme.colors }
+
+    private var toolsAIConsentGiven: Bool {
+        UserDefaults.standard.bool(forKey: "rork_ai_tools_consent_given")
+    }
+
+    enum ToolAIAction: String, Identifiable {
+        case compare, flashcards, document
+        var id: String { rawValue }
+    }
+
+    @State private var pendingToolAIAction: ToolAIAction?
 
     enum ToolSection {
         case document, stats, compare, flashcards, quickCount
@@ -136,6 +148,15 @@ struct ToolsView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(alertMessage ?? "")
+        }
+        .alert("AI Tools Consent", isPresented: $showToolsAIConsent) {
+            Button("Agree & Continue") {
+                UserDefaults.standard.set(true, forKey: "rork_ai_tools_consent_given")
+                executePendingToolAIAction()
+            }
+            Button("Cancel", role: .cancel) { pendingToolAIAction = nil }
+        } message: {
+            Text("Document translation, comparison, and flashcard generation are powered by the Rork AI toolkit. Text you enter in these tools is sent securely to Rork for processing. By continuing, you consent to this processing.")
         }
         .onChange(of: docPickerItem) { _, newItem in
             guard let newItem else { return }
@@ -380,7 +401,7 @@ struct ToolsView: View {
                     }
 
                     Button {
-                        Task { await translateDocument() }
+                        withToolsAIConsent(action: .document) { Task { await translateDocument() } }
                     } label: {
                         HStack(spacing: 8) {
                             if isTranslatingDocument {
@@ -580,7 +601,7 @@ struct ToolsView: View {
                     gradient: [colors.warning, colors.accent],
                     isLoading: isComparing
                 ) {
-                    Task { await compareTexts() }
+                    withToolsAIConsent(action: .compare) { Task { await compareTexts() } }
                 }
 
                 if let comparisonResult {
@@ -645,7 +666,7 @@ struct ToolsView: View {
                     gradient: [colors.secondary, colors.secondary.opacity(0.7)],
                     isLoading: isGeneratingFlashcards
                 ) {
-                    Task { await generateFlashcards() }
+                    withToolsAIConsent(action: .flashcards) { Task { await generateFlashcards() } }
                 }
 
                 if !flashcards.isEmpty {
@@ -830,6 +851,25 @@ struct ToolsView: View {
                 RoundedRectangle(cornerRadius: 12)
                     .strokeBorder(colors.glassBorder, lineWidth: 1)
             }
+    }
+
+    private func withToolsAIConsent(action: ToolAIAction, perform: @escaping () -> Void) {
+        if toolsAIConsentGiven {
+            perform()
+        } else {
+            pendingToolAIAction = action
+            showToolsAIConsent = true
+        }
+    }
+
+    private func executePendingToolAIAction() {
+        guard let action = pendingToolAIAction else { return }
+        pendingToolAIAction = nil
+        switch action {
+        case .compare: Task { await compareTexts() }
+        case .flashcards: Task { await generateFlashcards() }
+        case .document: Task { await translateDocument() }
+        }
     }
 
     private func gradientButton(

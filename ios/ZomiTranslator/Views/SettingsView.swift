@@ -1,4 +1,3 @@
-import StoreKit
 import SwiftUI
 
 /// Settings screen — clone of the Expo Settings tab (Appearance selector,
@@ -7,7 +6,6 @@ struct SettingsView: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(GlossaryStore.self) private var glossary
     @Environment(TranslationStore.self) private var translations
-    @Environment(\.requestReview) private var requestReview
 
     @State private var showResetConfirm = false
     @State private var showResetDone = false
@@ -62,22 +60,6 @@ struct SettingsView: View {
                         }
                     }
 
-                    section("Community") {
-                        GlassCard(padding: 0, colors: colors, isDark: theme.isDark) {
-                            Button {
-                                Haptics.light()
-                                requestReview()
-                            } label: {
-                                settingsRow(
-                                    icon: "star",
-                                    iconTint: colors.accent,
-                                    iconBackground: colors.glassYellow,
-                                    title: "Rate Zomi Translator"
-                                )
-                            }
-                        }
-                    }
-
                     section("Data") {
                         VStack(alignment: .leading, spacing: 10) {
                             GlassCard(padding: 0, colors: colors, isDark: theme.isDark) {
@@ -113,9 +95,7 @@ struct SettingsView: View {
                                     )
                                 }
                                 divider
-                                NavigationLink {
-                                    PrivacyView()
-                                } label: {
+                                Link(destination: URL(string: "https://zomi.me/privacy")!) {
                                     settingsRow(
                                         icon: "shield",
                                         iconTint: colors.tertiary,
@@ -124,14 +104,21 @@ struct SettingsView: View {
                                     )
                                 }
                                 divider
-                                NavigationLink {
-                                    TermsView()
-                                } label: {
+                                Link(destination: URL(string: "https://zomi.me/terms")!) {
                                     settingsRow(
                                         icon: "doc.plaintext",
                                         iconTint: colors.accent,
                                         iconBackground: colors.glassYellow,
                                         title: "Terms of Service"
+                                    )
+                                }
+                                divider
+                                Link(destination: URL(string: "https://zomi.me/contact")!) {
+                                    settingsRow(
+                                        icon: "envelope",
+                                        iconTint: colors.success,
+                                        iconBackground: colors.glassGreen,
+                                        title: "Contact Support"
                                     )
                                 }
                             }

@@ -26,6 +26,20 @@ final class TranslatorViewModel {
     var translationStore: TranslationStore?
     var glossaryStore: GlossaryStore?
 
+    /// App Store guideline 5.1: explicit consent before sending user text to
+    /// a third-party AI service (Google Gemini). Persisted across launches.
+    var aiConsentGiven: Bool {
+        get { UserDefaults.standard.bool(forKey: "ai_consent_given") }
+        set { UserDefaults.standard.set(newValue, forKey: "ai_consent_given") }
+    }
+
+    /// Records user consent for AI processing and re-runs the current translation.
+    func grantAIConsent() {
+        aiConsentGiven = true
+        errorText = nil
+        scheduleTranslation()
+    }
+
     private var debounceTask: Task<Void, Never>?
     private var streamTask: Task<Void, Never>?
     private var requestId = 0
@@ -78,6 +92,11 @@ final class TranslatorViewModel {
         debounceTask?.cancel()
         let text = inputText
         let direction = isZomiToEnglish
+
+        guard aiConsentGiven else {
+            errorText = "Please agree to AI translation processing to continue."
+            return
+        }
 
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             outputText = ""

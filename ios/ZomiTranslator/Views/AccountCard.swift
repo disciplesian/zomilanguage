@@ -7,6 +7,11 @@ struct AccountCard: View {
     @Environment(AuthManager.self) private var auth
     @Environment(ThemeManager.self) private var theme
 
+    @State private var showDeleteConfirm = false
+    @State private var isDeleting = false
+    @State private var showPrivacy = false
+    @State private var showTerms = false
+
     private var colors: ThemeColors { theme.colors }
 
     var body: some View {
@@ -31,6 +36,23 @@ struct AccountCard: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(auth.errorMessage)
+        }
+        .confirmationDialog(
+            "Delete Account?",
+            isPresented: $showDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Delete My Account", role: .destructive) {
+                Haptics.warning()
+                isDeleting = true
+                Task {
+                    _ = await auth.deleteAccount()
+                    isDeleting = false
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This permanently deletes your account, saved translations, glossary, and verification status. This cannot be undone.")
         }
     }
 
@@ -78,7 +100,40 @@ struct AccountCard: View {
                         Task { await auth.signIn(provider: "apple") }
                     }
                 }
+
+                HStack(spacing: 4) {
+                    Text("By signing in, you agree to our")
+                        .font(.system(size: 12))
+                        .foregroundStyle(colors.textMuted)
+                    Button {
+                        showTerms = true
+                    } label: {
+                        Text("Terms")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(colors.accent)
+                    }
+                    .buttonStyle(.plain)
+                    Text("and")
+                        .font(.system(size: 12))
+                        .foregroundStyle(colors.textMuted)
+                    Button {
+                        showPrivacy = true
+                    } label: {
+                        Text("Privacy Policy")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(colors.accent)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity, alignment: .center)
             }
+        }
+        .sheet(isPresented: $showPrivacy) {
+            PrivacyView()
+        }
+        .sheet(isPresented: $showTerms) {
+            TermsView()
         }
     }
 
@@ -181,6 +236,35 @@ struct AccountCard: View {
             .padding(10)
             .background(Color.black.opacity(0.15))
             .clipShape(.rect(cornerRadius: 10))
+
+            if isDeleting {
+                HStack {
+                    Spacer()
+                    ProgressView()
+                        .tint(colors.accent)
+                    Spacer()
+                }
+                .padding(.vertical, 8)
+            } else {
+                Button {
+                    Haptics.warning()
+                    showDeleteConfirm = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "person.badge.minus")
+                            .font(.system(size: 14))
+                        Text("Delete Account")
+                            .font(.system(size: 14, weight: .semibold))
+                    }
+                    .foregroundStyle(Color(hex: 0xFF5A5A))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(Color(hex: 0xFF5A5A, alpha: 0.12))
+                    .clipShape(.rect(cornerRadius: 12))
+                }
+                .buttonStyle(PressableButtonStyle())
+                .accessibilityLabel("Delete account")
+            }
         }
     }
 }

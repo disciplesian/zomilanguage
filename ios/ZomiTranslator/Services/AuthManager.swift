@@ -189,6 +189,29 @@ final class AuthManager {
         user = nil
     }
 
+    /// Permanently deletes the signed-in user's account from the Rork backend
+    /// and clears all local credentials. Required for App Store guideline 5.1.1(v).
+    func deleteAccount() async -> Bool {
+        guard let token = await getAccessToken() else { return false }
+        let base = Config.EXPO_PUBLIC_RORK_API_BASE_URL
+        let baseURL = !base.isEmpty ? (base.hasSuffix("/") ? String(base.dropLast()) : base) : "https://api.rork.app"
+        guard let url = URL(string: "\(baseURL)/api/portal/me") else { return false }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else { return false }
+            await signOut()
+            return true
+        } catch {
+            setError("Account deletion failed: \(error.localizedDescription)")
+            return false
+        }
+    }
+
     /// Current access token, refreshed first if expired — for authenticated API calls.
     func getAccessToken() async -> String? {
         if let token = KeychainHelper.get("access_token"), userFromToken(token) != nil {

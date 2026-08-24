@@ -21,8 +21,18 @@ struct TranslatorView: View {
     @State private var showCamera = false
     @State private var isExtractingText = false
     @State private var alertMessage: String?
+    @State private var showAIConsent = false
+    @State private var showAudioConsent = false
 
     private var colors: ThemeColors { theme.colors }
+
+    private var aiConsentGiven: Bool {
+        UserDefaults.standard.bool(forKey: "ai_consent_given")
+    }
+
+    private var audioConsentGiven: Bool {
+        UserDefaults.standard.bool(forKey: "audio_consent_given")
+    }
 
     var body: some View {
         ZStack {
@@ -45,6 +55,9 @@ struct TranslatorView: View {
         .onAppear {
             viewModel.translationStore = translationStore
             viewModel.glossaryStore = glossaryStore
+            if !aiConsentGiven {
+                showAIConsent = true
+            }
         }
         .sheet(isPresented: $showCamera) {
             CameraPicker { image in
@@ -72,6 +85,23 @@ struct TranslatorView: View {
                 }
                 photoPickerItem = nil
             }
+        }
+        .alert("AI Translation Consent", isPresented: $showAIConsent) {
+            Button("Agree & Continue") {
+                viewModel.grantAIConsent()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Translations are powered by Google Gemini AI. When you translate, your text and any glossary terms are sent securely to Google for processing. By continuing, you consent to this processing.")
+        }
+        .alert("Voice Transcription Consent", isPresented: $showAudioConsent) {
+            Button("Agree & Continue") {
+                UserDefaults.standard.set(true, forKey: "audio_consent_given")
+                Task { await handleVoiceInput() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Voice input sends your recording to the Rork AI toolkit for transcription. By continuing, you consent to this audio processing.")
         }
     }
 
@@ -299,7 +329,13 @@ struct TranslatorView: View {
 
     private var micButton: some View {
         Button {
-            Task { await handleVoiceInput() }
+            Task {
+                if recorder.isRecording || audioConsentGiven {
+                    await handleVoiceInput()
+                } else {
+                    showAudioConsent = true
+                }
+            }
         } label: {
             Group {
                 if recorder.isTranscribing {
