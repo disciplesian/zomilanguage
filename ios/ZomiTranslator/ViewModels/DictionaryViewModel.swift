@@ -33,6 +33,14 @@ final class DictionaryViewModel {
     private(set) var aiResult: String?
     private(set) var aiError: String?
 
+    /// App Store guideline 5.1: explicit consent before an unmatched query is
+    /// sent to the AI translation service. Separate from the Translate tab's
+    /// consent so the dictionary disclosure is specific to this feature.
+    var aiConsentGiven: Bool {
+        get { UserDefaults.standard.bool(forKey: "dictionary_ai_consent_given") }
+        set { UserDefaults.standard.set(newValue, forKey: "dictionary_ai_consent_given") }
+    }
+
     var trimmedQuery: String {
         query.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -86,11 +94,21 @@ final class DictionaryViewModel {
         let direction = englishToZomi
         guard text.count >= 2, needsAI else { return }
 
+        // Guideline 5.1: never transmit the query without explicit consent —
+        // the view presents the consent alert first.
+        guard aiConsentGiven else { return }
+
         aiTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(700))
             guard !Task.isCancelled else { return }
             await self?.askAI(text: text, englishToZomi: direction)
         }
+    }
+
+    /// Records consent for AI lookups and answers the current query.
+    func grantAIConsent() {
+        aiConsentGiven = true
+        scheduleAIFallback()
     }
 
     @MainActor

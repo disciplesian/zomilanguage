@@ -7,6 +7,7 @@ import UIKit
 struct DictionaryView: View {
     @Environment(ThemeManager.self) private var theme
     @State private var model = DictionaryViewModel()
+    @State private var showAIConsent = false
 
     private var colors: ThemeColors { theme.colors }
 
@@ -55,6 +56,14 @@ struct DictionaryView: View {
         .navigationTitle("Dictionary")
         .navigationBarTitleDisplayMode(.inline)
         .onDisappear { model.cancelAI() }
+        .alert("Zomi AI Lookup Consent", isPresented: $showAIConsent) {
+            Button("Don't Allow", role: .cancel) {}
+            Button("Allow") {
+                model.grantAIConsent()
+            }
+        } message: {
+            Text("Words not found in the verified dictionary are answered by Google Gemini AI. When you use this, your search word is sent securely to Google for processing. By continuing, you consent to this processing.")
+        }
     }
 
     // MARK: Header
@@ -288,6 +297,29 @@ struct DictionaryView: View {
                         .font(.system(size: 14))
                         .foregroundStyle(colors.textSecondary)
                 }
+            } else if !model.aiConsentGiven {
+                Text("This word isn't in the verified dictionary yet. Zomi AI can answer it — your search word would be sent securely to Google Gemini AI.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(colors.textSecondary)
+                Button {
+                    showAIConsent = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 13))
+                        Text("Ask Zomi AI")
+                            .font(.system(size: 14, weight: .semibold))
+                    }
+                    .foregroundStyle(colors.accent)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 9)
+                    .background(
+                        Capsule()
+                            .fill(colors.glassYellow)
+                            .overlay(Capsule().strokeBorder(colors.glassYellowBorder))
+                    )
+                }
+                .buttonStyle(.plain)
             } else if let result = model.aiResult {
                 Text(result)
                     .font(.system(size: 17, weight: .semibold))
