@@ -99,6 +99,42 @@ export default function TranslatorScreen() {
   const recordingAnim = useRef(new Animated.Value(1)).current;
   const resultAnim = useRef(new Animated.Value(1)).current;
   const resultSlide = useRef(new Animated.Value(0)).current;
+  const toastOpacity = useRef(new Animated.Value(0)).current;
+  const toastTranslate = useRef(new Animated.Value(16)).current;
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /** Slide the toast in, hold briefly, then fade it out. */
+  const showToast = useCallback(() => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    Animated.parallel([
+      Animated.timing(toastOpacity, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.spring(toastTranslate, {
+        toValue: 0,
+        speed: 20,
+        bounciness: 6,
+        useNativeDriver: true,
+      }),
+    ]).start();
+    toastTimer.current = setTimeout(() => {
+      Animated.timing(toastOpacity, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: true,
+      }).start(() => {
+        toastTranslate.setValue(16);
+      });
+    }, 1800);
+  }, [toastOpacity, toastTranslate]);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    };
+  }, []);
 
   const { 
     speak, 
@@ -562,9 +598,10 @@ export default function TranslatorScreen() {
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
+      showToast();
       setTimeout(() => setCopied(false), 2000);
     }
-  }, [outputText]);
+  }, [outputText, showToast]);
 
   const handleClear = useCallback(() => {
     setInputText('');
@@ -1281,6 +1318,19 @@ export default function TranslatorScreen() {
         </Animated.View>
       </ScrollView>
 
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.toast,
+          { opacity: toastOpacity, transform: [{ translateY: toastTranslate }] },
+        ]}
+      >
+        <View style={styles.toastPill}>
+          <Check size={16} color={Colors.success} />
+          <Text style={styles.toastText}>Copied!</Text>
+        </View>
+      </Animated.View>
+
       <Modal
         visible={showLanguagePicker}
         transparent
@@ -1562,6 +1612,35 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textMuted,
     marginTop: 1,
+  },
+  toast: {
+    position: 'absolute',
+    bottom: 110,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  toastPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 11,
+    borderRadius: 24,
+    backgroundColor: 'rgba(24, 28, 46, 0.94)',
+    borderWidth: 1,
+    borderColor: 'rgba(74, 222, 128, 0.35)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  toastText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.text,
   },
   inputCard: {
     marginBottom: 12,
