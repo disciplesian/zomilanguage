@@ -2,6 +2,50 @@ import { z } from 'zod';
 import { createTRPCRouter, dbProcedure } from '../../create-context';
 import type { WordContribution } from '@/backend/db/schema';
 
+/** Raw word_contribution row (snake_case columns from Postgres). */
+interface WordRow {
+  id: string;
+  user_id: string;
+  zomi: string;
+  english: string;
+  pronunciation: string | null;
+  example: string | null;
+  part_of_speech: string | null;
+  category: string | null;
+  dialect_specific: string | null;
+  status: string;
+  votes: number;
+  moderator_note: string | null;
+  moderator_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+function mapWordRow(row: WordRow): WordContribution {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    zomi: row.zomi,
+    english: row.english,
+    pronunciation: row.pronunciation ?? undefined,
+    example: row.example ?? undefined,
+    partOfSpeech: row.part_of_speech ?? undefined,
+    category: row.category ?? undefined,
+    dialectSpecific: row.dialect_specific ?? undefined,
+    status: row.status as WordContribution['status'],
+    votes: row.votes,
+    moderatorNote: row.moderator_note ?? undefined,
+    moderatorId: row.moderator_id ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+/** Strips PostgREST filter syntax characters from user search input. */
+function sanitizeSearch(value: string): string {
+  return value.replace(/[%,()]/g, ' ').trim();
+}
+
 const wordsRouter = createTRPCRouter({
   list: dbProcedure
     .input(z.object({
@@ -9,31 +53,24 @@ const wordsRouter = createTRPCRouter({
       limit: z.number().min(1).max(100).default(50),
     }))
     .query(async ({ ctx, input }) => {
-      let query = 'SELECT *, (SELECT name FROM user WHERE id = userId) as contributorName FROM word_contribution WHERE true';
-      const params: Record<string, unknown> = {};
-
-      if (input.status) {
-        query += ' AND status = $status';
-        params.status = input.status;
-      } else {
-        query += ' AND status = $approved';
-        params.approved = 'approved';
-      }
-
-      query += ' ORDER BY createdAt DESC LIMIT $limit';
-      params.limit = input.limit;
-
-      const result = await ctx.db.query<[(WordContribution & { contributorName: string })[]]>(query, params);
-      return result[0] || [];
+      let q = ctx.db.client.from('word_contribution').select('*');
+      q = input.status ? q.eq('status', input.status) : q.eq('status', 'approved');
+      const { data, error } = await q
+        .order('created_at', { ascending: false })
+        .limit(input.limit);
+      if (error) throw new Error(error.message);
+      return ((data ?? []) as WordRow[]).map(mapWordRow);
     }),
 
   pending: dbProcedure
     .query(async ({ ctx }) => {
-      const result = await ctx.db.query<[(WordContribution & { contributorName: string })[]]>(
-        'SELECT *, (SELECT name FROM user WHERE id = userId) as contributorName FROM word_contribution WHERE status = $pending ORDER BY createdAt ASC',
-        { pending: 'pending' }
-      );
-      return result[0] || [];
+      const { data, error } = await ctx.db.client
+        .from('word_contribution')
+        .select('*')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: true });
+      if (error) throw new Error(error.message);
+      return ((data ?? []) as WordRow[]).map(mapWordRow);
     }),
 
   submit: dbProcedure
@@ -49,30 +86,54 @@ const wordsRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       const { deviceId, ...rest } = input;
-      const result = await ctx.db.create('word_contribution', {
-        ...rest,
-        userId: deviceId,
-        status: 'pending',
-        votes: 0,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
+      const { data, error } = await ctx.db.client
+        .from('word_contribution')
+        .insert({
+          user_id: deviceId,
+          zomi: rest.zomi,
+          english: rest.english,
+          pronunciation: rest.pronunciation ?? null,
+          example: rest.example ?? null,
+          part_of_speech: rest.partOfSpeech ?? null,
+          category: rest.category ?? null,
+          dialect_specific: rest.dialectSpecific ?? null,
+          status: 'pending',
+          votes: 0,
+        })
+        .select()
+        .single();
+      if (error) throw new Error(error.message);
 
-      await ctx.db.query(
-        'UPDATE user_stats SET contributionsCount += 1, points += 15, updatedAt = $now WHERE userId = $userId',
-        { userId: deviceId, now: new Date().toISOString() }
-      );
+      try {
+        await ctx.db.rpc('bump_user_stats', {
+          p_user_id: deviceId,
+          p_translations: 0,
+          p_contributions: 1,
+          p_points: 15,
+        });
+      } catch {
+        // stats are best-effort
+      }
 
-      return result;
+      return mapWordRow(data as WordRow);
     }),
 
   vote: dbProcedure
     .input(z.object({ wordId: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      await ctx.db.query(
-        'UPDATE word_contribution SET votes += 1 WHERE id = $wordId',
-        { wordId: input.wordId }
-      );
+      const { data } = await ctx.db.client
+        .from('word_contribution')
+        .select('id, votes')
+        .eq('id', input.wordId)
+        .maybeSingle();
+      const row = (data ?? null) as { id: string; votes: number } | null;
+      if (row) {
+        const { error } = await ctx.db.client
+          .from('word_contribution')
+          .update({ votes: row.votes + 1, updated_at: new Date().toISOString() })
+          .eq('id', input.wordId);
+        if (error) throw new Error(error.message);
+      }
       return { success: true };
     }),
 
@@ -84,26 +145,27 @@ const wordsRouter = createTRPCRouter({
       moderatorId: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      await ctx.db.query(
-        'UPDATE word_contribution SET status = $status, moderatorNote = $note, moderatorId = $moderatorId, updatedAt = $now WHERE id = $wordId',
-        {
-          wordId: input.wordId,
+      const now = new Date().toISOString();
+      const { error } = await ctx.db.client
+        .from('word_contribution')
+        .update({
           status: input.status,
-          note: input.note,
-          moderatorId: input.moderatorId || 'system',
-          now: new Date().toISOString(),
-        }
-      );
+          moderator_note: input.note ?? null,
+          moderator_id: input.moderatorId || 'system',
+          updated_at: now,
+        })
+        .eq('id', input.wordId);
+      if (error) throw new Error(error.message);
 
       if (input.moderatorId) {
-        await ctx.db.create('moderation_action', {
-          moderatorId: input.moderatorId,
-          targetType: 'word',
-          targetId: input.wordId,
+        const { error: actionError } = await ctx.db.client.from('moderation_action').insert({
+          moderator_id: input.moderatorId,
+          target_type: 'word',
+          target_id: input.wordId,
           action: input.status === 'approved' ? 'approve' : 'reject',
-          reason: input.note,
-          createdAt: new Date().toISOString(),
+          reason: input.note ?? null,
         });
+        if (actionError) throw new Error(actionError.message);
       }
 
       return { success: true };
@@ -112,11 +174,16 @@ const wordsRouter = createTRPCRouter({
   search: dbProcedure
     .input(z.object({ query: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
-      const result = await ctx.db.query<[WordContribution[]]>(
-        'SELECT * FROM word_contribution WHERE status = $approved AND (zomi CONTAINS $query OR english CONTAINS $query) LIMIT 20',
-        { approved: 'approved', query: input.query }
-      );
-      return result[0] || [];
+      const s = sanitizeSearch(input.query);
+      if (!s) return [];
+      const { data, error } = await ctx.db.client
+        .from('word_contribution')
+        .select('*')
+        .eq('status', 'approved')
+        .or(`zomi.ilike.%${s}%,english.ilike.%${s}%`)
+        .limit(20);
+      if (error) throw new Error(error.message);
+      return ((data ?? []) as WordRow[]).map(mapWordRow);
     }),
 });
 

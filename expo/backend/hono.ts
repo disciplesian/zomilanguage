@@ -3,10 +3,9 @@ import type { Context } from "hono";
 import { trpcServer } from "@hono/trpc-server";
 import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
-import type Surreal from "surrealdb.js";
 import { appRouter } from "./trpc/app-router";
 import { createContext } from "./trpc/create-context";
-import { getDB } from "./db/client";
+import { getDB, type ZomiDB } from "./db/client";
 import {
   streamChatCompletion,
   chatCompletion,
@@ -306,7 +305,7 @@ app.post("/translate/stream", async (c) => {
 
 /**
  * Cloud sync: stores each signed-in user's personal glossary and saved
- * translations in SurrealDB so they stay consistent across devices.
+ * translations in Supabase so they stay consistent across devices.
  * Auth helpers (JWT bearer verification) live in ./portal.ts.
  */
 function sanitizeString(value: unknown, max: number): string {
@@ -368,9 +367,12 @@ app.post("/sync/push", async (c) => {
 
   try {
     const db = await getDB();
-    await db.query("DELETE FROM user_sync WHERE userId = $userId", { userId });
-    await db.create("user_sync", { userId, glossary, translations, updatedAt });
-    return c.json({ success: true, updatedAt });
+    const res = await db.rpc<{ updatedAt: string }>("upsert_user_sync", {
+      p_user_id: userId,
+      p_glossary: glossary,
+      p_translations: translations,
+    });
+    return c.json({ success: true, updatedAt: res?.updatedAt ?? updatedAt });
   } catch (err) {
     console.error("[sync] push failed", err);
     return c.json({ error: "sync_failed" }, 500);
@@ -384,11 +386,12 @@ app.post("/sync/pull", async (c) => {
 
   try {
     const db = await getDB();
-    const result = await db.query<[Record<string, unknown>[]]>(
-      "SELECT * FROM user_sync WHERE userId = $userId LIMIT 1",
-      { userId }
-    );
-    const row = result[0]?.[0];
+    const row = await db.rpc<{
+      user_id: string;
+      glossary: unknown[];
+      translations: unknown[];
+      updated_at: string | null;
+    } | null>("get_user_sync", { p_user_id: userId });
     if (!row) {
       return c.json({ exists: false, glossary: [], translations: [], updatedAt: null });
     }
@@ -396,7 +399,7 @@ app.post("/sync/pull", async (c) => {
       exists: true,
       glossary: Array.isArray(row.glossary) ? row.glossary : [],
       translations: Array.isArray(row.translations) ? row.translations : [],
-      updatedAt: row.updatedAt ?? null,
+      updatedAt: row.updated_at ?? null,
     });
   } catch (err) {
     console.error("[sync] pull failed", err);
@@ -405,16 +408,8 @@ app.post("/sync/pull", async (c) => {
 });
 
 /** Public share links: a completed translation can be posted and viewed by
- * anyone with the link (e.g. https://zomi.me/t/<shareId>). */
-const SHARE_ID_ALPHABET = "abcdefghijkmnopqrstuvwxyz23456789";
-
-function generateShareId(length = 10): string {
-  let id = "";
-  for (let i = 0; i < length; i++) {
-    id += SHARE_ID_ALPHABET[Math.floor(Math.random() * SHARE_ID_ALPHABET.length)];
-  }
-  return id;
-}
+ * anyone with the link (e.g. https://zomi.me/t/<shareId>). Share ids are
+ * generated inside the create_share RPC (unambiguous 10-char alphabet). */
 
 /** Creates a public share link for a completed translation. No account needed. */
 app.post("/share", async (c) => {
@@ -438,20 +433,18 @@ app.post("/share", async (c) => {
     return c.json({ error: "missing_text" }, 400);
   }
 
-  const shareId = generateShareId();
   try {
     const db = await getDB();
-    await db.create("shared_translations", {
-      shareId,
-      sourceText,
-      translatedText,
-      sourceLanguage: sanitizeLanguageCode(body.sourceLanguage),
-      targetLanguage: sanitizeLanguageCode(body.targetLanguage),
-      confidence:
+    const shareId = await db.rpc<string>("create_share", {
+      p_source_text: sourceText,
+      p_translated_text: translatedText,
+      p_source_language: sanitizeLanguageCode(body.sourceLanguage),
+      p_target_language: sanitizeLanguageCode(body.targetLanguage),
+      p_confidence:
         typeof body.confidence === "number" ? Math.round(body.confidence) : 0,
-      model: sanitizeString(body.model, 64) || null,
-      createdAt: new Date().toISOString(),
+      p_model: sanitizeString(body.model, 64) || null,
     });
+    if (!shareId) throw new Error("empty share id");
     return c.json({ shareId });
   } catch (err) {
     console.error("[share] create failed", err);
@@ -465,21 +458,22 @@ app.get("/share/:id", async (c) => {
   if (!shareId) return c.json({ error: "missing_id" }, 400);
   try {
     const db = await getDB();
-    const result = await db.query<[Record<string, unknown>[]]>(
-      "SELECT * FROM shared_translations WHERE shareId = $shareId LIMIT 1",
-      { shareId }
-    );
-    const row = result[0]?.[0];
+    const { data } = await db.client
+      .from("shared_translations")
+      .select("*")
+      .eq("share_id", shareId)
+      .maybeSingle();
+    const row = (data ?? null) as Record<string, unknown> | null;
     if (!row) return c.json({ error: "not_found" }, 404);
     return c.json({
-      shareId: String(row.shareId ?? shareId),
-      sourceText: String(row.sourceText ?? ""),
-      translatedText: String(row.translatedText ?? ""),
-      sourceLanguage: sanitizeLanguageCode(row.sourceLanguage),
-      targetLanguage: sanitizeLanguageCode(row.targetLanguage),
+      shareId: String(row.share_id ?? shareId),
+      sourceText: String(row.source_text ?? ""),
+      translatedText: String(row.translated_text ?? ""),
+      sourceLanguage: sanitizeLanguageCode(row.source_language),
+      targetLanguage: sanitizeLanguageCode(row.target_language),
       confidence: Number(row.confidence ?? 0),
       model: (row.model as string | null) ?? null,
-      createdAt: String(row.createdAt ?? ""),
+      createdAt: String(row.created_at ?? ""),
     });
   } catch (err) {
     console.error("[share] read failed", err);
@@ -539,16 +533,12 @@ app.post("/portal/verification/request", async (c) => {
 
   try {
     const db = await getDB();
-    const profile = await ensurePortalUser(db, auth);
-    if (profile.verified) return c.json({ success: true, status: "approved" });
-    if (profile.verificationStatus === "pending") {
-      return c.json({ success: true, status: "pending" });
-    }
-    await db.query(
-      "UPDATE portal_users SET verificationStatus = 'pending', verificationReason = $reason, requestedAt = $now WHERE userId = $userId",
-      { reason, now: new Date().toISOString(), userId: auth.userId }
-    );
-    return c.json({ success: true, status: "pending" });
+    await ensurePortalUser(db, auth);
+    const res = await db.rpc<{ status: string }>("request_verification", {
+      p_user_id: auth.userId,
+      p_reason: reason,
+    });
+    return c.json({ success: true, status: res?.status ?? "pending" });
   } catch (err) {
     console.error("[portal] verification request failed", err);
     return c.json({ error: "request_failed" }, 500);
@@ -556,14 +546,14 @@ app.post("/portal/verification/request", async (c) => {
 });
 
 type AdminGuard =
-  | { ok: true; auth: AuthInfo; db: Surreal }
+  | { ok: true; auth: AuthInfo; db: ZomiDB }
   | { ok: false; response: Response };
 
 /** Verifies the caller is a signed-in admin before any /api/admin route runs. */
 async function requireAdmin(c: Context): Promise<AdminGuard> {
   const auth = await authFromRequest(c.req.header("authorization"));
   if (!auth) return { ok: false, response: c.json({ error: "unauthorized" }, 401) };
-  let db: Surreal;
+  let db: ZomiDB;
   try {
     db = await getDB();
   } catch {
@@ -580,82 +570,11 @@ async function requireAdmin(c: Context): Promise<AdminGuard> {
 app.get("/admin/overview", async (c) => {
   const guard = await requireAdmin(c);
   if (!guard.ok) return guard.response;
-  const { db } = guard;
   try {
-    const usersRes = await db.query<[Record<string, unknown>[]]>("SELECT * FROM portal_users");
-    const counts = await db.query<[{ userId: string; total: number }[]]>(
-      "SELECT userId, count() AS total FROM translation_logs GROUP BY userId"
-    );
-
-    let totalTranslations = 0;
-    const countMap = new Map<string, number>();
-    for (const row of counts[0] ?? []) {
-      const total = Number(row.total ?? 0);
-      totalTranslations += total;
-      if (row.userId) countMap.set(String(row.userId), total);
-    }
-
-    let translationsToday = 0;
-    try {
-      const start = new Date();
-      start.setHours(0, 0, 0, 0);
-      const todayRes = await db.query<[{ total: number }[]]>(
-        "SELECT count() AS total FROM translation_logs WHERE createdAt >= $start GROUP ALL",
-        { start: start.toISOString() }
-      );
-      translationsToday = Number(todayRes[0]?.[0]?.total ?? 0);
-    } catch {
-      translationsToday = 0;
-    }
-
-    let recent: Record<string, unknown>[] = [];
-    try {
-      const recentRes = await db.query<[Record<string, unknown>[]]>(
-        "SELECT * FROM translation_logs ORDER BY createdAt DESC LIMIT 50"
-      );
-      recent = recentRes[0] ?? [];
-    } catch {
-      recent = [];
-    }
-
-    const userList = usersRes[0] ?? [];
-    const userById = new Map(userList.map((u) => [String(u.userId), u]));
-    const topUsers = [...countMap.entries()]
-      .map(([userId, total]) => {
-        const u = userById.get(userId);
-        return {
-          userId,
-          email: String(u?.email ?? ""),
-          name: (u?.name as string | null) ?? null,
-          total,
-        };
-      })
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 10);
-
-    return c.json({
-      totalUsers: userList.length,
-      totalTranslations,
-      translationsToday,
-      verifiedUsers: userList.filter((u) => u.verified === true).length,
-      pendingVerifications: userList.filter((u) => u.verificationStatus === "pending").length,
-      topUsers,
-      recentTranslations: recent.map((r) => {
-        const u = userById.get(String(r.userId));
-        return {
-          userId: String(r.userId ?? ""),
-          email: String(u?.email ?? ""),
-          name: (u?.name as string | null) ?? null,
-          sourceText: String(r.sourceText ?? ""),
-          translatedText: String(r.translatedText ?? ""),
-          targetLanguage: String(r.targetLanguage ?? ""),
-          model: (r.model as string | null) ?? null,
-          confidence: Number(r.confidence ?? 0),
-          wordCount: Number(r.wordCount ?? 0),
-          createdAt: String(r.createdAt ?? ""),
-        };
-      }),
+    const overview = await guard.db.rpc<Record<string, unknown>>("admin_overview", {
+      p_admin_user_id: guard.auth.userId,
     });
+    return c.json(overview ?? {});
   } catch (err) {
     console.error("[admin] overview failed", err);
     return c.json({ error: "overview_failed" }, 500);
@@ -667,28 +586,10 @@ app.get("/admin/users", async (c) => {
   const guard = await requireAdmin(c);
   if (!guard.ok) return guard.response;
   try {
-    const { db } = guard;
-    const usersRes = await db.query<[Record<string, unknown>[]]>("SELECT * FROM portal_users");
-    const counts = await db.query<[{ userId: string; total: number }[]]>(
-      "SELECT userId, count() AS total FROM translation_logs GROUP BY userId"
-    );
-    const countMap = new Map<string, number>();
-    for (const row of counts[0] ?? []) {
-      if (row.userId) countMap.set(String(row.userId), Number(row.total ?? 0));
-    }
-    const users = (usersRes[0] ?? []).map((u) => ({
-      userId: String(u.userId ?? ""),
-      email: String(u.email ?? ""),
-      name: (u.name as string | null) ?? null,
-      role: String(u.role ?? "user"),
-      verified: u.verified === true,
-      verificationStatus: String(u.verificationStatus ?? "none"),
-      verificationReason: String(u.verificationReason ?? ""),
-      requestedAt: (u.requestedAt as string | null) ?? null,
-      translationCount: countMap.get(String(u.userId)) ?? 0,
-      joinedAt: String(u.createdAt ?? ""),
-    }));
-    return c.json({ users });
+    const res = await guard.db.rpc<{ users: unknown[] }>("admin_users", {
+      p_admin_user_id: guard.auth.userId,
+    });
+    return c.json({ users: res?.users ?? [] });
   } catch (err) {
     console.error("[admin] users failed", err);
     return c.json({ error: "users_failed" }, 500);
@@ -713,9 +614,10 @@ app.post("/admin/role", async (c) => {
     return c.json({ error: "invalid_role" }, 400);
   }
   try {
-    await guard.db.query("UPDATE portal_users SET role = $role WHERE userId = $userId", {
-      role,
-      userId,
+    await guard.db.rpc("admin_set_role", {
+      p_admin_user_id: guard.auth.userId,
+      p_target_user_id: userId,
+      p_role: role,
     });
     return c.json({ success: true });
   } catch (err) {
@@ -742,17 +644,11 @@ app.post("/admin/verification", async (c) => {
     return c.json({ error: "invalid_decision" }, 400);
   }
   try {
-    if (decision === "approve") {
-      await guard.db.query(
-        "UPDATE portal_users SET verified = true, verificationStatus = 'approved' WHERE userId = $userId",
-        { userId }
-      );
-    } else {
-      await guard.db.query(
-        "UPDATE portal_users SET verified = false, verificationStatus = 'rejected' WHERE userId = $userId",
-        { userId }
-      );
-    }
+    await guard.db.rpc("admin_set_verification", {
+      p_admin_user_id: guard.auth.userId,
+      p_target_user_id: userId,
+      p_approve: decision === "approve",
+    });
     return c.json({ success: true });
   } catch (err) {
     console.error("[admin] verification decision failed", err);
@@ -760,37 +656,17 @@ app.post("/admin/verification", async (c) => {
   }
 });
 
-/** Central audit trail: records every admin dataset event (import, publish,
- *  export) with the acting user's ID, email and action details. Audit writes
- *  never block the primary operation — failures are logged server-side only. */
-async function writeAuditEvent(
-  db: Surreal,
-  auth: AuthInfo,
-  action: string,
-  details: Record<string, unknown>
-): Promise<void> {
-  try {
-    await db.create("admin_audit_log", {
-      action,
-      userId: auth.userId,
-      email: auth.email,
-      details,
-      createdAt: new Date().toISOString(),
-    });
-  } catch (err) {
-    console.error("[admin] audit write failed", err);
-  }
-}
-
 /** Admin: status of the published dictionary dataset (light — no payload). */
 app.get("/admin/dictionary", async (c) => {
   const guard = await requireAdmin(c);
   if (!guard.ok) return guard.response;
   try {
-    const res = await guard.db.query<[Record<string, unknown>[]]>(
-      "SELECT version, count, updatedAt, updatedBy, note, fileName FROM dictionary_dataset:latest"
-    );
-    const row = res[0]?.[0];
+    const { data } = await guard.db.client
+      .from("dictionary_dataset")
+      .select("version, count, updated_at, updated_by, note, file_name")
+      .eq("id", "latest")
+      .maybeSingle();
+    const row = (data ?? null) as Record<string, unknown> | null;
     if (!row) {
       return c.json({ available: false });
     }
@@ -798,10 +674,10 @@ app.get("/admin/dictionary", async (c) => {
       available: true,
       version: Number(row.version ?? 0),
       count: Number(row.count ?? 0),
-      updatedAt: String(row.updatedAt ?? ""),
-      updatedBy: String(row.updatedBy ?? ""),
+      updatedAt: String(row.updated_at ?? ""),
+      updatedBy: String(row.updated_by ?? ""),
       note: (row.note as string | null) || null,
-      fileName: (row.fileName as string | null) || null,
+      fileName: (row.file_name as string | null) || null,
     });
   } catch (err) {
     console.error("[admin] dictionary status failed", err);
@@ -861,42 +737,25 @@ app.post("/admin/dictionary/import", async (c) => {
     entries.push([english, pos, zomi, category]);
   }
 
-  const payload = JSON.stringify({ version: 1, count: entries.length, entries });
-  const now = new Date().toISOString();
   const fileName = typeof body.fileName === "string" ? body.fileName.slice(0, 200) : "";
   const note = typeof body.note === "string" ? body.note.slice(0, 500) : "";
 
   try {
-    const prevRes = await guard.db.query<[{ version?: number }[]]>(
-      "SELECT version FROM dictionary_dataset:latest"
+    const res = await guard.db.rpc<{ version: number; count: number }>(
+      "admin_publish_dictionary",
+      {
+        p_admin_user_id: guard.auth.userId,
+        p_entries: entries,
+        p_file_name: fileName,
+        p_note: note,
+        p_kind: "upload",
+      }
     );
-    const version = Number(prevRes[0]?.[0]?.version ?? 0) + 1;
-    await guard.db.update("dictionary_dataset:latest", {
-      version,
-      count: entries.length,
-      payload,
-      updatedAt: now,
-      updatedBy: guard.auth.email,
-      note,
-      fileName,
+    return c.json({
+      success: true,
+      version: res?.version ?? 0,
+      count: res?.count ?? entries.length,
     });
-    await guard.db.create("dictionary_imports", {
-      version,
-      fileName,
-      note,
-      totalRows: entries.length,
-      status: "completed",
-      kind: "upload",
-      createdBy: guard.auth.email,
-      createdAt: now,
-    });
-    await writeAuditEvent(guard.db, guard.auth, "dictionary.publish", {
-      version,
-      count: entries.length,
-      fileName,
-      note,
-    });
-    return c.json({ success: true, version, count: entries.length });
   } catch (err) {
     console.error("[admin] dictionary import failed", err);
     return c.json({ error: "import_failed" }, 500);
@@ -915,12 +774,17 @@ app.post("/admin/dictionary/export", async (c) => {
     return c.json({ error: "invalid_json" }, 400);
   }
   const format = body.format === "csv" ? "csv" : "json";
-  await writeAuditEvent(guard.db, guard.auth, "dictionary.export", {
-    format,
-    count: Number(body.count ?? 0),
-    fileName: typeof body.fileName === "string" ? body.fileName.slice(0, 200) : "",
-    scope: body.scope === "import" ? "import" : "bundled",
-  });
+  try {
+    await guard.db.rpc("admin_log_dictionary_export", {
+      p_admin_user_id: guard.auth.userId,
+      p_format: format,
+      p_count: Number(body.count ?? 0),
+      p_file_name: typeof body.fileName === "string" ? body.fileName.slice(0, 200) : "",
+      p_scope: body.scope === "import" ? "import" : "bundled",
+    });
+  } catch (err) {
+    console.error("[admin] dictionary export audit failed", err);
+  }
   return c.json({ success: true });
 });
 
@@ -945,68 +809,45 @@ function validateEntryRow(row: unknown): { ok: true; entry: string[] } | { ok: f
 
 /** Loads the published dataset payload as a parsed entries array. */
 async function loadPublishedDataset(
-  db: Surreal
+  db: ZomiDB
 ): Promise<{ version: number; entries: string[][] } | null> {
-  const res = await db.query<[{ version?: number; payload?: string }[]]>(
-    "SELECT version, payload FROM dictionary_dataset:latest"
-  );
-  const row = res[0]?.[0];
-  if (!row || typeof row.payload !== "string") return null;
-  let parsed: { entries?: unknown };
-  try {
-    parsed = JSON.parse(row.payload);
-  } catch {
-    return null;
-  }
+  const { data } = await db.client
+    .from("dictionary_dataset")
+    .select("version, payload")
+    .eq("id", "latest")
+    .maybeSingle();
+  const row = (data ?? null) as { version?: number; payload?: unknown } | null;
+  if (!row || !row.payload) return null;
+  const parsed =
+    typeof row.payload === "string"
+      ? (JSON.parse(row.payload) as { entries?: unknown })
+      : (row.payload as { entries?: unknown });
   if (!Array.isArray(parsed.entries)) return null;
-  const entries = parsed.entries.map((row: unknown) =>
-    Array.isArray(row) ? row.map((cell: unknown) => (typeof cell === "string" ? cell : "")) : []
+  const entries = parsed.entries.map((entry: unknown) =>
+    Array.isArray(entry) ? entry.map((cell: unknown) => (typeof cell === "string" ? cell : "")) : []
   );
   return { version: Number(row.version ?? 0), entries };
 }
 
 /** Persists a mutated dataset as the next version, records it in the version
- *  history and the audit trail. kind: "upload" | "edit" | "add" | "delete". */
+ *  history and the audit trail (all inside the admin_publish_dictionary RPC).
+ *  kind: "upload" | "edit" | "add" | "delete". */
 async function saveDatasetVersion(
-  db: Surreal,
+  db: ZomiDB,
   auth: AuthInfo,
   entries: string[][],
   kind: string,
   note: string,
   fileName: string
 ): Promise<number> {
-  const prevRes = await db.query<[{ version?: number }[]]>(
-    "SELECT version FROM dictionary_dataset:latest"
-  );
-  const version = Number(prevRes[0]?.[0]?.version ?? 0) + 1;
-  const now = new Date().toISOString();
-  const payload = JSON.stringify({ version: 1, count: entries.length, entries });
-  await db.update("dictionary_dataset:latest", {
-    version,
-    count: entries.length,
-    payload,
-    updatedAt: now,
-    updatedBy: auth.email,
-    note,
-    fileName,
+  const res = await db.rpc<{ version: number }>("admin_publish_dictionary", {
+    p_admin_user_id: auth.userId,
+    p_entries: entries,
+    p_file_name: fileName,
+    p_note: note,
+    p_kind: kind,
   });
-  await db.create("dictionary_imports", {
-    version,
-    fileName,
-    note,
-    totalRows: entries.length,
-    status: "completed",
-    kind,
-    createdBy: auth.email,
-    createdAt: now,
-  });
-  await writeAuditEvent(db, auth, `dictionary.${kind}`, {
-    version,
-    count: entries.length,
-    fileName,
-    note,
-  });
-  return version;
+  return res?.version ?? 0;
 }
 
 /** Admin: full published dataset entries (source of truth for entry editing). */
@@ -1033,19 +874,10 @@ app.get("/admin/dictionary/history", async (c) => {
   const guard = await requireAdmin(c);
   if (!guard.ok) return guard.response;
   try {
-    const res = await guard.db.query<[Record<string, unknown>[]]>(
-      "SELECT version, kind, fileName, note, totalRows, createdBy, createdAt FROM dictionary_imports ORDER BY createdAt DESC LIMIT 100"
-    );
-    const versions = (res[0] ?? []).map((r) => ({
-      version: Number(r.version ?? 0),
-      kind: String(r.kind ?? "upload"),
-      fileName: (r.fileName as string | null) || "",
-      note: (r.note as string | null) || "",
-      totalRows: Number(r.totalRows ?? 0),
-      createdBy: String(r.createdBy ?? ""),
-      createdAt: String(r.createdAt ?? ""),
-    }));
-    return c.json({ versions });
+    const res = await guard.db.rpc<{ versions: unknown[] }>("admin_dictionary_history", {
+      p_admin_user_id: guard.auth.userId,
+    });
+    return c.json({ versions: res?.versions ?? [] });
   } catch (err) {
     console.error("[admin] dictionary history failed", err);
     return c.json({ error: "dictionary_history_failed" }, 500);
@@ -1174,18 +1006,10 @@ app.get("/admin/audit-log", async (c) => {
   const guard = await requireAdmin(c);
   if (!guard.ok) return guard.response;
   try {
-    const res = await guard.db.query<[Record<string, unknown>[]]>(
-      "SELECT * FROM admin_audit_log ORDER BY createdAt DESC LIMIT 100"
-    );
-    const events = (res[0] ?? []).map((r) => ({
-      id: String(r.id ?? ""),
-      action: String(r.action ?? ""),
-      userId: String(r.userId ?? ""),
-      email: String(r.email ?? ""),
-      details: (r.details as Record<string, unknown> | null) ?? {},
-      createdAt: String(r.createdAt ?? ""),
-    }));
-    return c.json({ events });
+    const res = await guard.db.rpc<{ events: unknown[] }>("admin_audit_log", {
+      p_admin_user_id: guard.auth.userId,
+    });
+    return c.json({ events: res?.events ?? [] });
   } catch (err) {
     console.error("[admin] audit log failed", err);
     return c.json({ error: "audit_log_failed" }, 500);
@@ -1292,17 +1116,19 @@ app.post("/dictionary/examples", async (c) => {
 app.get("/dictionary/latest", async (c) => {
   try {
     const db = await getDB();
-    const res = await db.query<[Record<string, unknown>[]]>(
-      "SELECT version, count, updatedAt, payload FROM dictionary_dataset:latest"
-    );
-    const row = res[0]?.[0];
+    const { data } = await db.client
+      .from("dictionary_dataset")
+      .select("version, count, updated_at, payload")
+      .eq("id", "latest")
+      .maybeSingle();
+    const row = (data ?? null) as Record<string, unknown> | null;
     if (!row) return c.json({ available: false });
     return c.json({
       available: true,
       version: Number(row.version ?? 0),
       count: Number(row.count ?? 0),
-      updatedAt: String(row.updatedAt ?? ""),
-      payload: String(row.payload ?? ""),
+      updatedAt: String(row.updated_at ?? ""),
+      payload: row.payload ? JSON.stringify(row.payload) : "",
     });
   } catch (err) {
     console.error("[public] dictionary latest failed", err);

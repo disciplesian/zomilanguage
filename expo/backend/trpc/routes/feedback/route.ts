@@ -2,6 +2,35 @@ import { z } from 'zod';
 import { createTRPCRouter, dbProcedure } from '../../create-context';
 import type { Feedback } from '@/backend/db/schema';
 
+/** Raw feedback row (snake_case columns from Postgres). */
+interface FeedbackRow {
+  id: string;
+  user_id: string | null;
+  type: string;
+  title: string;
+  content: string;
+  device_info: string | null;
+  app_version: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+function mapFeedbackRow(row: FeedbackRow): Feedback {
+  return {
+    id: row.id,
+    userId: row.user_id ?? undefined,
+    type: row.type as Feedback['type'],
+    title: row.title,
+    content: row.content,
+    deviceInfo: row.device_info ?? undefined,
+    appVersion: row.app_version ?? undefined,
+    status: row.status as Feedback['status'],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 const feedbackRouter = createTRPCRouter({
   submit: dbProcedure
     .input(z.object({
@@ -14,15 +43,21 @@ const feedbackRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       const { deviceId, ...rest } = input;
-      const result = await ctx.db.create('feedback', {
-        ...rest,
-        userId: deviceId || 'anonymous',
-        status: 'new',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
-
-      return result;
+      const { data, error } = await ctx.db.client
+        .from('feedback')
+        .insert({
+          user_id: deviceId || 'anonymous',
+          type: rest.type,
+          title: rest.title,
+          content: rest.content,
+          device_info: rest.deviceInfo ?? null,
+          app_version: rest.appVersion ?? null,
+          status: 'new',
+        })
+        .select()
+        .single();
+      if (error) throw new Error(error.message);
+      return mapFeedbackRow(data as FeedbackRow);
     }),
 
   list: dbProcedure
@@ -32,24 +67,14 @@ const feedbackRouter = createTRPCRouter({
       limit: z.number().min(1).max(100).default(50),
     }))
     .query(async ({ ctx, input }) => {
-      let query = 'SELECT * FROM feedback WHERE true';
-      const params: Record<string, unknown> = {};
-
-      if (input.status) {
-        query += ' AND status = $status';
-        params.status = input.status;
-      }
-
-      if (input.type) {
-        query += ' AND type = $type';
-        params.type = input.type;
-      }
-
-      query += ' ORDER BY createdAt DESC LIMIT $limit';
-      params.limit = input.limit;
-
-      const result = await ctx.db.query<[Feedback[]]>(query, params);
-      return result[0] || [];
+      let q = ctx.db.client.from('feedback').select('*');
+      if (input.status) q = q.eq('status', input.status);
+      if (input.type) q = q.eq('type', input.type);
+      const { data, error } = await q
+        .order('created_at', { ascending: false })
+        .limit(input.limit);
+      if (error) throw new Error(error.message);
+      return ((data ?? []) as FeedbackRow[]).map(mapFeedbackRow);
     }),
 
   updateStatus: dbProcedure
@@ -58,15 +83,11 @@ const feedbackRouter = createTRPCRouter({
       status: z.enum(['new', 'in_progress', 'resolved', 'closed']),
     }))
     .mutation(async ({ ctx, input }) => {
-      await ctx.db.query(
-        'UPDATE feedback SET status = $status, updatedAt = $now WHERE id = $feedbackId',
-        {
-          feedbackId: input.feedbackId,
-          status: input.status,
-          now: new Date().toISOString(),
-        }
-      );
-
+      const { error } = await ctx.db.client
+        .from('feedback')
+        .update({ status: input.status, updated_at: new Date().toISOString() })
+        .eq('id', input.feedbackId);
+      if (error) throw new Error(error.message);
       return { success: true };
     }),
 });

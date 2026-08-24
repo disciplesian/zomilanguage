@@ -20,6 +20,11 @@
       "name": "Zomi Language Portal",
       "path": "android",
       "framework": "kotlin"
+    },
+    {
+      "name": "Backend",
+      "path": "backend",
+      "framework": "supabase"
     }
   ]
 }

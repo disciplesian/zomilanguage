@@ -1,156 +1,70 @@
-import Surreal from 'surrealdb.js';
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-let dbInstance: Surreal | null = null;
-let connectionPromise: Promise<Surreal> | null = null;
-
-function getHttpEndpoint(endpoint: string): string {
-  let httpEndpoint = endpoint;
-  
-  if (httpEndpoint.startsWith('wss://')) {
-    httpEndpoint = httpEndpoint.replace('wss://', 'https://');
-  } else if (httpEndpoint.startsWith('ws://')) {
-    httpEndpoint = httpEndpoint.replace('ws://', 'http://');
-  }
-  
-  if (!httpEndpoint.endsWith('/rpc')) {
-    httpEndpoint = httpEndpoint.replace(/\/$/, '') + '/rpc';
-  }
-  
-  return httpEndpoint;
+/**
+ * Supabase access layer for the Zomi backend.
+ *
+ * Sensitive tables (portal users, translation logs, sync data, admin audit
+ * trail, dictionary versioning) have RLS enabled with no public policies —
+ * they are only reachable through SECURITY DEFINER RPC functions that verify
+ * ZOMI_BACKEND_DB_SECRET, a server-only credential that is never inlined in
+ * client bundles. Public, non-sensitive reads (published dictionary dataset,
+ * shared translation links) use plain table selects with read-only policies.
+ */
+export interface ZomiDB {
+  /** Calls a SECURITY DEFINER RPC, injecting the backend secret. */
+  rpc<T = unknown>(fn: string, params?: Record<string, unknown>): Promise<T | null>;
+  /** Raw table access (only for tables with public read policies). */
+  readonly client: SupabaseClient;
 }
 
-async function createConnection(): Promise<Surreal> {
-  const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-  const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-  const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
+let client: SupabaseClient | null = null;
 
-  if (!endpoint || !namespace || !token) {
-    console.error('[DB] Missing credentials:', { 
-      hasEndpoint: !!endpoint, 
-      hasNamespace: !!namespace, 
-      hasToken: !!token 
+function resolveConfig(): { url: string; key: string } {
+  const url = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL || "";
+  const key =
+    process.env.SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "";
+  if (!url || !key) {
+    console.error("[DB] Missing Supabase credentials:", {
+      hasUrl: !!url,
+      hasKey: !!key,
     });
-    throw new Error('Database credentials not configured');
+    throw new Error("Supabase credentials not configured");
   }
+  return { url, key };
+}
 
-  const httpEndpoint = getHttpEndpoint(endpoint);
-  console.log('[DB] Connecting to:', httpEndpoint);
+function getSecret(): string {
+  const secret = process.env.ZOMI_BACKEND_DB_SECRET;
+  if (!secret) {
+    throw new Error("ZOMI_BACKEND_DB_SECRET not configured");
+  }
+  return secret;
+}
 
-  const db = new Surreal();
-  
-  try {
-    await db.connect(httpEndpoint, {
-      namespace: namespace,
-      database: 'zomi_translator',
+class ZomiDBImpl implements ZomiDB {
+  constructor(private readonly supabase: SupabaseClient) {}
+
+  async rpc<T>(fn: string, params: Record<string, unknown> = {}): Promise<T | null> {
+    const { data, error } = await this.supabase.rpc(fn, {
+      p_secret: getSecret(),
+      ...params,
     });
-    console.log('[DB] Connected successfully');
-  } catch (connectError: any) {
-    const msg = connectError?.message || String(connectError);
-    console.error('[DB] Connection failed:', msg);
-    
-    if (msg.includes('version') && msg.includes('supported')) {
-      console.log('[DB] Version warning, continuing...');
-    } else {
-      await db.close().catch(() => {});
-      throw new Error(`Database connection failed: ${msg}`);
-    }
+    if (error) throw new Error(error.message);
+    return (data ?? null) as T | null;
   }
 
-  try {
-    await db.use({ namespace: namespace, database: 'zomi_translator' });
-    console.log('[DB] Using namespace:', namespace);
-  } catch (useError: any) {
-    const msg = useError?.message || String(useError);
-    if (!msg.includes('already')) {
-      console.error('[DB] Use namespace failed:', msg);
-      await db.close().catch(() => {});
-      throw new Error(`Failed to select database: ${msg}`);
-    }
+  get client(): SupabaseClient {
+    return this.supabase;
   }
-
-  try {
-    await db.authenticate(token);
-    console.log('[DB] Authenticated');
-  } catch (authError: any) {
-    const msg = authError?.message || String(authError);
-    console.error('[DB] Authentication failed:', msg);
-    await db.close().catch(() => {});
-    throw new Error(`Database authentication failed: ${msg}`);
-  }
-
-  try {
-    const testResult = await db.query('SELECT 1 as test');
-    console.log('[DB] Connection verified:', testResult);
-  } catch (testError: any) {
-    const msg = testError?.message || String(testError);
-    console.error('[DB] Connection test failed:', msg);
-    await db.close().catch(() => {});
-    throw new Error(`Database connection test failed: ${msg}`);
-  }
-
-  return db;
 }
 
-export async function getDB(): Promise<Surreal> {
-  if (dbInstance) {
-    try {
-      const testPromise = dbInstance.query('SELECT 1');
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Connection check timeout')), 5000)
-      );
-      await Promise.race([testPromise, timeoutPromise]);
-      return dbInstance;
-    } catch (e) {
-      console.log('[DB] Connection stale, reconnecting...', e);
-      try {
-        await dbInstance.close();
-      } catch {}
-      dbInstance = null;
-      connectionPromise = null;
-    }
-  }
-
-  if (connectionPromise) {
-    try {
-      const timeoutPromise = new Promise<never>((_, reject) => 
-        setTimeout(() => reject(new Error('Connection timeout')), 30000)
-      );
-      return await Promise.race([connectionPromise, timeoutPromise]);
-    } catch (e) {
-      console.error('[DB] Connection promise failed:', e);
-      connectionPromise = null;
-      throw e;
-    }
-  }
-
-  connectionPromise = createConnection()
-    .then((db) => {
-      dbInstance = db;
-      connectionPromise = null;
-      return db;
-    })
-    .catch((error) => {
-      connectionPromise = null;
-      dbInstance = null;
-      throw error;
+/** Returns the shared backend DB handle (creates the client on first use). */
+export async function getDB(): Promise<ZomiDB> {
+  if (!client) {
+    const { url, key } = resolveConfig();
+    client = createClient(url, key, {
+      auth: { persistSession: false, autoRefreshToken: false },
     });
-
-  return connectionPromise;
-}
-
-export async function closeDB(): Promise<void> {
-  if (dbInstance) {
-    try {
-      await dbInstance.close();
-    } catch (err) {
-      console.warn('[DB] Close error:', err);
-    }
-    dbInstance = null;
   }
-  connectionPromise = null;
-}
-
-export async function withDB<T>(operation: (db: Surreal) => Promise<T>): Promise<T> {
-  const db = await getDB();
-  return operation(db);
+  return new ZomiDBImpl(client);
 }

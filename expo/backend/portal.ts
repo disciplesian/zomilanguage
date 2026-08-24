@@ -1,9 +1,9 @@
-import Surreal from "surrealdb.js";
-import { getDB } from "./db/client";
+import type { ZomiDB } from "./db/client";
 
 /**
  * Shared portal auth + user management for the Zomi Language Portal.
  * Used by both the Hono REST endpoints and the tRPC translation route.
+ * All persistence goes through secret-guarded SECURITY DEFINER RPCs.
  */
 
 /** Free tier: words an anonymous visitor may translate before sign-in is required. */
@@ -16,13 +16,12 @@ export function countWords(text: string): number {
 }
 
 /** Words translated so far by an anonymous visitor (0 when unknown). */
-export async function anonymousWordsUsed(db: Surreal, anonymousId: string): Promise<number> {
+export async function anonymousWordsUsed(db: ZomiDB, anonymousId: string): Promise<number> {
   try {
-    const res = await db.query<[{ wordsUsed: number }[]]>(
-      "SELECT wordsUsed FROM anonymous_usage WHERE anonymousId = $anonymousId LIMIT 1",
-      { anonymousId }
-    );
-    return Math.max(0, Number(res[0]?.[0]?.wordsUsed ?? 0));
+    const words = await db.rpc<number>("get_anonymous_words", {
+      p_anonymous_id: anonymousId,
+    });
+    return Math.max(0, Number(words ?? 0));
   } catch {
     return 0;
   }
@@ -33,24 +32,17 @@ export async function anonymousWordsUsed(db: Surreal, anonymousId: string): Prom
  * total. Failures are non-fatal — quota tracking must never break a translation.
  */
 export async function recordAnonymousWords(
-  db: Surreal,
+  db: ZomiDB,
   anonymousId: string,
   words: number
 ): Promise<number> {
   if (words <= 0) return anonymousWordsUsed(db, anonymousId);
   try {
-    const updated = await db.query<[{ wordsUsed: number }[]]>(
-      "UPDATE anonymous_usage SET wordsUsed = $total, updatedAt = $now WHERE anonymousId = $anonymousId RETURN AFTER",
-      { total: (await anonymousWordsUsed(db, anonymousId)) + words, now: new Date().toISOString(), anonymousId }
-    );
-    const row = updated[0]?.[0];
-    if (row) return Math.max(0, Number(row.wordsUsed ?? 0));
-    await db.create("anonymous_usage", {
-      anonymousId,
-      wordsUsed: words,
-      updatedAt: new Date().toISOString(),
+    const total = await db.rpc<number>("increment_anonymous_words", {
+      p_anonymous_id: anonymousId,
+      p_words: words,
     });
-    return words;
+    return Math.max(0, Number(total ?? 0));
   } catch (err) {
     console.warn("[portal] anonymous usage update failed:", err);
     return 0;
@@ -73,6 +65,34 @@ export interface PortalUserRecord {
   verificationReason: string;
   requestedAt: string | null;
   createdAt: string;
+}
+
+/** Raw portal_users row as returned by Postgres (snake_case columns). */
+interface PortalUserRow {
+  user_id: string;
+  email: string;
+  name: string | null;
+  role: string;
+  verified: boolean;
+  verification_status: string;
+  verification_reason: string;
+  requested_at: string | null;
+  created_at: string;
+}
+
+function mapUserRow(row: PortalUserRow): PortalUserRecord {
+  return {
+    userId: String(row.user_id ?? ""),
+    email: String(row.email ?? ""),
+    name: row.name ?? null,
+    role: (row.role as PortalUserRecord["role"]) ?? "user",
+    verified: row.verified === true,
+    verificationStatus:
+      (row.verification_status as PortalUserRecord["verificationStatus"]) ?? "none",
+    verificationReason: String(row.verification_reason ?? ""),
+    requestedAt: row.requested_at ?? null,
+    createdAt: String(row.created_at ?? ""),
+  };
 }
 
 function b64UrlDecode(segment: string): string {
@@ -140,49 +160,25 @@ export async function authFromRequest(header: string | undefined): Promise<AuthI
 /**
  * Fetches (or lazily creates) the portal profile for a signed-in user.
  * The very first user to register becomes the admin — this bootstraps the
- * role system without any manual setup.
+ * role system without any manual setup (enforced inside ensure_portal_user).
  */
-export async function ensurePortalUser(db: Surreal, auth: AuthInfo): Promise<PortalUserRecord> {
-  const existing = await db.query<[Record<string, unknown>[]]>(
-    "SELECT * FROM portal_users WHERE userId = $userId LIMIT 1",
-    { userId: auth.userId }
-  );
-  const row = existing[0]?.[0];
-  if (row) return row as unknown as PortalUserRecord;
-
-  let total = 0;
-  try {
-    const countRes = await db.query<[{ total: number }[]]>(
-      "SELECT count() AS total FROM portal_users GROUP ALL"
-    );
-    total = Number(countRes[0]?.[0]?.total ?? 0);
-  } catch {
-    total = 0;
-  }
-
-  const record = {
-    userId: auth.userId,
-    email: auth.email.slice(0, 200),
-    name: auth.name.slice(0, 120),
-    role: total === 0 ? "admin" : "user",
-    verified: false,
-    verificationStatus: "none",
-    verificationReason: "",
-    requestedAt: null,
-    createdAt: new Date().toISOString(),
-  };
-  await db.create("portal_users", record);
-  return record as unknown as PortalUserRecord;
+export async function ensurePortalUser(db: ZomiDB, auth: AuthInfo): Promise<PortalUserRecord> {
+  const row = await db.rpc<PortalUserRow>("ensure_portal_user", {
+    p_user_id: auth.userId,
+    p_email: auth.email,
+    p_name: auth.name,
+  });
+  if (!row) throw new Error("Failed to load portal user");
+  return mapUserRow(row);
 }
 
 /** Translation count for a single user (used by /api/portal/me). */
-export async function translationCountFor(db: Surreal, userId: string): Promise<number> {
+export async function translationCountFor(db: ZomiDB, userId: string): Promise<number> {
   try {
-    const res = await db.query<[{ total: number }[]]>(
-      "SELECT count() AS total FROM translation_logs WHERE userId = $userId GROUP ALL",
-      { userId }
-    );
-    return Number(res[0]?.[0]?.total ?? 0);
+    const count = await db.rpc<number>("count_user_translations", {
+      p_user_id: userId,
+    });
+    return Math.max(0, Number(count ?? 0));
   } catch {
     return 0;
   }
@@ -193,7 +189,7 @@ export async function translationCountFor(db: Surreal, userId: string): Promise<
  * Failures are non-fatal — logging must never break a translation.
  */
 export async function logTranslation(
-  db: Surreal,
+  db: ZomiDB,
   auth: AuthInfo,
   entry: {
     sourceText: string;
@@ -204,17 +200,16 @@ export async function logTranslation(
   }
 ): Promise<void> {
   try {
-    await ensurePortalUser(db, auth);
-    const wordCount = countWords(entry.sourceText);
-    await db.create("translation_logs", {
-      userId: auth.userId,
-      sourceText: entry.sourceText.slice(0, 5000),
-      translatedText: entry.translatedText.slice(0, 5000),
-      targetLanguage: String(entry.targetLanguage).slice(0, 32),
-      model: entry.model ? String(entry.model).slice(0, 64) : null,
-      confidence: Math.max(0, Math.min(100, Math.round(entry.confidence))),
-      wordCount,
-      createdAt: new Date().toISOString(),
+    await db.rpc("log_translation", {
+      p_user_id: auth.userId,
+      p_email: auth.email,
+      p_name: auth.name,
+      p_source_text: entry.sourceText,
+      p_translated_text: entry.translatedText,
+      p_target_language: entry.targetLanguage,
+      p_model: entry.model,
+      p_confidence: Math.round(entry.confidence),
+      p_word_count: countWords(entry.sourceText),
     });
   } catch (err) {
     console.warn("[portal] translation log failed:", err);
@@ -222,7 +217,10 @@ export async function logTranslation(
 }
 
 /** Full portal profile with usage stats, for the signed-in user. */
-export async function portalProfileFor(db: Surreal, auth: AuthInfo): Promise<PortalUserRecord & { translationCount: number }> {
+export async function portalProfileFor(
+  db: ZomiDB,
+  auth: AuthInfo
+): Promise<PortalUserRecord & { translationCount: number }> {
   const profile = await ensurePortalUser(db, auth);
   const translationCount = await translationCountFor(db, auth.userId);
   return { ...profile, translationCount };
@@ -232,9 +230,6 @@ export async function portalProfileFor(db: Surreal, auth: AuthInfo): Promise<Por
  * Permanently deletes a signed-in user's account and all associated data.
  * This is required for App Store guideline 5.1.1(v) account deletion.
  */
-export async function deletePortalUser(db: Surreal, auth: AuthInfo): Promise<void> {
-  await db.query("DELETE FROM portal_users WHERE userId = $userId", { userId: auth.userId });
-  await db.query("DELETE FROM translation_logs WHERE userId = $userId", { userId: auth.userId });
-  await db.query("DELETE FROM user_sync WHERE userId = $userId", { userId: auth.userId });
-  await db.query("DELETE FROM verification_requests WHERE userId = $userId", { userId: auth.userId });
+export async function deletePortalUser(db: ZomiDB, auth: AuthInfo): Promise<void> {
+  await db.rpc("delete_user_data", { p_user_id: auth.userId });
 }

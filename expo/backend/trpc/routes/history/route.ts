@@ -2,6 +2,37 @@ import { z } from 'zod';
 import { createTRPCRouter, dbProcedure } from '../../create-context';
 import type { TranslationHistory } from '@/backend/db/schema';
 
+/** Raw translation_history row (snake_case columns from Postgres). */
+interface HistoryRow {
+  id: string;
+  user_id: string;
+  source_text: string;
+  translated_text: string;
+  source_language: string;
+  target_language: string;
+  translation_type: string;
+  is_favorite: boolean;
+  file_name: string | null;
+  file_thumbnail: string | null;
+  created_at: string;
+}
+
+function mapHistoryRow(row: HistoryRow): TranslationHistory {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    sourceText: row.source_text,
+    translatedText: row.translated_text,
+    sourceLanguage: row.source_language as TranslationHistory['sourceLanguage'],
+    targetLanguage: row.target_language as TranslationHistory['targetLanguage'],
+    translationType: row.translation_type as TranslationHistory['translationType'],
+    isFavorite: row.is_favorite,
+    fileName: row.file_name ?? undefined,
+    fileThumbnail: row.file_thumbnail ?? undefined,
+    createdAt: row.created_at,
+  };
+}
+
 const historyRouter = createTRPCRouter({
   list: dbProcedure
     .input(z.object({
@@ -12,35 +43,38 @@ const historyRouter = createTRPCRouter({
       search: z.string().optional(),
     }))
     .query(async ({ ctx, input }) => {
-      let query = 'SELECT * FROM translation_history WHERE userId = $userId';
-      const params: Record<string, unknown> = { userId: input.deviceId };
+      let q = ctx.db.client.from('translation_history').select('*').eq('user_id', input.deviceId);
 
       if (input.type) {
-        query += ' AND translationType = $type';
-        params.type = input.type;
+        q = q.eq('translation_type', input.type);
       }
 
       if (input.search) {
-        query += ' AND (sourceText CONTAINS $search OR translatedText CONTAINS $search)';
-        params.search = input.search;
+        // Strip PostgREST filter syntax characters from user input.
+        const s = input.search.replace(/[%,()]/g, ' ').trim();
+        if (s) {
+          q = q.or(`source_text.ilike.%${s}%,translated_text.ilike.%${s}%`);
+        }
       }
 
-      query += ' ORDER BY createdAt DESC LIMIT $limit START $offset';
-      params.limit = input.limit;
-      params.offset = input.offset;
-
-      const result = await ctx.db.query<[TranslationHistory[]]>(query, params);
-      return result[0] || [];
+      const { data, error } = await q
+        .order('created_at', { ascending: false })
+        .range(input.offset, input.offset + input.limit - 1);
+      if (error) throw new Error(error.message);
+      return ((data ?? []) as HistoryRow[]).map(mapHistoryRow);
     }),
 
   favorites: dbProcedure
     .input(z.object({ deviceId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const result = await ctx.db.query<[TranslationHistory[]]>(
-        'SELECT * FROM translation_history WHERE userId = $userId AND isFavorite = true ORDER BY createdAt DESC',
-        { userId: input.deviceId }
-      );
-      return result[0] || [];
+      const { data, error } = await ctx.db.client
+        .from('translation_history')
+        .select('*')
+        .eq('user_id', input.deviceId)
+        .eq('is_favorite', true)
+        .order('created_at', { ascending: false });
+      if (error) throw new Error(error.message);
+      return ((data ?? []) as HistoryRow[]).map(mapHistoryRow);
     }),
 
   add: dbProcedure
@@ -56,65 +90,90 @@ const historyRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       const { deviceId, ...rest } = input;
-      const result = await ctx.db.create('translation_history', {
-        ...rest,
-        userId: deviceId,
-        isFavorite: false,
-        createdAt: new Date().toISOString(),
-      });
+      const { data, error } = await ctx.db.client
+        .from('translation_history')
+        .insert({
+          user_id: deviceId,
+          source_text: rest.sourceText,
+          translated_text: rest.translatedText,
+          source_language: rest.sourceLanguage,
+          target_language: rest.targetLanguage,
+          translation_type: rest.translationType,
+          is_favorite: false,
+          ...(rest.fileName ? { file_name: rest.fileName } : {}),
+          ...(rest.fileThumbnail ? { file_thumbnail: rest.fileThumbnail } : {}),
+        })
+        .select()
+        .single();
+      if (error) throw new Error(error.message);
 
-      await ctx.db.query(
-        'UPDATE user_stats SET translationsCount += 1, updatedAt = $now WHERE userId = $userId',
-        { userId: deviceId, now: new Date().toISOString() }
-      );
+      try {
+        await ctx.db.rpc('bump_user_stats', {
+          p_user_id: deviceId,
+          p_translations: 1,
+          p_contributions: 0,
+          p_points: 0,
+        });
+      } catch {
+        // stats are best-effort
+      }
 
-      return result;
+      return mapHistoryRow(data as HistoryRow);
     }),
 
   toggleFavorite: dbProcedure
-    .input(z.object({ 
+    .input(z.object({
       id: z.string(),
       deviceId: z.string(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const result = await ctx.db.query<[TranslationHistory[]]>(
-        'SELECT * FROM translation_history WHERE id = $id AND userId = $userId LIMIT 1',
-        { id: input.id, userId: input.deviceId }
-      );
+      const { data, error } = await ctx.db.client
+        .from('translation_history')
+        .select('*')
+        .eq('id', input.id)
+        .eq('user_id', input.deviceId)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
 
-      const item = result[0]?.[0];
+      const item = (data ?? null) as HistoryRow | null;
       if (!item) {
         throw new Error('Not found');
       }
 
-      await ctx.db.query(
-        'UPDATE translation_history SET isFavorite = $favorite WHERE id = $id',
-        { id: input.id, favorite: !item.isFavorite }
-      );
+      const next = !item.is_favorite;
+      const { error: updateError } = await ctx.db.client
+        .from('translation_history')
+        .update({ is_favorite: next })
+        .eq('id', input.id)
+        .eq('user_id', input.deviceId);
+      if (updateError) throw new Error(updateError.message);
 
-      return { success: true, isFavorite: !item.isFavorite };
+      return { success: true, isFavorite: next };
     }),
 
   delete: dbProcedure
-    .input(z.object({ 
+    .input(z.object({
       id: z.string(),
       deviceId: z.string(),
     }))
     .mutation(async ({ ctx, input }) => {
-      await ctx.db.query(
-        'DELETE FROM translation_history WHERE id = $id AND userId = $userId',
-        { id: input.id, userId: input.deviceId }
-      );
+      const { error } = await ctx.db.client
+        .from('translation_history')
+        .delete()
+        .eq('id', input.id)
+        .eq('user_id', input.deviceId);
+      if (error) throw new Error(error.message);
       return { success: true };
     }),
 
   clear: dbProcedure
     .input(z.object({ deviceId: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      await ctx.db.query(
-        'DELETE FROM translation_history WHERE userId = $userId',
-        { userId: input.deviceId }
-      );
+      const { error } = await ctx.db.client
+        .from('translation_history')
+        .delete()
+        .eq('user_id', input.deviceId);
+      if (error) throw new Error(error.message);
       return { success: true };
     }),
 });
