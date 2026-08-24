@@ -43,6 +43,7 @@ import {
   Check,
   Search,
   X,
+  CloudOff,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
@@ -59,6 +60,7 @@ import {
   isPrimaryLanguage,
   type LanguageOption,
 } from '@/constants/languages';
+import { offlineLookup, OFFLINE_ENTRY_COUNT } from '@/constants/offlineDictionary';
 
 
 import GlassCard from '@/components/GlassCard';
@@ -85,6 +87,8 @@ export default function TranslatorScreen() {
   const [languageSearch, setLanguageSearch] = useState('');
   const [isTranslating, setIsTranslating] = useState(false);
   const [translationQuality, setTranslationQuality] = useState(0);
+  const [isOfflineResult, setIsOfflineResult] = useState(false);
+  const [offlineNote, setOfflineNote] = useState<string | null>(null);
   
   const [copied, setCopied] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
@@ -271,6 +275,8 @@ export default function TranslatorScreen() {
     // Update refs to track current translation
     lastTranslatedText.current = text.trim();
     lastDirection.current = `${source}→${target}`;
+    setIsOfflineResult(false);
+    setOfflineNote(null);
     
     // Only show loading if we're not already translating (prevents flicker)
     if (!isTranslatingRef.current) {
@@ -459,6 +465,25 @@ export default function TranslatorScreen() {
       if (offlineHit) {
         setOutputText(offlineHit.translatedText);
         setTranslationQuality(Math.max(50, offlineHit.confidence - 20));
+        setIsOfflineResult(true);
+        setOfflineNote('previously translated on this device');
+        return;
+      }
+
+      // Offline dictionary: bundled common Zomi ⇄ English vocabulary plus the
+      // user's personal glossary keeps working with no connection at all.
+      const dictHit = offlineLookup(text.trim(), sourceLang, targetLang, glossary.asRecord());
+      if (dictHit) {
+        console.log('[offline] dictionary hit:', dictHit.fromUserGlossary ? 'personal glossary' : 'bundled');
+        setOutputText(dictHit.translation);
+        setTranslationQuality(88);
+        setIsOfflineResult(true);
+        const bits = [
+          dictHit.entry.pos,
+          dictHit.entry.note,
+          dictHit.fromUserGlossary ? 'from your personal glossary' : null,
+        ].filter(Boolean);
+        setOfflineNote(bits.join(' · '));
         return;
       }
 
@@ -1104,10 +1129,16 @@ export default function TranslatorScreen() {
                 <Text style={styles.inputLabel}>
                   {targetLabel}
                 </Text>
-                {!!outputText && !isTranslating && !stream.isStreaming && !outputText.startsWith('Translation') && !outputText.startsWith('Service') && !outputText.startsWith('Error:') && !outputText.startsWith('Invalid') && !outputText.startsWith('API') && !outputText.startsWith('Network') && !outputText.startsWith('Authentication') && !outputText.startsWith('Sign in') && !outputText.startsWith('Your session') && !outputText.startsWith('Request timed') && (
+                {!!outputText && !isTranslating && !stream.isStreaming && !isOfflineResult && !outputText.startsWith('Translation') && !outputText.startsWith('Service') && !outputText.startsWith('Error:') && !outputText.startsWith('Invalid') && !outputText.startsWith('API') && !outputText.startsWith('Network') && !outputText.startsWith('Authentication') && !outputText.startsWith('Sign in') && !outputText.startsWith('Your session') && !outputText.startsWith('Request timed') && (
                   <View style={styles.officialBadge}>
                     <BadgeCheck size={12} color="#63C0FF" />
                     <Text style={styles.officialBadgeText}>Official</Text>
+                  </View>
+                )}
+                {isOfflineResult && !!outputText && !isTranslating && !stream.isStreaming && (
+                  <View style={styles.offlineBadge}>
+                    <CloudOff size={12} color="#FFB84D" />
+                    <Text style={styles.offlineBadgeText}>Offline dictionary</Text>
                   </View>
                 )}
               </View>
@@ -1257,6 +1288,16 @@ export default function TranslatorScreen() {
                 </Text>
               )}
             </Animated.View>
+
+            {isOfflineResult && !!outputText && !isTranslating && (
+              <View style={styles.offlineNotice}>
+                <CloudOff size={13} color="#FFB84D" />
+                <Text style={styles.offlineNoticeText}>
+                  {offlineNote ? `${offlineNote} — ` : ''}
+                  served from offline vocabulary ({OFFLINE_ENTRY_COUNT}+ entries on this device). Full AI translation resumes when you are back online.
+                </Text>
+              </View>
+            )}
 
             {hasGlossaryHighlights && !isTranslating && !stream.isStreaming && (
               <View style={styles.glossaryLegend}>
@@ -1775,6 +1816,42 @@ const styles = StyleSheet.create({
     color: '#63C0FF',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  offlineBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 184, 77, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 184, 77, 0.35)',
+  },
+  offlineBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FFB84D',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  offlineNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    marginTop: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 184, 77, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 184, 77, 0.2)',
+  },
+  offlineNoticeText: {
+    flex: 1,
+    fontSize: 11,
+    lineHeight: 16,
+    color: Colors.textSecondary,
   },
   outputActions: {
     flexDirection: 'row',
