@@ -10,6 +10,7 @@ import io.ktor.client.request.post
 import io.ktor.client.request.preparePost
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsChannel
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
@@ -252,4 +253,45 @@ object PortalApi {
         if (result.text.isEmpty()) error("No translation was returned. Please try again.")
         return result
     }
+
+    /**
+     * Fetches two AI-generated example sentences for a verified dictionary
+     * entry. Guests are served while their anonymous free-tier allowance
+     * lasts; viewing examples does not draw it down.
+     */
+    suspend fun fetchEntryExamples(
+        token: String?,
+        anonymousId: String,
+        english: String,
+        zomi: String,
+        pos: String,
+    ): List<EntryExample> {
+        val response = PortalHttp.client.post("${AppConfig.API_BASE_URL}/api/dictionary/examples") {
+            token?.let { header(HttpHeaders.Authorization, "Bearer $it") }
+            header("X-Anonymous-Id", anonymousId)
+            contentType(ContentType.Application.Json)
+            setBody(EntryExamplesBody(english, zomi, pos, anonymousId))
+        }
+        return PortalHttp.json.decodeFromString<ExamplesResponse>(response.bodyAsText()).examples
+    }
 }
+
+/** One AI-generated example sentence pair for a dictionary entry. */
+@Serializable
+data class EntryExample(
+    val english: String = "",
+    val zomi: String = "",
+)
+
+@Serializable
+private data class EntryExamplesBody(
+    val english: String,
+    val zomi: String,
+    val pos: String,
+    val anonymousId: String,
+)
+
+@Serializable
+private data class ExamplesResponse(
+    val examples: List<EntryExample> = emptyList(),
+)

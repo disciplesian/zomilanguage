@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.rork.zomilanguageportal.data.AuthManager
 import com.rork.zomilanguageportal.data.DictionaryEntry
 import com.rork.zomilanguageportal.data.DictionaryRepository
+import com.rork.zomilanguageportal.data.EntryExample
 import com.rork.zomilanguageportal.data.PortalApi
 import com.rork.zomilanguageportal.data.SessionExpiredException
 import com.rork.zomilanguageportal.data.Suggestion
@@ -40,6 +41,12 @@ data class DictionaryUiState(
     val browseEntries: List<DictionaryEntry> = emptyList(),
     /** No query typed — show the A–Z index instead of search results. */
     val isBrowsing: Boolean = true,
+    // Expanded entry detail view
+    val detailEntry: DictionaryEntry? = null,
+    val detailRelated: List<DictionaryEntry> = emptyList(),
+    val detailExamples: List<EntryExample> = emptyList(),
+    val detailExamplesLoading: Boolean = false,
+    val detailExamplesError: Boolean = false,
 )
 
 /** State for the Dictionary tab: instant local search over the verified
@@ -50,6 +57,9 @@ class DictionaryViewModel(application: Application) : AndroidViewModel(applicati
     val uiState: StateFlow<DictionaryUiState> = _uiState.asStateFlow()
 
     private var aiJob: Job? = null
+
+    /** Example sentences cached per English headword for this session. */
+    private val examplesCache = HashMap<String, List<EntryExample>>()
 
     init {
         viewModelScope.launch {
@@ -131,6 +141,65 @@ class DictionaryViewModel(application: Application) : AndroidViewModel(applicati
             _uiState.update { it.copy(results = results, suggestions = suggestions, needsAI = needsAI) }
             if (needsAI) scheduleAI(trimmed)
         }
+    }
+
+    /** Opens the expanded detail view for an entry: related terms computed
+     *  locally, example sentences fetched from the AI endpoint (cached). */
+    fun openDetail(entry: DictionaryEntry) {
+        _uiState.update {
+            it.copy(
+                detailEntry = entry,
+                detailRelated = emptyList(),
+                detailExamples = emptyList(),
+                detailExamplesError = false,
+                detailExamplesLoading = true,
+            )
+        }
+        viewModelScope.launch {
+            val related = withContext(Dispatchers.Default) {
+                DictionaryRepository.relatedEntries(entry)
+            }
+            if (_uiState.value.detailEntry == entry) {
+                _uiState.update { it.copy(detailRelated = related) }
+            }
+
+            val key = entry.english.lowercase()
+            val cached = examplesCache[key]
+            if (cached != null) {
+                if (_uiState.value.detailEntry == entry) {
+                    _uiState.update { it.copy(detailExamples = cached, detailExamplesLoading = false) }
+                }
+                return@launch
+            }
+            try {
+                val examples = PortalApi.fetchEntryExamples(
+                    token = AuthManager.accessToken(),
+                    anonymousId = AuthManager.anonymousId(),
+                    english = entry.english,
+                    zomi = entry.zomi,
+                    pos = entry.pos,
+                )
+                if (examples.isNotEmpty()) examplesCache[key] = examples
+                if (_uiState.value.detailEntry == entry) {
+                    _uiState.update {
+                        it.copy(
+                            detailExamples = examples,
+                            detailExamplesLoading = false,
+                            detailExamplesError = examples.isEmpty(),
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                if (_uiState.value.detailEntry == entry) {
+                    _uiState.update { it.copy(detailExamplesLoading = false, detailExamplesError = true) }
+                }
+            }
+        }
+    }
+
+    /** Closes the expanded entry detail view. */
+    fun closeDetail() {
+        _uiState.update { it.copy(detailEntry = null) }
     }
 
     fun onDirectionChange(englishToZomi: Boolean) {

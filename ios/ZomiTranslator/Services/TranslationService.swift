@@ -15,6 +15,12 @@ nonisolated enum TranslationEvent {
     case failure(message: String)
 }
 
+/// One AI-generated example sentence pair for a dictionary entry.
+nonisolated struct EntryExample: Codable, Sendable {
+    let english: String
+    let zomi: String
+}
+
 /// Streams translations token-by-token from the shared Rork backend SSE endpoint
 /// (POST /api/translate/stream), with a Rork toolkit fallback. Mirrors the Expo
 /// useStreamingTranslation hook + client fallback.
@@ -168,5 +174,32 @@ nonisolated final class TranslationService: Sendable {
     func fallbackTranslate(text: String, sourceLanguage: String, targetLanguage: String) async throws -> String {
         let prompt = ZomiPrompt.fallbackPrompt(text: text, sourceLanguage: sourceLanguage, targetLanguage: targetLanguage)
         return try await ToolkitService.shared.generateText(prompt: prompt)
+    }
+
+    /// Fetches two AI-generated example sentences for a verified dictionary
+    /// entry (POST /api/dictionary/examples). Returns [] when unavailable.
+    func fetchEntryExamples(english: String, zomi: String, pos: String) async -> [EntryExample] {
+        guard let url = URL(string: "\(baseURL)/api/dictionary/examples") else { return [] }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(anonymousId, forHTTPHeaderField: "X-Anonymous-Id")
+        if let accessToken = KeychainHelper.get("access_token") {
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
+        request.timeoutInterval = 45
+        let body: [String: Any] = ["english": english, "zomi": zomi, "pos": pos, "anonymousId": anonymousId]
+        guard let data = try? JSONSerialization.data(withJSONObject: body) else { return [] }
+        request.httpBody = data
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return [] }
+            struct ExamplesResponse: Codable {
+                let examples: [EntryExample]
+            }
+            return (try? JSONDecoder().decode(ExamplesResponse.self, from: data))?.examples ?? []
+        } catch {
+            return []
+        }
     }
 }

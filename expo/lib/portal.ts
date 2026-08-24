@@ -151,3 +151,36 @@ export async function decideAdminVerification(
     body: JSON.stringify({ userId, decision }),
   });
 }
+
+export interface EntryExample {
+  english: string;
+  zomi: string;
+}
+
+/**
+ * Fetches two AI-generated example sentences (English + Zomi) for a verified
+ * dictionary entry. Guests are served while their anonymous free-tier
+ * allowance lasts; viewing examples does not draw it down.
+ */
+export async function fetchEntryExamples(
+  entry: { english: string; zomi: string; pos?: string },
+  opts?: { authToken?: string; anonymousId?: string }
+): Promise<EntryExample[]> {
+  const res = await fetch(`${getBaseUrl()}/api/dictionary/examples`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(opts?.authToken ? { Authorization: `Bearer ${opts.authToken}` } : {}),
+      ...(opts?.anonymousId ? { 'X-Anonymous-Id': opts.anonymousId } : {}),
+    },
+    body: JSON.stringify({
+      english: entry.english,
+      zomi: entry.zomi,
+      pos: entry.pos ?? '',
+      anonymousId: opts?.anonymousId ?? '',
+    }),
+  });
+  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok) throw new Error(String(body.error ?? `HTTP ${res.status}`));
+  return Array.isArray(body.examples) ? (body.examples as EntryExample[]) : [];
+}

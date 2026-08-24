@@ -253,4 +253,58 @@ object DictionaryRepository {
     /** Alphabetically sorted entries whose English headword starts with the letter. */
     fun entriesForLetter(letter: String): List<DictionaryEntry> =
         sections().firstOrNull { it.letter == letter }?.entries ?: emptyList()
+
+    /** Short plain-language description of each grammatical category. */
+    val categoryDescriptions: Map<String, String> = mapOf(
+        "noun" to "Names a person, place, thing, or idea.",
+        "verb" to "Describes an action or a state of being.",
+        "adjective" to "Describes or modifies a noun.",
+        "adverb" to "Modifies a verb, adjective, or another adverb.",
+        "preposition" to "Shows the relationship between a noun and another word.",
+        "pronoun" to "Stands in place of a noun.",
+        "conjunction" to "Joins words, phrases, or clauses together.",
+        "interjection" to "Expresses a sudden emotion or reaction.",
+        "prefix" to "Attaches to the start of a word to change its meaning.",
+        "particle" to "A small function word that carries grammatical meaning.",
+        "article" to "Introduces a noun (a, an, the).",
+        "other" to "A word that does not fit the standard grammatical categories.",
+    )
+
+    /** Shared leading characters (max 8) of two lowercased strings, or 0 when
+     *  fewer than two characters match — a relation needs a real prefix. */
+    private fun sharedPrefixLength(a: String, b: String): Int {
+        var n = 0
+        val max = minOf(a.length, b.length, 8)
+        while (n < max && a[n].equals(b[n], ignoreCase = true)) n++
+        return if (n >= 2) n else 0
+    }
+
+    /**
+     * Entries related to the given one, ranked by shared English prefix,
+     * shared Zomi prefix, and same grammatical category. Computed locally
+     * over the verified dataset, so it works fully offline.
+     */
+    fun relatedEntries(entry: DictionaryEntry, limit: Int = 6): List<DictionaryEntry> {
+        val all = entries ?: return emptyList()
+        val en = entry.english.lowercase()
+        val zo = entry.zomi.lowercase()
+        val seen = HashSet<String>(listOf(en))
+        data class Scored(val entry: DictionaryEntry, val score: Int)
+        val scored = ArrayList<Scored>()
+        for (e in all) {
+            val eEn = e.english.lowercase()
+            if (seen.contains(eEn)) continue
+            val score =
+                sharedPrefixLength(en, eEn) * 3 +
+                    sharedPrefixLength(zo, e.zomi.lowercase()) * 2 +
+                    if (e.category == entry.category) 1 else 0
+            if (score <= 1) continue
+            seen.add(eEn)
+            scored.add(Scored(e, score))
+        }
+        return scored
+            .sortedWith(compareByDescending<Scored> { it.score }.thenBy { it.entry.english })
+            .take(limit)
+            .map { it.entry }
+    }
 }

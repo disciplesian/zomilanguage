@@ -246,3 +246,52 @@ export function browseLetters(): string[] {
 export function entriesForLetter(letter: string): DictionaryEntry[] {
   return browseSections().find((s) => s.letter === letter)?.entries ?? [];
 }
+
+/** Short plain-language description of each grammatical category. */
+export const CATEGORY_DESCRIPTIONS: Record<DictionaryCategory, string> = {
+  noun: 'Names a person, place, thing, or idea.',
+  verb: 'Describes an action or a state of being.',
+  adjective: 'Describes or modifies a noun.',
+  adverb: 'Modifies a verb, adjective, or another adverb.',
+  preposition: 'Shows the relationship between a noun and another word.',
+  pronoun: 'Stands in place of a noun.',
+  conjunction: 'Joins words, phrases, or clauses together.',
+  interjection: 'Expresses a sudden emotion or reaction.',
+  prefix: 'Attaches to the start of a word to change its meaning.',
+  particle: 'A small function word that carries grammatical meaning.',
+  article: 'Introduces a noun (a, an, the).',
+  other: 'A word that does not fit the standard grammatical categories.',
+};
+
+/**
+ * Entries related to the given one, ranked by shared English prefix, shared
+ * Zomi prefix, and same grammatical category. Computed locally over the
+ * verified dataset, so it works fully offline.
+ */
+export function relatedEntries(entry: DictionaryEntry, limit = 6): DictionaryEntry[] {
+  const en = entry.english.toLowerCase();
+  const zo = entry.zomi.toLowerCase();
+  const prefixLen = (a: string, b: string): number => {
+    let n = 0;
+    const max = Math.min(a.length, b.length, 8);
+    while (n < max && a[n] === b[n]) n++;
+    return n >= 2 ? n : 0;
+  };
+  const seen = new Set([en]);
+  const scored: { entry: DictionaryEntry; score: number }[] = [];
+  for (const e of activeEntries) {
+    const eEn = e.english.toLowerCase();
+    if (seen.has(eEn)) continue;
+    const score =
+      prefixLen(en, eEn) * 3 +
+      prefixLen(zo, e.zomi.toLowerCase()) * 2 +
+      (e.category === entry.category ? 1 : 0);
+    if (score <= 1) continue;
+    seen.add(eEn);
+    scored.push({ entry: e, score });
+  }
+  return scored
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((m) => m.entry);
+}

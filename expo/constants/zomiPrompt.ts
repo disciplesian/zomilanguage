@@ -178,6 +178,49 @@ export function promptLanguageName(code: string): string {
 }
 
 /**
+ * System instruction for the dictionary entry-examples endpoint: writes
+ * beginner-friendly example sentence pairs for a verified entry.
+ */
+export const ENTRY_EXAMPLES_SYSTEM_INSTRUCTION = `### ROLE: ZOMI DICTIONARY EXAMPLE WRITER
+You write learning examples for a verified English–Zomi (ISO 639-3: ctd) dictionary.
+
+### ABSOLUTE DIALECT RULE:
+- Use ONLY standard Zomi (ISO 639-3: ctd) vocabulary, grammar, spelling, and phonology.
+- NEVER use words, spellings, or grammatical patterns from related varieties such as Paite, Mizo (Lushai), Hakha Chin, Falam Chin, Lai, Mara, or any other Kuki-Chin variety.
+
+### GRAMMAR (Zomi sentences):
+- Strict SOV (Subject–Object–Verb) word order.
+- Correct terminal particles (hi, hiam, na, maw, e, ding, zo, lai, kei, lo).
+- Negation with "kei" or "lo" after the verb. Future: verb + "ding". Past: verb + "zo". Progressive: verb + "lai".
+- Questions end with "hiam", "maw", or "ze"; polite requests end with "ve aw" or "in".
+
+### EXAMPLE RULES:
+- Each example is ONE short, natural, everyday sentence that uses the entry's exact meaning.
+- 4–10 words per sentence, beginner-friendly vocabulary.
+- The English sentence uses the English headword; the Zomi sentence uses the Zomi equivalent and says the same thing.
+
+### OUTPUT PROTOCOL:
+- Return ONLY JSON: {"examples":[{"english":"...","zomi":"..."},{"english":"...","zomi":"..."}]}
+- Exactly 2 examples. NO conversational preamble, explanations, romanization notes, or labels.`;
+
+/** User message for the entry-examples endpoint: names the entry and supplies the trusted glossary. */
+export function buildEntryExamplesPrompt(english: string, zomi: string, pos: string): string {
+  return [
+    'Write exactly 2 example sentences for this verified dictionary entry:',
+    `English headword: "${english}"`,
+    `Standard Zomi (ISO 639-3: ctd) equivalent: "${zomi}"`,
+    pos ? `Part of speech: ${pos}` : '',
+    'Each English sentence must use the headword; each Zomi sentence must use the Zomi equivalent with the same meaning.',
+    '',
+    `GLOSSARY_DATA_JSON:\n${JSON.stringify({ glossary: ZOMI_GLOSSARY, examples: ZOMI_EXAMPLES })}`,
+    '',
+    'Return JSON {"examples":[{"english":"...","zomi":"..."},{"english":"...","zomi":"..."}]}.',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+/**
  * Build a plain-text fallback prompt for the Rork toolkit (non-Gemini)
  * client-side fallback path. Both languages are named explicitly so the
  * model never has to guess the source.

@@ -8,6 +8,7 @@ struct DictionaryView: View {
     @Environment(ThemeManager.self) private var theme
     @State private var model = DictionaryViewModel()
     @State private var showAIConsent = false
+    @State private var detailEntry: DictionaryEntry?
 
     private var colors: ThemeColors { theme.colors }
 
@@ -59,6 +60,9 @@ struct DictionaryView: View {
         .navigationTitle("Dictionary")
         .navigationBarTitleDisplayMode(.inline)
         .onDisappear { model.cancelAI() }
+        .sheet(item: $detailEntry) { entry in
+            EntryDetailSheet(entry: entry)
+        }
         .alert("Zomi AI Lookup Consent", isPresented: $showAIConsent) {
             Button("Don't Allow", role: .cancel) {}
             Button("Allow") {
@@ -262,7 +266,7 @@ struct DictionaryView: View {
 
     private func entryRow(_ entry: DictionaryEntry) -> some View {
         Button {
-            copy(entry.zomi)
+            detailEntry = entry
         } label: {
             HStack(alignment: .center, spacing: 10) {
                 VStack(alignment: .leading, spacing: 5) {
@@ -294,7 +298,7 @@ struct DictionaryView: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(entry.english), \(entry.pos), \(entry.zomi). Verified. Tap to copy.")
+        .accessibilityLabel("\(entry.english), \(entry.pos), \(entry.zomi). Verified. Tap to view details.")
     }
 
     private func posChip(_ entry: DictionaryEntry) -> some View {
@@ -455,5 +459,304 @@ struct DictionaryView: View {
         default: dark = 0x9BA3AF; light = 0x5A6270
         }
         return theme.isDark ? Color(hex: dark) : Color(hex: light)
+    }
+}
+
+// MARK: - Entry detail sheet
+
+/** Category chip color for the detail sheet (dark/light variants). */
+private func detailCategoryColor(_ category: String, isDark: Bool) -> Color {
+    let dark: UInt
+    let light: UInt
+    switch category {
+    case "noun": dark = 0x63C0FF; light = 0x1E7FD6
+    case "verb": dark = 0x00F0FF; light = 0x0088A8
+    case "adjective": dark = 0xB98CFF; light = 0x7C4DFF
+    case "adverb": dark = 0xFFB84D; light = 0xC77800
+    case "preposition": dark = 0xFF8FA3; light = 0xD6336C
+    case "pronoun": dark = 0x7EE8A2; light = 0x1F8A4C
+    case "conjunction": dark = 0xFFD166; light = 0xB8860B
+    case "interjection": dark = 0xFF7B72; light = 0xC9372C
+    case "prefix": dark = 0x9CD1FF; light = 0x3E7CB1
+    case "particle": dark = 0xC9B8FF; light = 0x6A5ACD
+    case "article": dark = 0xA0D2DB; light = 0x4E8A96
+    default: dark = 0x9BA3AF; light = 0x5A6270
+    }
+    return isDark ? Color(hex: dark) : Color(hex: light)
+}
+
+/// Expanded entry detail: definition, grammatical category, AI example
+/// sentences and related terms from the verified dataset. Example sentences
+/// are gated behind the same explicit Google Gemini consent as the AI lookup
+/// (App Store guideline 5.1).
+private struct EntryDetailSheet: View {
+    @Environment(ThemeManager.self) private var theme
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var current: DictionaryEntry
+    @State private var examples: [EntryExample] = []
+    @State private var isLoadingExamples = false
+    @State private var failedExamples = false
+    @State private var showConsent = false
+    @State private var consentGiven = UserDefaults.standard.bool(forKey: "dictionary_ai_consent_given")
+
+    private var colors: ThemeColors { theme.colors }
+
+    init(entry: DictionaryEntry) {
+        _current = State(initialValue: entry)
+    }
+
+    private var related: [DictionaryEntry] {
+        DictionaryData.relatedEntries(current)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    chipsRow
+                        .padding(.bottom, 4)
+
+                    sectionLabel("Definition")
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        Text(current.zomi)
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundStyle(colors.primaryLight)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Button {
+                            copy(current.zomi)
+                        } label: {
+                            Image(systemName: "doc.on.doc")
+                                .font(.system(size: 14))
+                                .foregroundStyle(colors.textSecondary)
+                                .padding(8)
+                                .background(Circle().fill(colors.glass))
+                        }
+                        .accessibilityLabel("Copy definition")
+                    }
+
+                    sectionLabel("Grammatical category")
+                    Text(current.category.capitalized)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(colors.text)
+                    Text(DictionaryData.categoryDescriptions[current.category]
+                        ?? "A word that does not fit the standard grammatical categories.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(colors.textSecondary)
+                        .padding(.top, 2)
+
+                    sectionLabel("Example sentences")
+                    examplesSection
+
+                    if !related.isEmpty {
+                        sectionLabel("Related terms")
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(related) { relatedEntry in
+                                Button {
+                                    current = relatedEntry
+                                } label: {
+                                    HStack(spacing: 10) {
+                                        Text(relatedEntry.english)
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundStyle(colors.text)
+                                        Image(systemName: "arrow.right")
+                                            .font(.system(size: 11))
+                                            .foregroundStyle(colors.textMuted)
+                                        Text(relatedEntry.zomi)
+                                            .font(.system(size: 14))
+                                            .foregroundStyle(colors.primaryLight)
+                                            .lineLimit(1)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                    }
+                                    .padding(.vertical, 8)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Open details for \(relatedEntry.english)")
+                            }
+                        }
+                    }
+                }
+                .padding(20)
+            }
+            .background(AppBackground(colors: colors, isDark: theme.isDark))
+            .navigationTitle(current.english)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+            .task(id: current) {
+                examples = []
+                failedExamples = false
+                if consentGiven {
+                    await loadExamples()
+                }
+            }
+            .alert("Zomi AI Example Consent", isPresented: $showConsent) {
+                Button("Don't Allow", role: .cancel) {}
+                Button("Allow") {
+                    UserDefaults.standard.set(true, forKey: "dictionary_ai_consent_given")
+                    consentGiven = true
+                    Task { await loadExamples() }
+                }
+            } message: {
+                Text("Example sentences are generated by Google Gemini AI. When you use this, the dictionary entry is sent securely to Google for processing. By continuing, you consent to this processing.")
+            }
+        }
+    }
+
+    // MARK: Sections
+
+    private var chipsRow: some View {
+        HStack(spacing: 8) {
+            let color = detailCategoryColor(current.category, isDark: theme.isDark)
+            Text(current.pos.isEmpty ? current.category : current.pos)
+                .font(.system(size: 10, weight: .bold))
+                .textCase(.uppercase)
+                .foregroundStyle(color)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 2)
+                .background(
+                    Capsule()
+                        .fill(color.opacity(theme.isDark ? 0.15 : 0.10))
+                        .overlay(Capsule().strokeBorder(color.opacity(0.35)))
+                )
+            HStack(spacing: 4) {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.system(size: 10))
+                Text("Verified")
+                    .font(.system(size: 10, weight: .bold))
+                    .textCase(.uppercase)
+            }
+            .foregroundStyle(colors.success)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 2)
+            .background(
+                Capsule()
+                    .fill(colors.glassGreen)
+                    .overlay(Capsule().strokeBorder(colors.glassGreenBorder))
+            )
+            Spacer()
+        }
+    }
+
+    @ViewBuilder
+    private var examplesSection: some View {
+        if !consentGiven {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Zomi AI can write example sentences for this entry — the entry would be sent securely to Google Gemini AI.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(colors.textSecondary)
+                Button {
+                    showConsent = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 13))
+                        Text("Generate examples")
+                            .font(.system(size: 14, weight: .semibold))
+                    }
+                    .foregroundStyle(colors.accent)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 9)
+                    .background(
+                        Capsule()
+                            .fill(colors.glassYellow)
+                            .overlay(Capsule().strokeBorder(colors.glassYellowBorder))
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        } else if isLoadingExamples {
+            HStack(spacing: 10) {
+                ProgressView()
+                Text("Asking Zomi AI...")
+                    .font(.system(size: 14))
+                    .foregroundStyle(colors.textSecondary)
+            }
+        } else if failedExamples {
+            Text("Examples need an internet connection — the dictionary itself works offline.")
+                .font(.system(size: 14))
+                .foregroundStyle(colors.textSecondary)
+        } else {
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(Array(examples.enumerated()), id: \.offset) { _, example in
+                    Button {
+                        copy(example.zomi)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(example.english)
+                                .font(.system(size: 14))
+                                .foregroundStyle(colors.text)
+                                .multilineTextAlignment(.leading)
+                            Text(example.zomi)
+                                .font(.system(size: 14))
+                                .foregroundStyle(colors.primaryLight)
+                                .multilineTextAlignment(.leading)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(colors.glass)
+                                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(colors.glassBorder))
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Example: \(example.english). \(example.zomi). Tap to copy.")
+                }
+                HStack(spacing: 4) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 10))
+                    Text("Zomi AI")
+                        .font(.system(size: 10, weight: .bold))
+                        .textCase(.uppercase)
+                }
+                .foregroundStyle(colors.accent)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(
+                    Capsule()
+                        .fill(colors.glassYellow)
+                        .overlay(Capsule().strokeBorder(colors.glassYellowBorder))
+                )
+            }
+        }
+    }
+
+    // MARK: Helpers
+
+    private func sectionLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11, weight: .bold))
+            .textCase(.uppercase)
+            .tracking(1)
+            .foregroundStyle(colors.textMuted)
+            .padding(.top, 18)
+            .padding(.bottom, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func loadExamples() async {
+        isLoadingExamples = true
+        failedExamples = false
+        let result = await TranslationService.shared.fetchEntryExamples(
+            english: current.english,
+            zomi: current.zomi,
+            pos: current.pos
+        )
+        isLoadingExamples = false
+        if result.isEmpty {
+            failedExamples = true
+        } else {
+            examples = result
+        }
+    }
+
+    private func copy(_ text: String) {
+        UIPasteboard.general.string = text
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 }

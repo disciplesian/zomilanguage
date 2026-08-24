@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
@@ -45,11 +46,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import com.rork.zomilanguageportal.data.DictionaryEntry
+import com.rork.zomilanguageportal.data.DictionaryRepository
 import com.rork.zomilanguageportal.data.Suggestion
 import com.rork.zomilanguageportal.ui.components.GlassCard
 import com.rork.zomilanguageportal.ui.theme.PortalColors
@@ -218,11 +221,11 @@ fun DictionaryScreen(viewModel: DictionaryViewModel = viewModel()) {
                 state.browseEntries.size,
                 key = { i -> "$i|${state.browseEntries[i].english}|${state.browseEntries[i].zomi}" },
             ) { i ->
-                EntryRow(state.browseEntries[i]) { copy(it) }
+                EntryRow(state.browseEntries[i]) { viewModel.openDetail(it) }
             }
         } else {
             items(state.results.size, key = { i -> "${state.results[i].english}|${state.results[i].pos}|${state.results[i].zomi}" }) { i ->
-                EntryRow(state.results[i]) { copy(it) }
+                EntryRow(state.results[i]) { viewModel.openDetail(it) }
             }
         }
 
@@ -231,6 +234,15 @@ fun DictionaryScreen(viewModel: DictionaryViewModel = viewModel()) {
         }
 
         item { Spacer(Modifier.height(24.dp)) }
+    }
+
+    if (state.detailEntry != null) {
+        EntryDetailDialog(
+            state = state,
+            onCopy = { copy(it) },
+            onOpenRelated = { viewModel.openDetail(it) },
+            onClose = viewModel::closeDetail,
+        )
     }
 }
 
@@ -346,7 +358,7 @@ private fun LetterIndex(letters: List<String>, selected: String, onSelect: (Stri
 }
 
 @Composable
-private fun EntryRow(entry: DictionaryEntry, onCopy: (String) -> Unit) {
+private fun EntryRow(entry: DictionaryEntry, onOpen: (DictionaryEntry) -> Unit) {
     val posColor = categoryColor(entry.category)
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -355,7 +367,7 @@ private fun EntryRow(entry: DictionaryEntry, onCopy: (String) -> Unit) {
             .padding(bottom = 10.dp)
             .background(PortalColors.GlassFill, RoundedCornerShape(16.dp))
             .border(1.dp, PortalColors.GlassBorder, RoundedCornerShape(16.dp))
-            .clickable { onCopy(entry.zomi) }
+            .clickable { onOpen(entry) }
             .padding(14.dp),
     ) {
         Column(Modifier.weight(1f)) {
@@ -393,6 +405,210 @@ private fun EntryRow(entry: DictionaryEntry, onCopy: (String) -> Unit) {
             )
         }
         Text("⧉", fontSize = 16.sp, color = PortalColors.TextMuted, modifier = Modifier.padding(start = 8.dp))
+    }
+}
+
+/** Section heading inside the entry detail dialog. */
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold,
+        color = PortalColors.TextFaint,
+        letterSpacing = 1.sp,
+        modifier = Modifier.padding(top = 18.dp, bottom = 8.dp),
+    )
+}
+
+/** Expanded entry detail: definition, grammatical category, AI example
+ *  sentences and related terms from the verified dataset. */
+@Composable
+private fun EntryDetailDialog(
+    state: DictionaryUiState,
+    onCopy: (String) -> Unit,
+    onOpenRelated: (DictionaryEntry) -> Unit,
+    onClose: () -> Unit,
+) {
+    val entry = state.detailEntry ?: return
+    Dialog(onDismissRequest = onClose) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFF161B2C), RoundedCornerShape(20.dp))
+                .border(1.dp, PortalColors.GlassBorder, RoundedCornerShape(20.dp))
+                .verticalScroll(rememberScrollState())
+                .padding(18.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    entry.english,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = PortalColors.TextPrimary,
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = "Close details",
+                    tint = PortalColors.TextMuted,
+                    modifier = Modifier
+                        .size(22.dp)
+                        .clickable(onClick = onClose),
+                )
+            }
+
+            val posColor = categoryColor(entry.category)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(top = 6.dp),
+            ) {
+                Text(
+                    entry.pos.ifEmpty { entry.category },
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = posColor,
+                    modifier = Modifier
+                        .background(posColor.copy(alpha = 0.15f), RoundedCornerShape(50))
+                        .border(1.dp, posColor.copy(alpha = 0.35f), RoundedCornerShape(50))
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                )
+                Text(
+                    "✓ Verified",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = PortalColors.Green,
+                    modifier = Modifier
+                        .background(PortalColors.Green.copy(alpha = 0.12f), RoundedCornerShape(50))
+                        .border(1.dp, PortalColors.Green.copy(alpha = 0.35f), RoundedCornerShape(50))
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                )
+            }
+
+            SectionLabel("DEFINITION")
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    entry.zomi,
+                    fontSize = 19.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF80F7FF),
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    "⧉",
+                    fontSize = 16.sp,
+                    color = PortalColors.TextSecondary,
+                    modifier = Modifier
+                        .background(PortalColors.GlassFill, RoundedCornerShape(50))
+                        .clickable { onCopy(entry.zomi) }
+                        .padding(8.dp),
+                )
+            }
+
+            SectionLabel("GRAMMATICAL CATEGORY")
+            val description = DictionaryRepository.categoryDescriptions[entry.category]
+                ?: "A word that does not fit the standard grammatical categories."
+            Text(
+                entry.category.replaceFirstChar { it.uppercase() },
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = PortalColors.TextPrimary,
+            )
+            Text(
+                description,
+                fontSize = 13.sp,
+                color = PortalColors.TextSecondary,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+
+            SectionLabel("EXAMPLE SENTENCES")
+            when {
+                state.detailExamplesLoading -> Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = PortalColors.Yellow,
+                    )
+                    Text("Asking Zomi AI...", fontSize = 13.sp, color = PortalColors.TextSecondary)
+                }
+
+                state.detailExamplesError -> Text(
+                    "Examples need an internet connection — the dictionary itself works offline.",
+                    fontSize = 13.sp,
+                    color = PortalColors.TextSecondary,
+                )
+
+                else -> state.detailExamples.forEach { example ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 10.dp)
+                            .background(PortalColors.GlassFill, RoundedCornerShape(12.dp))
+                            .border(1.dp, PortalColors.GlassBorder, RoundedCornerShape(12.dp))
+                            .clickable { onCopy(example.zomi) }
+                            .padding(12.dp),
+                    ) {
+                        Text(example.english, fontSize = 14.sp, color = PortalColors.TextPrimary)
+                        Text(
+                            example.zomi,
+                            fontSize = 14.sp,
+                            color = Color(0xFF80F7FF),
+                            modifier = Modifier.padding(top = 3.dp),
+                        )
+                    }
+                }
+            }
+            Text(
+                "✦ Zomi AI",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = PortalColors.Yellow,
+                modifier = Modifier
+                    .background(PortalColors.Yellow.copy(alpha = 0.12f), RoundedCornerShape(50))
+                    .border(1.dp, PortalColors.Yellow.copy(alpha = 0.35f), RoundedCornerShape(50))
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
+            )
+
+            if (state.detailRelated.isNotEmpty()) {
+                SectionLabel("RELATED TERMS")
+                state.detailRelated.forEach { related ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp)
+                            .clickable { onOpenRelated(related) },
+                    ) {
+                        Text(
+                            related.english,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = PortalColors.TextPrimary,
+                        )
+                        Text("→", fontSize = 13.sp, color = PortalColors.TextMuted)
+                        Text(
+                            related.zomi,
+                            fontSize = 14.sp,
+                            color = Color(0xFF80F7FF),
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+        }
     }
 }
 

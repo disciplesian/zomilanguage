@@ -8,6 +8,7 @@ import {
   TextInput,
   Platform,
   ScrollView,
+  Modal,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -29,15 +30,18 @@ import Colors from '@/constants/colors';
 import {
   activeDictionaryCount,
   CATEGORY_COLORS,
+  CATEGORY_DESCRIPTIONS,
   categoryLabel,
   searchDictionary,
   suggestTerms,
+  relatedEntries,
   hasExactMatch,
   browseLetters,
   entriesForLetter,
   type DictionaryEntry,
 } from '@/constants/dictionaryData';
 import { checkDictionaryUpdate } from '@/lib/dictionaryUpdate';
+import { fetchEntryExamples, type EntryExample } from '@/lib/portal';
 import { useStreamingTranslation } from '@/hooks/useStreamingTranslation';
 import { useAuth } from '@/contexts/AuthContext';
 import { getAnonymousId } from '@/lib/anonymousId';
@@ -56,6 +60,13 @@ export default function DictionaryScreen() {
   /** Bumped when an over-the-air dataset update is applied, so the search and
    *  browse memos recompute against the refreshed dictionary. */
   const [datasetVersion, setDatasetVersion] = useState(0);
+
+  // Expanded entry detail view.
+  const [detail, setDetail] = useState<DictionaryEntry | null>(null);
+  const [detailExamples, setDetailExamples] = useState<EntryExample[]>([]);
+  const [examplesPhase, setExamplesPhase] = useState<'loading' | 'ready' | 'error'>('loading');
+  /** Example sentences cached per English headword for this session. */
+  const examplesCache = useRef(new Map<string, EntryExample[]>());
 
   const stream = useStreamingTranslation();
   const { getAccessToken } = useAuth();
@@ -150,12 +161,62 @@ export default function DictionaryScreen() {
     }
   }, []);
 
+  const openDetail = useCallback((entry: DictionaryEntry) => {
+    setDetail(entry);
+    Haptics.selectionAsync();
+  }, []);
+
+  // Related terms for the open entry (local, offline-safe).
+  const detailRelated = useMemo(
+    () => (detail ? relatedEntries(detail) : []),
+    [detail, datasetVersion]
+  );
+
+  // Example sentences for the open entry: session cache first, then the AI
+  // endpoint (offline-tolerant — the rest of the detail view works without it).
+  useEffect(() => {
+    if (!detail) return;
+    const key = detail.english.toLowerCase();
+    const cached = examplesCache.current.get(key);
+    if (cached) {
+      setDetailExamples(cached);
+      setExamplesPhase('ready');
+      return;
+    }
+    let cancelled = false;
+    setDetailExamples([]);
+    setExamplesPhase('loading');
+    void (async () => {
+      try {
+        const authToken = (await getAccessToken()) ?? undefined;
+        const anonymousId = await getAnonymousId();
+        const result = await fetchEntryExamples(
+          { english: detail.english, zomi: detail.zomi, pos: detail.pos },
+          { authToken, anonymousId }
+        );
+        if (cancelled) return;
+        if (result.length > 0) {
+          examplesCache.current.set(key, result);
+          setDetailExamples(result);
+          setExamplesPhase('ready');
+        } else {
+          setExamplesPhase('error');
+        }
+      } catch {
+        if (!cancelled) setExamplesPhase('error');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [detail, getAccessToken]);
+
   const renderEntry = useCallback(
     ({ item }: { item: DictionaryEntry }) => (
       <TouchableOpacity
         style={styles.entryCard}
         activeOpacity={0.7}
-        onPress={() => copyZomi(item.zomi)}
+        onPress={() => openDetail(item)}
       >
         <View style={styles.entryTop}>
           <View style={styles.entryHeadRow}>
@@ -182,7 +243,7 @@ export default function DictionaryScreen() {
         </View>
       </TouchableOpacity>
     ),
-    [copyZomi]
+    [openDetail]
   );
 
   const trimmed = query.trim();
@@ -366,6 +427,121 @@ export default function DictionaryScreen() {
         }
         ListFooterComponent={<View style={{ height: 24 }} />}
       />
+
+      {/* Expanded entry detail: definition, grammatical category, AI example
+          sentences and related terms from the verified dataset. */}
+      <Modal
+        visible={detail !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setDetail(null)}
+      >
+        {detail ? (
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.modalContent}
+              >
+                <View style={styles.modalHeaderRow}>
+                  <Text style={styles.detailHeadword}>{detail.english}</Text>
+                  <TouchableOpacity
+                    onPress={() => setDetail(null)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <X size={22} color={Colors.textSecondary} />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.modalChipRow}>
+                  <View
+                    style={[
+                      styles.posChip,
+                      {
+                        backgroundColor: `${CATEGORY_COLORS[detail.category]}22`,
+                        borderColor: `${CATEGORY_COLORS[detail.category]}55`,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.posChipText, { color: CATEGORY_COLORS[detail.category] }]}>
+                      {categoryLabel(detail)}
+                    </Text>
+                  </View>
+                  <View style={styles.verifiedBadge}>
+                    <BadgeCheck size={12} color={Colors.success} />
+                    <Text style={styles.verifiedText}>Verified</Text>
+                  </View>
+                </View>
+
+                <Text style={styles.sectionLabel}>Definition</Text>
+                <View style={styles.definitionRow}>
+                  <Text style={styles.detailZomi}>{detail.zomi}</Text>
+                  <TouchableOpacity style={styles.copyButton} onPress={() => copyZomi(detail.zomi)}>
+                    <ClipboardIcon size={16} color={Colors.textSecondary} />
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={styles.sectionLabel}>Grammatical category</Text>
+                <Text style={styles.detailCategoryTitle}>{detail.category}</Text>
+                <Text style={styles.detailCategoryText}>
+                  {CATEGORY_DESCRIPTIONS[detail.category] ??
+                    'A word that does not fit the standard grammatical categories.'}
+                </Text>
+
+                <Text style={styles.sectionLabel}>Example sentences</Text>
+                {examplesPhase === 'loading' ? (
+                  <View style={styles.examplesLoadingRow}>
+                    <TypingDots color={Colors.accent} dotSize={7} />
+                    <Text style={styles.examplesLoadingText}>Asking Zomi AI...</Text>
+                  </View>
+                ) : examplesPhase === 'error' ? (
+                  <Text style={styles.detailMuted}>
+                    Examples need an internet connection — the dictionary itself works offline.
+                  </Text>
+                ) : (
+                  <>
+                    {detailExamples.map((example, i) => (
+                      <TouchableOpacity
+                        key={`${example.english}-${i}`}
+                        style={styles.exampleCard}
+                        activeOpacity={0.7}
+                        onPress={() => copyZomi(example.zomi)}
+                      >
+                        <Text style={styles.exampleEnglish}>{example.english}</Text>
+                        <Text style={styles.exampleZomi}>{example.zomi}</Text>
+                      </TouchableOpacity>
+                    ))}
+                    <View style={[styles.aiBadge, { alignSelf: 'flex-start' }]}>
+                      <Sparkles size={12} color={Colors.accent} />
+                      <Text style={styles.aiBadgeText}>Zomi AI</Text>
+                    </View>
+                  </>
+                )}
+
+                {detailRelated.length > 0 ? (
+                  <>
+                    <Text style={styles.sectionLabel}>Related terms</Text>
+                    {detailRelated.map((related) => (
+                      <TouchableOpacity
+                        key={`${related.english}-${related.pos}`}
+                        style={styles.relatedRow}
+                        activeOpacity={0.7}
+                        onPress={() => setDetail(related)}
+                      >
+                        <Text style={styles.relatedEnglish}>{related.english}</Text>
+                        <ArrowRight size={13} color={Colors.textMuted} />
+                        <Text style={styles.relatedZomi} numberOfLines={1}>
+                          {related.zomi}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </>
+                ) : null}
+              </ScrollView>
+            </View>
+          </View>
+        ) : null}
+      </Modal>
     </View>
   );
 }
@@ -374,6 +550,126 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(6, 8, 16, 0.72)',
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
+    maxHeight: '86%',
+    backgroundColor: Colors.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderWidth: 1,
+    borderColor: Colors.glassBorder,
+    borderBottomWidth: 0,
+  },
+  modalContent: {
+    padding: 20,
+    paddingBottom: 36,
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 8,
+  },
+  detailHeadword: {
+    flexShrink: 1,
+    fontSize: 24,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  modalChipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+    marginBottom: 6,
+  },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.textMuted,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginTop: 18,
+    marginBottom: 8,
+  },
+  definitionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  detailZomi: {
+    flex: 1,
+    fontSize: 20,
+    fontWeight: '600',
+    color: Colors.primaryLight,
+  },
+  copyButton: {
+    padding: 8,
+    borderRadius: 12,
+    backgroundColor: Colors.surfaceLight,
+  },
+  detailCategoryTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.text,
+    textTransform: 'capitalize',
+  },
+  detailCategoryText: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  examplesLoadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  examplesLoadingText: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+  },
+  detailMuted: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+  },
+  exampleCard: {
+    backgroundColor: Colors.surfaceLight,
+    borderWidth: 1,
+    borderColor: Colors.glassBorder,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+  },
+  exampleEnglish: {
+    fontSize: 14,
+    color: Colors.text,
+  },
+  exampleZomi: {
+    fontSize: 14,
+    color: Colors.primaryLight,
+    marginTop: 3,
+  },
+  relatedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 8,
+  },
+  relatedEnglish: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  relatedZomi: {
+    fontSize: 14,
+    color: Colors.primaryLight,
+    flexShrink: 1,
   },
   scrollView: {
     flex: 1,

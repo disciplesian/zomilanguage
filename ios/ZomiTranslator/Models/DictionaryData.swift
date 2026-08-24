@@ -193,4 +193,58 @@ nonisolated enum DictionaryData {
     static func entries(forLetter letter: String) -> [DictionaryEntry] {
         browseSections().first { $0.letter == letter }?.entries ?? []
     }
+
+    // MARK: Entry detail data
+
+    /// Short plain-language description of each grammatical category.
+    static let categoryDescriptions: [String: String] = [
+        "noun": "Names a person, place, thing, or idea.",
+        "verb": "Describes an action or a state of being.",
+        "adjective": "Describes or modifies a noun.",
+        "adverb": "Modifies a verb, adjective, or another adverb.",
+        "preposition": "Shows the relationship between a noun and another word.",
+        "pronoun": "Stands in place of a noun.",
+        "conjunction": "Joins words, phrases, or clauses together.",
+        "interjection": "Expresses a sudden emotion or reaction.",
+        "prefix": "Attaches to the start of a word to change its meaning.",
+        "particle": "A small function word that carries grammatical meaning.",
+        "article": "Introduces a noun (a, an, the).",
+        "other": "A word that does not fit the standard grammatical categories.",
+    ]
+
+    /// Shared leading characters (max 8) of two lowercased strings, or 0 when
+    /// fewer than two characters match — a relation needs a real prefix.
+    private static func sharedPrefixLength(_ a: String, _ b: String) -> Int {
+        let charsA = Array(a.lowercased())
+        let charsB = Array(b.lowercased())
+        var n = 0
+        let max = min(charsA.count, charsB.count, 8)
+        while n < max && charsA[n] == charsB[n] { n += 1 }
+        return n >= 2 ? n : 0
+    }
+
+    /// Entries related to the given one, ranked by shared English prefix,
+    /// shared Zomi prefix, and same grammatical category. Computed locally
+    /// over the verified dataset, so it works fully offline.
+    static func relatedEntries(_ entry: DictionaryEntry, limit: Int = 6) -> [DictionaryEntry] {
+        let en = entry.english.lowercased()
+        let zo = entry.zomi.lowercased()
+        var seen: Set<String> = [en]
+        var scored: [(entry: DictionaryEntry, score: Int)] = []
+        for e in load() {
+            let eEn = e.english.lowercased()
+            guard !seen.contains(eEn) else { continue }
+            let score =
+                sharedPrefixLength(en, eEn) * 3
+                + sharedPrefixLength(zo, e.zomi.lowercased()) * 2
+                + (e.category == entry.category ? 1 : 0)
+            guard score > 1 else { continue }
+            seen.insert(eEn)
+            scored.append((e, score))
+        }
+        return scored
+            .sorted { $0.score != $1.score ? $0.score > $1.score : $0.entry.english < $1.entry.english }
+            .prefix(limit)
+            .map(\.entry)
+    }
 }

@@ -305,6 +305,46 @@ export async function fetchLatestDictionary(): Promise<LatestDictionary | null> 
   }
 }
 
+export interface EntryExample {
+  english: string;
+  zomi: string;
+}
+
+/**
+ * Fetches two AI-generated example sentences (English + Zomi) for a verified
+ * dictionary entry. Public endpoint: guests are served while their anonymous
+ * free-tier allowance lasts; viewing examples does not draw it down.
+ */
+export async function fetchEntryExamples(
+  entry: { english: string; zomi: string; pos?: string },
+  opts?: { token?: string | null; anonymousId?: string | null; signal?: AbortSignal }
+): Promise<EntryExample[]> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}/api/dictionary/examples`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(opts?.token ? { Authorization: `Bearer ${opts.token}` } : {}),
+        ...(opts?.anonymousId ? { 'X-Anonymous-Id': opts.anonymousId } : {}),
+      },
+      body: JSON.stringify({
+        english: entry.english,
+        zomi: entry.zomi,
+        pos: entry.pos ?? '',
+        anonymousId: opts?.anonymousId ?? '',
+      }),
+      signal: opts?.signal,
+    });
+  } catch (err) {
+    if (opts?.signal?.aborted) throw err;
+    throw new Error('offline');
+  }
+  if (!res.ok) throw new Error(String((await res.json().catch(() => ({}))).error ?? `HTTP ${res.status}`));
+  const body = (await res.json()) as { examples?: EntryExample[] };
+  return Array.isArray(body.examples) ? body.examples : [];
+}
+
 export interface TranslationResult {
   text: string;
   model: string | null;

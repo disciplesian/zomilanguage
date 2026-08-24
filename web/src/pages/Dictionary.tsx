@@ -14,7 +14,13 @@ import {
 import { SiteLayout, GlassCard } from '@/components/SiteLayout';
 import { useAuth } from '@/lib/auth';
 import { getAnonymousId } from '@/lib/anonymousId';
-import { streamTranslation, WORD_LIMIT_ERROR, fetchLatestDictionary } from '@/lib/portalApi';
+import {
+  streamTranslation,
+  WORD_LIMIT_ERROR,
+  fetchLatestDictionary,
+  fetchEntryExamples,
+  type EntryExample,
+} from '@/lib/portalApi';
 import {
   CATEGORY_COLORS,
   activeDictionaryCount,
@@ -26,6 +32,8 @@ import {
   hasExactMatch,
   loadCachedDictionary,
   posLabel,
+  relatedEntries,
+  CATEGORY_DESCRIPTIONS,
   searchDictionary,
   suggestTerms,
   type DictionaryEntry,
@@ -51,6 +59,13 @@ export default function Dictionary() {
   /** Bumped when an over-the-air dataset update is applied, so the search and
    *  browse memos recompute against the refreshed dictionary. */
   const [datasetVersion, setDatasetVersion] = useState<number>(() => activeDictionaryVersion());
+
+  // Expanded entry detail view.
+  const [detail, setDetail] = useState<DictionaryEntry | null>(null);
+  const [detailExamples, setDetailExamples] = useState<EntryExample[]>([]);
+  const [examplesPhase, setExamplesPhase] = useState<'loading' | 'ready' | 'error'>('loading');
+  /** Example sentences cached per English headword for this session. */
+  const examplesCache = useRef(new Map<string, EntryExample[]>());
 
   const { user, getAccessToken } = useAuth();
   const abortRef = useRef<AbortController | null>(null);
@@ -170,6 +185,52 @@ export default function Dictionary() {
     ) : (
       <Copy className="h-4 w-4 text-white/40" />
     );
+
+  // Related terms for the open entry (local, offline-safe).
+  const detailRelated = useMemo(
+    () => (detail ? relatedEntries(detail) : []),
+    [detail, datasetVersion]
+  );
+
+  // Example sentences for the open entry: session cache first, then the AI
+  // endpoint (offline-tolerant — the rest of the detail view works without it).
+  useEffect(() => {
+    if (!detail) return;
+    const key = detail.english.toLowerCase();
+    const cached = examplesCache.current.get(key);
+    if (cached) {
+      setDetailExamples(cached);
+      setExamplesPhase('ready');
+      return;
+    }
+    const controller = new AbortController();
+    let cancelled = false;
+    setDetailExamples([]);
+    setExamplesPhase('loading');
+    void (async () => {
+      try {
+        const token = user ? await getAccessToken() : null;
+        const result = await fetchEntryExamples(
+          { english: detail.english, zomi: detail.zomi, pos: detail.pos },
+          { token, anonymousId: getAnonymousId(), signal: controller.signal }
+        );
+        if (cancelled) return;
+        if (result.length > 0) {
+          examplesCache.current.set(key, result);
+          setDetailExamples(result);
+          setExamplesPhase('ready');
+        } else {
+          setExamplesPhase('error');
+        }
+      } catch {
+        if (!cancelled) setExamplesPhase('error');
+      }
+    })();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [detail, user, getAccessToken]);
 
   return (
     <SiteLayout>
@@ -297,6 +358,7 @@ export default function Dictionary() {
               <ResultRow
                 key={`${selectedLetter}-${i}-${entry.english}-${entry.pos}-${entry.zomi}`}
                 entry={entry}
+                onOpen={setDetail}
                 onCopy={copy}
                 copyIcon={copyIcon(entry.zomi)}
               />
@@ -340,6 +402,129 @@ export default function Dictionary() {
           </GlassCard>
         )}
 
+        {/* Expanded entry detail: definition, grammatical category, AI example
+            sentences and related terms from the verified dataset. */}
+        {detail && (
+          <div
+            className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 sm:items-center sm:p-4"
+            onClick={() => setDetail(null)}
+          >
+            <div
+              role="dialog"
+              aria-label={`Details for ${detail.english}`}
+              className="max-h-[86vh] w-full max-w-lg overflow-y-auto rounded-t-3xl border border-white/15 bg-[#131722] p-6 shadow-2xl sm:rounded-3xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <h2 className="text-2xl font-bold tracking-tight text-white">{detail.english}</h2>
+                <button
+                  onClick={() => setDetail(null)}
+                  aria-label="Close details"
+                  className="shrink-0 rounded-full p-1 text-white/45 transition hover:bg-white/10 hover:text-white"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                <span
+                  className="rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+                  style={{
+                    color: CATEGORY_COLORS[detail.category] ?? '#9BA3AF',
+                    borderColor: `${CATEGORY_COLORS[detail.category] ?? '#9BA3AF'}55`,
+                    backgroundColor: `${CATEGORY_COLORS[detail.category] ?? '#9BA3AF'}22`,
+                  }}
+                >
+                  {posLabel(detail)}
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full border border-[#00ff88]/35 bg-[#00ff88]/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#00ff88]">
+                  <BadgeCheck className="h-3 w-3" /> Verified
+                </span>
+              </div>
+
+              <p className="mt-5 mb-2 text-[11px] font-bold uppercase tracking-widest text-white/35">
+                Definition
+              </p>
+              <div className="flex items-center gap-3">
+                <p className="flex-1 text-xl font-semibold leading-relaxed text-[#80f7ff]">
+                  {detail.zomi}
+                </p>
+                <button
+                  onClick={() => copy(detail.zomi)}
+                  aria-label="Copy definition"
+                  className="shrink-0 rounded-full bg-white/5 p-2 transition hover:bg-white/10"
+                >
+                  {copyIcon(detail.zomi)}
+                </button>
+              </div>
+
+              <p className="mt-5 mb-2 text-[11px] font-bold uppercase tracking-widest text-white/35">
+                Grammatical category
+              </p>
+              <p className="text-[15px] font-semibold capitalize text-white">{detail.category}</p>
+              <p className="mt-1 text-sm leading-relaxed text-white/60">
+                {CATEGORY_DESCRIPTIONS[detail.category] ??
+                  'A word that does not fit the standard grammatical categories.'}
+              </p>
+
+              <p className="mt-5 mb-2 text-[11px] font-bold uppercase tracking-widest text-white/35">
+                Example sentences
+              </p>
+              {examplesPhase === 'loading' ? (
+                <div className="flex items-center gap-3">
+                  <Loader2 className="h-4 w-4 animate-spin text-[#ffd000]" />
+                  <span className="text-sm text-white/60">Asking Zomi AI...</span>
+                </div>
+              ) : examplesPhase === 'error' ? (
+                <p className="text-sm leading-relaxed text-white/60">
+                  Examples need an internet connection — the dictionary itself works offline.
+                </p>
+              ) : (
+                <div>
+                  {detailExamples.map((example, i) => (
+                    <button
+                      key={`${example.english}-${i}`}
+                      onClick={() => copy(example.zomi)}
+                      aria-label={`Copy Zomi example: ${example.zomi}`}
+                      className="mb-2.5 block w-full rounded-xl border border-white/10 bg-white/[0.04] p-3 text-left transition hover:bg-white/[0.07]"
+                    >
+                      <p className="text-sm text-white">{example.english}</p>
+                      <p className="mt-1 text-sm text-[#80f7ff]">{example.zomi}</p>
+                    </button>
+                  ))}
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[#ffd000]/35 bg-[#ffd000]/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-[#ffd000]">
+                    <Sparkles className="h-3 w-3" /> Zomi AI
+                  </span>
+                </div>
+              )}
+
+              {detailRelated.length > 0 && (
+                <>
+                  <p className="mt-5 mb-1 text-[11px] font-bold uppercase tracking-widest text-white/35">
+                    Related terms
+                  </p>
+                  <div className="flex flex-col">
+                    {detailRelated.map((related) => (
+                      <button
+                        key={`${related.english}-${related.pos}`}
+                        onClick={() => setDetail(related)}
+                        aria-label={`Open details for ${related.english}`}
+                        className="flex items-center gap-2.5 rounded-lg px-1 py-1.5 text-left transition hover:bg-white/5"
+                      >
+                        <span className="shrink-0 text-sm font-semibold text-white">
+                          {related.english}
+                        </span>
+                        <span className="text-white/30">→</span>
+                        <span className="truncate text-sm text-[#80f7ff]">{related.zomi}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
       </div>
     </SiteLayout>
   );
@@ -347,19 +532,29 @@ export default function Dictionary() {
 
 function ResultRow({
   entry,
+  onOpen,
   onCopy,
   copyIcon,
 }: {
   entry: DictionaryEntry;
+  onOpen: (entry: DictionaryEntry) => void;
   onCopy: (text: string) => void;
   copyIcon: React.ReactNode;
 }) {
-  const color = CATEGORY_COLORS[entry.category];
+  const color = CATEGORY_COLORS[entry.category] ?? '#9BA3AF';
   return (
-    <button
-      onClick={() => onCopy(entry.zomi)}
-      className="group flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-left backdrop-blur-md transition hover:border-white/20 hover:bg-white/[0.08]"
-      aria-label={`${entry.english}, ${entry.pos}, ${entry.zomi}. Verified. Click to copy.`}
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpen(entry)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onOpen(entry);
+        }
+      }}
+      className="group flex w-full cursor-pointer items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-left backdrop-blur-md transition hover:border-white/20 hover:bg-white/[0.08]"
+      aria-label={`${entry.english}, ${entry.pos}, ${entry.zomi}. Verified. Open details.`}
     >
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
@@ -376,7 +571,17 @@ function ResultRow({
         </div>
         <p className="mt-1.5 text-[15px] leading-relaxed text-[#80f7ff]">{entry.zomi}</p>
       </div>
-      <span className="shrink-0 p-2 transition group-hover:bg-white/10 rounded-full">{copyIcon}</span>
-    </button>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onCopy(entry.zomi);
+        }}
+        aria-label={`Copy ${entry.zomi}`}
+        className="shrink-0 rounded-full p-2 transition hover:bg-white/10"
+      >
+        {copyIcon}
+      </button>
+    </div>
   );
 }
