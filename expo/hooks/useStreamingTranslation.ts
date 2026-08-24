@@ -73,7 +73,12 @@ export function useStreamingTranslation() {
     (
       text: string,
       targetLanguage: string,
-      options?: { extraGlossary?: Record<string, string>; authToken?: string; anonymousId?: string }
+      options?: {
+        sourceLanguage?: string;
+        extraGlossary?: Record<string, string>;
+        authToken?: string;
+        anonymousId?: string;
+      }
     ): Promise<StreamResult> => {
       cancel();
       const myToken = ++tokenRef.current;
@@ -82,6 +87,7 @@ export function useStreamingTranslation() {
       const url = `${getBaseUrl()}/api/translate/stream`;
       const body = JSON.stringify({
         text,
+        sourceLanguage: options?.sourceLanguage ?? 'auto',
         targetLanguage,
         extraGlossary: options?.extraGlossary ?? {},
         anonymousId: options?.anonymousId,

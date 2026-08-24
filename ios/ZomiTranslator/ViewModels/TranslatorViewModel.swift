@@ -227,6 +227,7 @@ final class TranslatorViewModel {
 
             for await event in TranslationService.shared.stream(
                 text: trimmed,
+                sourceLanguage: source,
                 targetLanguage: target,
                 extraGlossary: extraGlossary
             ) {

@@ -44,6 +44,7 @@ nonisolated final class TranslationService: Sendable {
     /// after a `.done` or `.failure` event.
     func stream(
         text: String,
+        sourceLanguage: String,
         targetLanguage: String,
         extraGlossary: [String: String]
     ) -> AsyncStream<TranslationEvent> {
@@ -71,6 +72,7 @@ nonisolated final class TranslationService: Sendable {
 
                     let body: [String: Any] = [
                         "text": text,
+                        "sourceLanguage": sourceLanguage,
                         "targetLanguage": targetLanguage,
                         "extraGlossary": extraGlossary,
                         "anonymousId": guestId,

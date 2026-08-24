@@ -30,10 +30,8 @@ import {
   type AuthInfo,
 } from "./portal";
 import {
-  ZOMI_SYSTEM_INSTRUCTION,
-  ZOMI_GLOSSARY,
-  ZOMI_EXAMPLES,
-  promptLanguageName,
+  buildSystemInstruction,
+  buildUserPrompt,
 } from "../constants/zomiPrompt";
 
 const app = new Hono();
@@ -133,6 +131,7 @@ function extractConfidence(raw: string): number | null {
 app.post("/translate/stream", async (c) => {
   let body: {
     text?: string;
+    sourceLanguage?: string;
     targetLanguage?: string;
     extraGlossary?: Record<string, string>;
     anonymousId?: string;
@@ -168,27 +167,25 @@ app.post("/translate/stream", async (c) => {
   }
 
   const text = (body.text ?? "").trim();
-  const target = (body.targetLanguage ?? "english").trim();
+  const target = sanitizeLanguageCode(body.targetLanguage);
+  // Clients state the source language explicitly; stale clients fall back to
+  // auto-detection so they keep working.
+  const source =
+    typeof body.sourceLanguage === "string" && body.sourceLanguage.trim()
+      ? sanitizeLanguageCode(body.sourceLanguage)
+      : "auto";
   const extraGlossary =
     body.extraGlossary && typeof body.extraGlossary === 'object' ? body.extraGlossary : {};
   if (!text) return c.json({ error: "missing_text" }, 400);
   if (!aiProxyConfigured() && !geminiConfigured())
     return c.json({ error: "ai_unavailable" }, 500);
 
-  const targetLang = promptLanguageName(target);
-  const isZomiTarget = targetLang === "Zomi (ISO 639-3: ctd)";
-  const mergedGlossary: Record<string, string> = { ...ZOMI_GLOSSARY, ...extraGlossary };
-  const glossaryJson = JSON.stringify({ glossary: mergedGlossary, examples: ZOMI_EXAMPLES });
-  const prompt = [
-    `Translate the following text into ${targetLang}.`,
-    `Use EXCLUSIVELY standard ${isZomiTarget ? "Zomi (ISO 639-3: ctd) — no related variety" : targetLang}.`,
-    `Ensure the grammar and natural idiom of ${targetLang} are perfect. Translate meaning, not words.`,
-    `Return JSON {"translation": string, "confidence": number 0-100}.`,
-    "",
-    `GLOSSARY_DATA_JSON:\n${glossaryJson}`,
-    "",
-    `INPUT_TEXT:\n"${text}"`,
-  ].join("\n");
+  // Pair-aware prompt: the Zomi specialist instruction and glossary are used
+  // only when Zomi is part of the pair; every other pair gets a clean,
+  // generic professional-translation context. The source language is always
+  // stated explicitly so the model never has to guess.
+  const systemInstruction = buildSystemInstruction(source, target);
+  const prompt = buildUserPrompt(text, source, target, extraGlossary);
 
   return streamSSE(c, async (stream) => {
     // Model chain: auto-discovered from the Gemini ListModels endpoint (newest
@@ -219,7 +216,7 @@ app.post("/translate/stream", async (c) => {
             model,
             maxTokens: 8192,
             messages: [
-              { role: "system", content: ZOMI_SYSTEM_INSTRUCTION },
+              { role: "system", content: systemInstruction },
               { role: "user", content: prompt },
             ],
           },

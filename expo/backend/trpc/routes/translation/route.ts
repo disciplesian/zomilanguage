@@ -10,6 +10,8 @@ import {
   ZOMI_GLOSSARY,
   ZOMI_EXAMPLES,
   promptLanguageName,
+  buildSystemInstruction,
+  buildUserPrompt,
 } from '../../../../constants/zomiPrompt';
 
 /**
@@ -57,15 +59,15 @@ async function completeWithFallback(
 
 const MAX_INPUT_CHARS = 10000;
 
-/** Simple in-memory LRU cache by hash(text|target). */
+/** Simple in-memory LRU cache by hash(source|target|text). */
 const CACHE_SIZE = 256;
 type CacheEntry = { translatedText: string; confidence: number; model: string };
 const cache = new Map<string, CacheEntry>();
 
-function cacheKey(text: string, target: string): string {
+function cacheKey(text: string, source: string, target: string): string {
   // Lightweight FNV-1a — good enough for a process-local cache key.
   let h = 0x811c9dc5;
-  const s = `${target}::${text}`;
+  const s = `${source}>${target}::${text}`;
   for (let i = 0; i < s.length; i++) {
     h ^= s.charCodeAt(i);
     h = Math.imul(h, 0x01000193);
@@ -132,26 +134,26 @@ function classifyError(err: unknown): {
 
 function buildMessages(
   text: string,
+  sourceLang: string,
   targetLang: string,
   extraGlossary?: Record<string, string>
 ): ChatMessage[] {
-  const mergedGlossary: Record<string, string> = { ...ZOMI_GLOSSARY, ...(extraGlossary ?? {}) };
-  const glossaryJson = JSON.stringify({ glossary: mergedGlossary, examples: ZOMI_EXAMPLES });
+  // Pair-aware: the Zomi specialist instruction + glossary are used only when
+  // Zomi is part of the pair; the source language is always stated explicitly
+  // so the model never has to guess (critical for low-resource languages).
+  const sourceCode =
+    sourceLang === 'Auto'
+      ? 'auto'
+      : sourceLang === 'Zomi (ISO 639-3: ctd)'
+        ? 'zomi'
+        : sourceLang.toLowerCase().replace(/\s+/g, '_');
+  const targetCode =
+    targetLang === 'Zomi (ISO 639-3: ctd)'
+      ? 'zomi'
+      : targetLang.toLowerCase().replace(/\s+/g, '_');
   return [
-    { role: 'system', content: ZOMI_SYSTEM_INSTRUCTION },
-    {
-      role: 'user',
-      content: `Translate the following text into ${targetLang}.
-Use EXCLUSIVELY standard ${targetLang === 'Zomi (ISO 639-3: ctd)' ? 'Zomi (ISO 639-3: ctd) — no related variety' : targetLang}. No related variety is acceptable.
-Ensure the grammar and natural idiom of ${targetLang} are perfect. Translate meaning, not words.
-Return JSON {"translation": string, "confidence": number 0-100}.
-
-GLOSSARY_DATA_JSON:
-${glossaryJson}
-
-INPUT_TEXT:
-"${text}"`,
-    },
+    { role: 'system', content: buildSystemInstruction(sourceCode, targetCode) },
+    { role: 'user', content: buildUserPrompt(text, sourceCode, targetCode, extraGlossary) },
   ];
 }
 
@@ -180,17 +182,24 @@ const REFINE_MIN_CHARS = 80;
 async function refineTranslation(
   model: string,
   text: string,
+  sourceLang: string,
   targetLang: string,
   draft: string
 ): Promise<{ translation: string; confidence: number } | null> {
-  const raw = await completeWithFallback(
-    model,
-    [
-      { role: 'system', content: ZOMI_SYSTEM_INSTRUCTION },
-      {
-        role: 'user',
-        content: `You are an expert Zomi (ISO 639-3: ctd) translation reviewer.
-A draft translation into ${targetLang} is provided below. Compare it against the source and correct ANY error in meaning, grammar, dialect purity (standard Zomi only), or natural phrasing. Pay special attention to idioms, politeness particles and register.
+  const involvesZomi =
+    sourceLang === 'Zomi (ISO 639-3: ctd)' || targetLang === 'Zomi (ISO 639-3: ctd)';
+  const reviewerLine = involvesZomi
+    ? `You are an expert Zomi (ISO 639-3: ctd) translation reviewer.`
+    : `You are an expert ${sourceLang} to ${targetLang} translation reviewer.`;
+  const dialectLine = involvesZomi
+    ? ' Pay special attention to idioms, politeness particles, register, and dialect purity (standard Zomi only).'
+    : ' Pay special attention to idioms, tone, and register.';
+  const messages: ChatMessage[] = [
+    ...(involvesZomi ? [{ role: 'system' as const, content: ZOMI_SYSTEM_INSTRUCTION }] : []),
+    {
+      role: 'user',
+      content: `${reviewerLine}
+A draft translation from ${sourceLang} into ${targetLang} is provided below. Compare it against the source and correct ANY error in meaning, grammar, or natural phrasing.${dialectLine}
 If the draft is already correct, return it unchanged.
 Return JSON {"translation": string, "confidence": number 0-100}.
 
@@ -199,10 +208,9 @@ SOURCE_TEXT:
 
 DRAFT_TRANSLATION:
 "${draft}"`,
-      },
-    ],
-    { maxTokens: 8192 }
-  );
+    },
+  ];
+  const raw = await completeWithFallback(model, messages, { maxTokens: 8192 });
   const parsed = parseTranslation(raw);
   return parsed.translation ? parsed : null;
 }
@@ -210,6 +218,7 @@ DRAFT_TRANSLATION:
 /** Run translation with structured output, model/provider fallback, and a refinement pass. */
 export async function runTranslation(
   text: string,
+  sourceLanguage: string | undefined,
   targetLanguage: string,
   extraGlossary?: Record<string, string>
 ): Promise<CacheEntry & { cached: boolean; refined: boolean }> {
@@ -219,15 +228,16 @@ export async function runTranslation(
   }
 
   const targetLang = promptLanguageName(targetLanguage);
+  const sourceLang = sourceLanguage?.trim() ? promptLanguageName(sourceLanguage) : 'Auto';
 
-  const key = cacheKey(text, targetLang);
+  const key = cacheKey(text, sourceLang === 'Auto' ? '' : sourceLang, targetLang);
   const cached = cacheGet(key);
   if (cached) {
     logTelemetry({ event: 'cache_hit', model: cached.model, key });
     return { ...cached, cached: true, refined: false };
   }
 
-  const messages = buildMessages(text, targetLang, extraGlossary);
+  const messages = buildMessages(text, sourceLang, targetLang, extraGlossary);
 
   let lastError: unknown = null;
   const startedAt = Date.now();
@@ -247,7 +257,7 @@ export async function runTranslation(
       if (confidence < REFINE_CONFIDENCE_THRESHOLD && text.length >= REFINE_MIN_CHARS) {
         try {
           const refineStart = Date.now();
-          const reviewed = await refineTranslation(model, text, targetLang, translatedText);
+          const reviewed = await refineTranslation(model, text, sourceLang, targetLang, translatedText);
           if (reviewed) {
             translatedText = reviewed.translation;
             confidence = Math.max(confidence, reviewed.confidence);
@@ -342,8 +352,8 @@ export default createTRPCRouter({
           });
         }
       }
-      const { text, targetLanguage, extraGlossary } = input;
-      const result = await runTranslation(text.trim(), targetLanguage, extraGlossary);
+      const { text, sourceLanguage, targetLanguage, extraGlossary } = input;
+      const result = await runTranslation(text.trim(), sourceLanguage, targetLanguage, extraGlossary);
       // Usage accounting: per-user log for members, free-tier words for guests.
       let usage = { authed: true, wordsUsed: 0, wordLimit: 0 };
       try {
@@ -366,7 +376,7 @@ export default createTRPCRouter({
       return {
         translatedText: result.translatedText,
         confidence: result.confidence,
-        detectedSource: 'Auto',
+        detectedSource: sourceLanguage?.trim() || 'Auto',
         model: result.model,
         cached: result.cached,
         refined: result.refined,

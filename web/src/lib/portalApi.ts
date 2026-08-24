@@ -162,6 +162,7 @@ export const WORD_LIMIT_ERROR = 'WORD_LIMIT_REACHED';
 export async function streamTranslation(
   input: {
     text: string;
+    sourceLanguage?: string;
     targetLanguage: string;
     token?: string | null;
     anonymousId?: string | null;
@@ -181,6 +182,7 @@ export async function streamTranslation(
       },
       body: JSON.stringify({
         text: input.text,
+        sourceLanguage: input.sourceLanguage ?? 'auto',
         targetLanguage: input.targetLanguage,
         anonymousId: input.anonymousId ?? undefined,
       }),

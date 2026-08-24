@@ -103,6 +103,7 @@ private data class VerificationBody(val userId: String, val decision: String)
 @Serializable
 private data class TranslateBody(
     val text: String,
+    val sourceLanguage: String? = null,
     val targetLanguage: String,
     val anonymousId: String? = null,
 )
@@ -171,6 +172,7 @@ object PortalApi {
         token: String?,
         anonymousId: String,
         text: String,
+        sourceLanguage: String,
         targetLanguage: String,
         onDelta: (String) -> Unit,
     ): TranslationResult {
@@ -182,7 +184,7 @@ object PortalApi {
             header("X-Anonymous-Id", anonymousId)
             header(HttpHeaders.Accept, "text/event-stream")
             contentType(ContentType.Application.Json)
-            setBody(TranslateBody(text, targetLanguage, anonymousId))
+            setBody(TranslateBody(text, sourceLanguage, targetLanguage, anonymousId))
         }.execute { response ->
             if (response.status.value == 401) {
                 // Read the JSON error body to tell an exhausted free tier apart

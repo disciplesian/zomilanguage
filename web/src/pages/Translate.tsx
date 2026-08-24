@@ -78,6 +78,7 @@ const Translate = () => {
       const result = await streamTranslation(
         {
           text,
+          sourceLanguage,
           targetLanguage,
           token,
           anonymousId: getAnonymousId(),
@@ -99,7 +100,7 @@ const Translate = () => {
     } finally {
       if (!controller.signal.aborted) setIsTranslating(false);
     }
-  }, [input, targetLanguage, getAccessToken, user]);
+  }, [input, sourceLanguage, targetLanguage, getAccessToken, user]);
 
   useEffect(() => {
     return () => abortRef.current?.abort();

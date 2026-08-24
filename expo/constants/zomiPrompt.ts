@@ -56,7 +56,7 @@ You are a professional, high-fidelity translation system for the Zomi language (
 - If no established Zomi word exists for a term, build a clear descriptive Zomi phrase. NEVER borrow from related varieties.
 
 ### CORE TRANSLATION PROTOCOL:
-1. **Task:** Translate the INPUT_TEXT into the target language named in the user message. Auto-detect the source language. The source or target may be Zomi, English, or ANY other language in the world.
+1. **Task:** Translate the INPUT_TEXT into the target language named in the user message. The user message ALSO names the source language — treat that as ground truth and never second-guess or re-detect it. The source or target may be Zomi, English, or ANY other language in the world.
 2. **Accuracy first:** Translate meaning, not words. Read the entire input, resolve ambiguity from context, then produce the translation a professional translator would deliver. Never omit content, never add content, never summarize, and never explain.
 3. **Zomi grammar enforcement (target is Zomi):**
    - Strict SOV (Subject–Object–Verb) word order.
@@ -89,6 +89,82 @@ When the register is ambiguous, use the neutral standard register.
 - NO dialect mixing. Standard Zomi (ISO 639-3: ctd) ONLY when the target is Zomi.`;
 
 /**
+ * System instruction for language pairs where NEITHER side is Zomi
+ * (e.g. English → Burmese). Keeps the context clean so the model translates
+ * with the same quality a plain, unmodified Gemini request would produce.
+ */
+export const GENERIC_SYSTEM_INSTRUCTION = `### ROLE: EXPERT TRANSLATION ENGINE
+You are a professional, high-fidelity translation system. You translate at the quality of a certified professional translator.
+
+### CORE TRANSLATION PROTOCOL:
+1. **Task:** Translate the INPUT_TEXT from the source language into the target language, exactly as named in the user message. Treat both as ground truth.
+2. **Accuracy first:** Translate meaning, not words. Read the entire input, resolve ambiguity from context, then produce the translation a professional translator would deliver. Never omit content, never add content, never summarize, and never explain.
+3. **Natural idiom:** Follow the target language's standard grammar, spelling, and natural idiom. Translate idioms by their meaning, never word-for-word.
+4. **Register:** Detect the register of the source (dictionary entry, everyday speech, lyrics, news, scripture, prayer, poetry) and mirror it in the target.
+5. **Fidelity to form:** Preserve the original formatting exactly — line breaks, paragraph breaks, punctuation, list numbering, and verse structure. Keep proper names, numbers, dates, and quotations accurate and unaltered.
+
+### OUTPUT PROTOCOL:
+- Return ONLY the translated text in the JSON field "translation".
+- Provide a "confidence" score (0-100) reflecting your certainty.
+- NO conversational preamble, explanations, notes, or labels.`;
+
+/**
+ * Returns the system instruction appropriate for a language pair: the Zomi
+ * specialist instruction whenever Zomi is the source or the target, and a
+ * clean generic translator instruction for all other pairs.
+ */
+export function buildSystemInstruction(source: string, target: string): string {
+  const involvesZomi = source === 'zomi' || target === 'zomi';
+  return involvesZomi ? ZOMI_SYSTEM_INSTRUCTION : GENERIC_SYSTEM_INSTRUCTION;
+}
+
+/**
+ * Builds the user message for a translation request. The source language is
+ * always stated explicitly (models frequently mis-detect low-resource
+ * languages such as Zomi), and the Zomi glossary/examples are included only
+ * when Zomi is part of the pair.
+ */
+export function buildUserPrompt(
+  text: string,
+  source: string,
+  target: string,
+  extraGlossary?: Record<string, string>
+): string {
+  const sourceName = promptLanguageName(source);
+  const targetName = promptLanguageName(target);
+  const involvesZomi = source === 'zomi' || target === 'zomi';
+
+  const lines: string[] =
+    source === 'auto'
+      ? [
+          `Translate the following text into ${targetName}.`,
+          `Auto-detect the source language of the text and translate it faithfully.`,
+        ]
+      : [
+          `Translate the following text from ${sourceName} into ${targetName}.`,
+          `The source language is ${sourceName} — trust this and do not re-detect it.`,
+        ];
+
+  if (involvesZomi) {
+    lines.push(
+      `When translating INTO Zomi, use EXCLUSIVELY standard Zomi (ISO 639-3: ctd) — never a related variety such as Paite, Mizo, Hakha Chin, Falam Chin, Lai, or Mara.`
+    );
+    const mergedGlossary: Record<string, string> = { ...ZOMI_GLOSSARY, ...(extraGlossary ?? {}) };
+    lines.push('', `GLOSSARY_DATA_JSON:\n${JSON.stringify({ glossary: mergedGlossary, examples: ZOMI_EXAMPLES })}`);
+  }
+
+  lines.push(
+    '',
+    `Ensure the grammar and natural idiom of ${targetName} are perfect. Translate meaning, not words. Never omit, add, or explain.`,
+    `Return JSON {"translation": string, "confidence": number 0-100}.`,
+    '',
+    `INPUT_TEXT:\n"${text}"`
+  );
+
+  return lines.join('\n');
+}
+
+/**
  * Maps a language code (e.g. "zomi", "chinese_simplified") to the display
  * name used inside AI prompts. Shared by the SSE stream, the tRPC route and
  * the client-side fallback so every path describes the language identically.
@@ -103,63 +179,32 @@ export function promptLanguageName(code: string): string {
 
 /**
  * Build a plain-text fallback prompt for the Rork toolkit (non-Gemini)
- * client-side fallback path. When `customTarget` is provided the prompt
- * targets that language instead of the two primary ones.
+ * client-side fallback path. Both languages are named explicitly so the
+ * model never has to guess the source.
  */
 export function buildFallbackPrompt(
   text: string,
-  direction: 'zomi-to-english' | 'english-to-zomi',
-  customTarget?: string
+  sourceLanguage: string,
+  targetLanguage: string
 ): string {
-  const glossaryLines = Object.entries(ZOMI_GLOSSARY)
-    .map(([k, v]) => `- "${k}" = ${v}`)
-    .join('\n');
-  const exampleLines = ZOMI_EXAMPLES.map((e) =>
-    direction === 'english-to-zomi' ? `- "${e.source}" = "${e.target}"` : `- "${e.target}" = "${e.source}"`
-  ).join('\n');
+  const sourceName = promptLanguageName(sourceLanguage);
+  const targetName = promptLanguageName(targetLanguage);
+  const involvesZomi = sourceLanguage === 'zomi' || targetLanguage === 'zomi';
+  const zomiOnly =
+    involvesZomi
+      ? `\nUse EXCLUSIVELY standard Zomi (ISO 639-3: ctd) when the output is Zomi. Never use Paite, Mizo, Hakha, Falam, Lai, or any other related variety.\nGRAMMAR (Zomi target): SOV word order; negation with "kei"/"lo" after the verb; future "ding", past "zo", progressive "lai"; questions end with "hiam"/"maw".`
+      : '';
+  const glossaryBlock =
+    involvesZomi
+      ? `\nZOMI GLOSSARY:\n${Object.entries(ZOMI_GLOSSARY).map(([k, v]) => `- "${k}" = ${v}`).join('\n')}\n\nEXAMPLES:\n${ZOMI_EXAMPLES.map((e) => `- "${e.source}" = "${e.target}"`).join('\n')}`
+      : '';
 
-  if (customTarget) {
-    const sourceLabel = direction === 'zomi-to-english' ? 'Zomi (ISO 639-3: ctd)' : 'English';
-    return `You are a professional ${sourceLabel} to ${customTarget} translator.
-Translate meaning, not words. Never omit, add, or explain.
-STYLE: Match the register of the input — everyday sentence, song lyrics, news, scripture, or poetry — and mirror it in ${customTarget}. Preserve line breaks for songs and poetry.
-
-Translate: "${text}"
-
-Output ONLY the ${customTarget} translation:`;
-  }
-
-  if (direction === 'zomi-to-english') {
-    return `You are a professional Zomi (ISO 639-3: ctd) to English translator.
-Use EXCLUSIVELY standard Zomi (ISO 639-3: ctd). No related variety (Paite, Mizo, Hakha, Falam, Lai, Mara).
-Translate meaning, not words. Never omit, add, or explain.
-STYLE: Match the register of the input — dictionary word, everyday sentence, song lyrics, news, scripture/theology, prayer/religious, or poetry — and mirror it in English. Use terminology consistent with the Zomi Bible for religious text. Preserve line breaks for songs and poetry.
-
-ZOMI GLOSSARY:
-${glossaryLines}
-
-EXAMPLES:
-${exampleLines}
+  return `You are a professional ${sourceName} to ${targetName} translator.
+The source language is ${sourceName} — trust this and do not re-detect it.
+Translate meaning, not words. Never omit, add, or explain.${zomiOnly}
+STYLE: Match the register of the input — dictionary word, everyday sentence, song lyrics, news, scripture/theology, prayer/religious, or poetry — and mirror it in ${targetName}. Preserve line breaks for songs and poetry.${glossaryBlock}
 
 Translate: "${text}"
 
-Output ONLY the English translation:`;
-  }
-
-  return `You are a professional English to Zomi (ISO 639-3: ctd) translator.
-Use EXCLUSIVELY standard Zomi (ISO 639-3: ctd). NEVER use Paite, Mizo, Hakha Chin, Falam, or any other related variety.
-Translate meaning, not words. Never omit, add, or explain.
-
-ZOMI GLOSSARY:
-${glossaryLines}
-
-GRAMMAR: SOV word order (Subject-Object-Verb); negation with "kei"/"lo" after the verb; future "ding", past "zo", progressive "lai"; questions end with "hiam"/"maw".
-STYLE: Detect the register of the input — dictionary word, everyday sentence, song lyrics, news, scripture/theology, prayer/religious, or poetry — and match it in Zomi. Use terminology consistent with the Zomi Bible and hymnal for religious text. Preserve line breaks for songs and poetry.
-
-EXAMPLES:
-${exampleLines}
-
-Translate: "${text}"
-
-Output ONLY the Zomi translation:`;
+Output ONLY the ${targetName} translation:`;
 }

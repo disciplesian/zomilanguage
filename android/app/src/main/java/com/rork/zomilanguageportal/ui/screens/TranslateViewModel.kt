@@ -105,6 +105,7 @@ class TranslateViewModel : ViewModel() {
                     token = token,
                     anonymousId = AuthManager.anonymousId(),
                     text = text,
+                    sourceLanguage = if (state.zomiToEnglish) "zomi" else "english",
                     targetLanguage = state.targetLanguage,
                 ) { piece ->
                     _uiState.update { it.copy(output = it.output + piece) }

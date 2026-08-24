@@ -307,6 +307,7 @@ export default function TranslatorScreen() {
       const authToken = (await getAccessToken()) ?? undefined;
       const anonymousId = await getAnonymousId();
       const streamResult = await stream.start(text.trim(), targetLang, {
+        sourceLanguage: sourceLang,
         extraGlossary: glossary.asRecord(),
         authToken,
         anonymousId,
@@ -422,11 +423,7 @@ export default function TranslatorScreen() {
     // Fallback to client-side AI translation
     try {
       console.log('Using client-side AI fallback...');
-      const prompt = buildFallbackPrompt(
-        text.trim(),
-        sourceLang === 'zomi' ? 'zomi-to-english' : 'english-to-zomi',
-        isPrimaryLanguage(targetLang) ? undefined : languageLabel(targetLang)
-      );
+      const prompt = buildFallbackPrompt(text.trim(), sourceLang, targetLang);
 
       const fallbackResult = await generateText({ messages: [{ role: 'user', content: prompt }] });
       
