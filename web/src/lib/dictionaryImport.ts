@@ -16,6 +16,8 @@ export interface ImportReport {
   errors: string[];
   /** Normalized rows: [english, pos, zomi, category]. */
   entries: string[][];
+  /** Per-entry diff result versus the currently bundled dataset. */
+  diff: DatasetDiff;
 }
 
 const CATEGORY_ORDER: DictionaryCategory[] = [
@@ -178,12 +180,111 @@ export function buildImportReport(fileName: string, rows: string[][]): ImportRep
     categoryCounts,
     errors,
     entries,
+    diff: diffAgainstCurrent(entries),
   };
 }
 
 /** The bundled dataset as normalized rows (basis for exports). */
 export function currentDatasetEntries(): string[][] {
   return DICTIONARY_ENTRIES.map((e) => [e.english, e.pos, e.zomi, e.category]);
+}
+
+/** Diff status of one imported entry versus the bundled dataset. */
+export type EntryStatus = 'new' | 'changed' | 'same';
+
+export interface DatasetDiff {
+  newCount: number;
+  changedCount: number;
+  sameCount: number;
+  removedCount: number;
+  /** Up to 5 English words present in the bundle but absent from the import. */
+  removedSamples: string[];
+  /** Parallel to the entries array the diff was computed against. */
+  statuses: EntryStatus[];
+}
+
+function rowKey(row: string[]): string {
+  return `${row[0].toLowerCase()}|${row[1].toLowerCase()}|${row[2].toLowerCase()}`;
+}
+
+/** Compares a normalized entry list with the bundled dataset: entries that do
+ *  not exist at all are "new", entries whose English word exists but whose POS
+ *  or translation differ are "changed", and bundled entries missing from the
+ *  import are counted as removed. */
+export function diffAgainstCurrent(entries: string[][]): DatasetDiff {
+  const existing = currentDatasetEntries();
+  const existingByKey = new Set<string>();
+  const existingByEnglish = new Set<string>();
+  for (const row of existing) {
+    existingByKey.add(rowKey(row));
+    existingByEnglish.add(row[0].toLowerCase());
+  }
+
+  let newCount = 0;
+  let changedCount = 0;
+  let sameCount = 0;
+  const statuses: EntryStatus[] = entries.map((row) => {
+    if (existingByKey.has(rowKey(row))) {
+      sameCount += 1;
+      return 'same';
+    }
+    if (existingByEnglish.has(row[0].toLowerCase())) {
+      changedCount += 1;
+      return 'changed';
+    }
+    newCount += 1;
+    return 'new';
+  });
+
+  const importKeys = new Set(entries.map(rowKey));
+  const removedSamples: string[] = [];
+  let removedCount = 0;
+  for (const row of existing) {
+    if (!importKeys.has(rowKey(row))) {
+      removedCount += 1;
+      if (removedSamples.length < 5) removedSamples.push(row[0]);
+    }
+  }
+
+  return { newCount, changedCount, sameCount, removedCount, removedSamples, statuses };
+}
+
+/** Row in the manager's searchable browser view. */
+export interface EntryRow {
+  english: string;
+  pos: string;
+  zomi: string;
+  category: string;
+  status: EntryStatus;
+}
+
+/** Builds the browser view model for the bundled dataset or an import preview. */
+export function toEntryRows(entries: string[][], statuses?: EntryStatus[]): EntryRow[] {
+  return entries.map((row, i) => ({
+    english: row[0],
+    pos: row[1],
+    zomi: row[2],
+    category: row[3],
+    status: statuses?.[i] ?? 'same',
+  }));
+}
+
+export type StatusFilter = 'all' | 'new' | 'changed' | 'same';
+
+/** Case-insensitive search over English and Zomi text with an optional diff
+ *  status filter. Returns at most 200 rows for the preview table. */
+export function filterEntryRows(
+  rows: EntryRow[],
+  query: string,
+  statusFilter: StatusFilter
+): EntryRow[] {
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? rows.filter((r) => r.english.toLowerCase().includes(q) || r.zomi.toLowerCase().includes(q))
+    : rows;
+  const scoped =
+    statusFilter === 'all' ? filtered : filtered.filter((r) => r.status === statusFilter);
+  return scoped.slice(0, 200);
 }
 
 /** Serializes rows into the exact dictionary.json format bundled in the apps. */

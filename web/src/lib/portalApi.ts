@@ -180,6 +180,35 @@ export async function importAdminDictionary(
   return { version: Number(body.version ?? 0), count: Number(body.count ?? 0) };
 }
 
+/** Admin: record that a dataset export was downloaded (CSV or JSON bundle). */
+export async function logDictionaryExport(
+  token: string,
+  format: 'csv' | 'json',
+  count: number,
+  scope: 'bundled' | 'import'
+): Promise<void> {
+  await portalFetch('/api/admin/dictionary/export', token, {
+    method: 'POST',
+    body: JSON.stringify({ format, count, scope }),
+  });
+}
+
+export interface AuditEvent {
+  id: string;
+  action: string;
+  userId: string;
+  email: string;
+  details: Record<string, unknown>;
+  createdAt: string;
+}
+
+/** Admin: the central audit trail — recent admin actions with the acting
+ *  user's ID, the specific action and its details. */
+export async function fetchAuditLog(token: string): Promise<AuditEvent[]> {
+  const body = await portalFetch('/api/admin/audit-log', token);
+  return Array.isArray(body.events) ? (body.events as AuditEvent[]) : [];
+}
+
 export interface TranslationResult {
   text: string;
   model: string | null;

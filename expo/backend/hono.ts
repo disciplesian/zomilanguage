@@ -756,6 +756,28 @@ app.post("/admin/verification", async (c) => {
   }
 });
 
+/** Central audit trail: records every admin dataset event (import, publish,
+ *  export) with the acting user's ID, email and action details. Audit writes
+ *  never block the primary operation — failures are logged server-side only. */
+async function writeAuditEvent(
+  db: Surreal,
+  auth: AuthInfo,
+  action: string,
+  details: Record<string, unknown>
+): Promise<void> {
+  try {
+    await db.create("admin_audit_log", {
+      action,
+      userId: auth.userId,
+      email: auth.email,
+      details,
+      createdAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error("[admin] audit write failed", err);
+  }
+}
+
 /** Admin: status of the published dictionary dataset (light — no payload). */
 app.get("/admin/dictionary", async (c) => {
   const guard = await requireAdmin(c);
@@ -863,10 +885,60 @@ app.post("/admin/dictionary/import", async (c) => {
       createdBy: guard.auth.email,
       createdAt: now,
     });
+    await writeAuditEvent(guard.db, guard.auth, "dictionary.publish", {
+      version,
+      count: entries.length,
+      fileName,
+      note,
+    });
     return c.json({ success: true, version, count: entries.length });
   } catch (err) {
     console.error("[admin] dictionary import failed", err);
     return c.json({ error: "import_failed" }, 500);
+  }
+});
+
+/** Admin: record that a dataset export was downloaded (CSV or JSON bundle).
+ *  Body: { format: "csv" | "json", count, fileName?, scope? ("bundled" | "import") }. */
+app.post("/admin/dictionary/export", async (c) => {
+  const guard = await requireAdmin(c);
+  if (!guard.ok) return guard.response;
+  let body: { format?: unknown; count?: unknown; fileName?: unknown; scope?: unknown } = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_json" }, 400);
+  }
+  const format = body.format === "csv" ? "csv" : "json";
+  await writeAuditEvent(guard.db, guard.auth, "dictionary.export", {
+    format,
+    count: Number(body.count ?? 0),
+    fileName: typeof body.fileName === "string" ? body.fileName.slice(0, 200) : "",
+    scope: body.scope === "import" ? "import" : "bundled",
+  });
+  return c.json({ success: true });
+});
+
+/** Admin: central audit log — recent admin actions across the portal. */
+app.get("/admin/audit-log", async (c) => {
+  const guard = await requireAdmin(c);
+  if (!guard.ok) return guard.response;
+  try {
+    const res = await guard.db.query<[Record<string, unknown>[]]>(
+      "SELECT * FROM admin_audit_log ORDER BY createdAt DESC LIMIT 100"
+    );
+    const events = (res[0] ?? []).map((r) => ({
+      id: String(r.id ?? ""),
+      action: String(r.action ?? ""),
+      userId: String(r.userId ?? ""),
+      email: String(r.email ?? ""),
+      details: (r.details as Record<string, unknown> | null) ?? {},
+      createdAt: String(r.createdAt ?? ""),
+    }));
+    return c.json({ events });
+  } catch (err) {
+    console.error("[admin] audit log failed", err);
+    return c.json({ error: "audit_log_failed" }, 500);
   }
 });
 
