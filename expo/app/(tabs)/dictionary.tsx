@@ -7,17 +7,18 @@ import {
   TouchableOpacity,
   TextInput,
   Platform,
+  ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   Search,
   X,
-  BookOpen,
   BadgeCheck,
   Clipboard as ClipboardIcon,
   ArrowRight,
   Sparkles,
   AlertCircle,
+  WifiOff,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
@@ -31,6 +32,8 @@ import {
   categoryLabel,
   searchDictionary,
   hasExactMatch,
+  browseLetters,
+  entriesForLetter,
   type DictionaryEntry,
 } from '@/constants/dictionaryData';
 import { useStreamingTranslation } from '@/hooks/useStreamingTranslation';
@@ -38,8 +41,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { getAnonymousId } from '@/lib/anonymousId';
 
 type Direction = 'en-zo' | 'zo-en';
-
-const SUGGESTIONS = ['love', 'water', 'family', 'heart', 'God', 'thank you', 'friend', 'house'];
 
 const AI_DEBOUNCE_MS = 700;
 
@@ -49,6 +50,7 @@ export default function DictionaryScreen() {
   const [aiResult, setAiResult] = useState<string | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
+  const [selectedLetter, setSelectedLetter] = useState('A');
 
   const stream = useStreamingTranslation();
   const { getAccessToken } = useAuth();
@@ -59,6 +61,14 @@ export default function DictionaryScreen() {
   const results = useMemo(() => searchDictionary(query, 60), [query]);
   const hasMatches = results.length > 0;
   const needsAi = query.trim().length >= 2 && !hasMatches && !hasExactMatch(query);
+
+  // Offline browsing: with no query, list entries alphabetically by letter.
+  const isBrowsing = query.trim().length === 0;
+  const letters = useMemo(() => browseLetters(), []);
+  const browseData = useMemo(
+    () => (isBrowsing ? entriesForLetter(selectedLetter) : []),
+    [isBrowsing, selectedLetter]
+  );
 
   // Debounced AI fallback when the word is not in the verified dictionary.
   useEffect(() => {
@@ -90,12 +100,16 @@ export default function DictionaryScreen() {
           setAiError(
             /limit/i.test(msg)
               ? 'Daily AI word limit reached — try again tomorrow or sign in.'
-              : 'AI lookup is unavailable right now. Check your connection and try again.'
+              : /network|fetch|connect|offline|internet/i.test(msg)
+                ? 'You appear to be offline. The verified dictionary still works — reconnect for AI answers.'
+                : 'AI lookup is unavailable right now. Check your connection and try again.'
           );
         }
       } catch {
         if (queryRef.current.trim() === current) {
-          setAiError('AI lookup failed. Please try again.');
+          setAiError(
+            'You appear to be offline. The verified dictionary still works — reconnect for AI answers.'
+          );
         }
       } finally {
         if (queryRef.current.trim() === current) setIsAiLoading(false);
@@ -168,7 +182,7 @@ export default function DictionaryScreen() {
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        data={results}
+        data={isBrowsing ? browseData : results}
         keyExtractor={(item, i) => `${item.english}-${item.pos}-${i}`}
         renderItem={renderEntry}
         ListHeaderComponent={
@@ -179,6 +193,10 @@ export default function DictionaryScreen() {
                 <Text style={styles.headerSubtitle}>
                   {DICTIONARY_COUNT.toLocaleString()} verified entries · English ⇄ Zomi
                 </Text>
+              </View>
+              <View style={styles.offlineBadge}>
+                <WifiOff size={12} color={Colors.warning} />
+                <Text style={styles.offlineBadgeText}>Offline ready</Text>
               </View>
             </View>
 
@@ -223,6 +241,43 @@ export default function DictionaryScreen() {
               ))}
             </View>
 
+            {isBrowsing && (
+              <View>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.letterRow}
+                >
+                  {letters.map((letter) => (
+                    <TouchableOpacity
+                      key={letter}
+                      style={[
+                        styles.letterChip,
+                        selectedLetter === letter && styles.letterChipActive,
+                      ]}
+                      onPress={() => {
+                        setSelectedLetter(letter);
+                        Haptics.selectionAsync();
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.letterChipText,
+                          selectedLetter === letter && styles.letterChipTextActive,
+                        ]}
+                      >
+                        {letter}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+                <Text style={styles.resultCount}>
+                  {browseData.length.toLocaleString()} {browseData.length === 1 ? 'entry' : 'entries'}{' '}
+                  under “{selectedLetter}”
+                </Text>
+              </View>
+            )}
+
             {trimmed.length > 0 && hasMatches && (
               <Text style={styles.resultCount}>
                 {results.length === 60 ? '60+' : results.length} verified{' '}
@@ -232,22 +287,7 @@ export default function DictionaryScreen() {
           </View>
         }
         ListEmptyComponent={
-          trimmed.length === 0 ? (
-            <View style={styles.emptyState}>
-              <BookOpen size={44} color={Colors.primary} />
-              <Text style={styles.emptyTitle}>Search the verified dictionary</Text>
-              <Text style={styles.emptySubtitle}>
-                Every entry is human-verified. Words not in the dictionary are answered by Zomi AI.
-              </Text>
-              <View style={styles.suggestionRow}>
-                {SUGGESTIONS.map((word) => (
-                  <TouchableOpacity key={word} style={styles.suggestionChip} onPress={() => setQuery(word)}>
-                    <Text style={styles.suggestionText}>{word}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          ) : needsAi || isAiLoading || aiResult || aiError ? (
+          trimmed.length === 0 ? null : needsAi || isAiLoading || aiResult || aiError ? (
             <View style={styles.aiCard}>
               <View style={styles.aiHeader}>
                 <Sparkles size={16} color={Colors.accent} />
@@ -304,6 +344,28 @@ const styles = StyleSheet.create({
   },
   headerTop: {
     marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  offlineBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 184, 77, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 184, 77, 0.35)',
+    marginTop: 4,
+  },
+  offlineBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Colors.warning,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   headerTitle: {
     fontSize: 28,
@@ -360,6 +422,35 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textMuted,
     marginBottom: 8,
+  },
+  letterRow: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingVertical: 4,
+    paddingRight: 8,
+    marginBottom: 4,
+  },
+  letterChip: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.glassBorder,
+  },
+  letterChipActive: {
+    backgroundColor: 'rgba(0, 240, 255, 0.12)',
+    borderColor: 'rgba(0, 240, 255, 0.4)',
+  },
+  letterChipText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.textSecondary,
+  },
+  letterChipTextActive: {
+    color: Colors.primary,
   },
   entryCard: {
     flexDirection: 'row',

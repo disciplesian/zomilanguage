@@ -10,8 +10,6 @@ struct DictionaryView: View {
 
     private var colors: ThemeColors { theme.colors }
 
-    private let suggestions = ["love", "water", "family", "heart", "God", "thank you", "friend", "house"]
-
     var body: some View {
         ZStack {
             AppBackground(colors: colors, isDark: theme.isDark)
@@ -29,8 +27,15 @@ struct DictionaryView: View {
                             .padding(.bottom, 2)
                     }
 
-                    if model.results.isEmpty && model.trimmedQuery.isEmpty {
-                        emptyState
+                    if model.isBrowsing {
+                        letterIndex
+                        Text("\(model.browseEntries.count.formatted()) \(model.browseEntries.count == 1 ? "entry" : "entries") under “\(model.selectedLetter)”")
+                            .font(.system(size: 12))
+                            .foregroundStyle(colors.textMuted)
+                            .padding(.bottom, 2)
+                        ForEach(model.browseEntries) { entry in
+                            entryRow(entry)
+                        }
                     } else {
                         ForEach(model.results) { entry in
                             entryRow(entry)
@@ -67,6 +72,22 @@ struct DictionaryView: View {
                     .font(.system(size: 13))
                     .foregroundStyle(colors.textSecondary)
             }
+            Spacer()
+            HStack(spacing: 4) {
+                Image(systemName: "wifi.slash")
+                    .font(.system(size: 10))
+                Text("Offline ready")
+                    .font(.system(size: 10, weight: .bold))
+                    .textCase(.uppercase)
+            }
+            .foregroundStyle(colors.warning)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                Capsule()
+                    .fill(colors.warning.opacity(theme.isDark ? 0.15 : 0.10))
+                    .overlay(Capsule().strokeBorder(colors.warning.opacity(0.35)))
+            )
         }
         .padding(.top, 8)
     }
@@ -134,6 +155,46 @@ struct DictionaryView: View {
                 )
         }
         .buttonStyle(.plain)
+    }
+
+    // MARK: Offline A–Z browse index
+
+    private var letterIndex: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(model.browseLetters, id: \.self) { letter in
+                    Button {
+                        model.selectLetter(letter)
+                    } label: {
+                        Text(letter)
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(
+                                model.selectedLetter == letter ? colors.primary : colors.textSecondary
+                            )
+                            .frame(width: 36, height: 36)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(
+                                        model.selectedLetter == letter
+                                            ? colors.glassCyan
+                                            : colors.surface
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .strokeBorder(
+                                                model.selectedLetter == letter
+                                                    ? colors.glassCyanBorder
+                                                    : colors.glassBorder
+                                            )
+                                    )
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Browse entries under \(letter)")
+                }
+            }
+            .padding(.vertical, 4)
+        }
     }
 
     // MARK: Entry rows
@@ -281,30 +342,6 @@ struct DictionaryView: View {
         )
     }
 
-    // MARK: Empty state
-
-    private var emptyState: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "book")
-                .font(.system(size: 40))
-                .foregroundStyle(colors.primary)
-            Text("Search the verified dictionary")
-                .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(colors.text)
-            Text("Every entry is human-verified. Words not in the dictionary are answered by Zomi AI.")
-                .font(.system(size: 13))
-                .foregroundStyle(colors.textSecondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 300)
-            FlowChips(items: suggestions, colors: colors) { word in
-                model.query = word
-            }
-            .padding(.top, 6)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 32)
-    }
-
     // MARK: Helpers
 
     private func copy(_ text: String) {
@@ -334,77 +371,5 @@ struct DictionaryView: View {
         default: dark = 0x9BA3AF; light = 0x5A6270
         }
         return theme.isDark ? Color(hex: dark) : Color(hex: light)
-    }
-}
-
-/// Simple wrapping chip row used for the empty-state suggestions.
-private struct FlowChips: View {
-    let items: [String]
-    let colors: ThemeColors
-    let onTap: (String) -> Void
-
-    var body: some View {
-        FlexibleChipsLayout(items: items) { word in
-            Button {
-                onTap(word)
-            } label: {
-                Text(word)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(colors.primary)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(
-                        Capsule()
-                            .fill(colors.surface)
-                            .overlay(Capsule().strokeBorder(colors.glassBorder))
-                    )
-            }
-            .buttonStyle(.plain)
-        }
-    }
-}
-
-/// Wrapping layout for tag chips.
-private struct FlexibleChipsLayout<Item: Hashable, Content: View>: View {
-    let items: [Item]
-    let content: (Item) -> Content
-
-    init(items: [Item], @ViewBuilder content: @escaping (Item) -> Content) {
-        self.items = items
-        self.content = content
-    }
-
-    var body: some View {
-        var width: CGFloat = 0
-        var height: CGFloat = 0
-
-        return GeometryReader { geo in
-            ZStack(alignment: .topLeading) {
-                ForEach(items, id: \.self) { item in
-                    content(item)
-                        .alignmentGuide(.leading) { d in
-                            if abs(width - d.width) > geo.size.width {
-                                width = 0
-                                height -= d.height + 8
-                            }
-                            let result = width
-                            if item == items.last {
-                                width = 0
-                            } else {
-                                width -= d.width + 8
-                            }
-                            return result
-                        }
-                        .alignmentGuide(.top) { _ in
-                            let result = height
-                            if item == items.last {
-                                height = 0
-                            }
-                            return result
-                        }
-                }
-            }
-        }
-        .frame(minHeight: 90)
     }
 }

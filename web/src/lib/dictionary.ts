@@ -96,3 +96,48 @@ export function hasExactMatch(query: string): boolean {
     (e) => e.english.toLowerCase() === q || e.zomi.toLowerCase() === q
   );
 }
+
+export interface BrowseSection {
+  letter: string;
+  entries: DictionaryEntry[];
+}
+
+let browseCache: BrowseSection[] | null = null;
+
+/**
+ * All entries grouped by first letter (A–Z, then # for digits/symbols), each
+ * group sorted alphabetically. Computed once and cached — powers offline browsing.
+ */
+export function browseSections(): BrowseSection[] {
+  if (browseCache) return browseCache;
+  const buckets = new Map<string, DictionaryEntry[]>();
+  for (const e of DICTIONARY_ENTRIES) {
+    const first = e.english.trim().toLowerCase();
+    const letter = first && /[a-z]/.test(first[0]) ? first[0].toUpperCase() : '#';
+    const bucket = buckets.get(letter);
+    if (bucket) bucket.push(e);
+    else buckets.set(letter, [e]);
+  }
+  const sections = Array.from(buckets.entries())
+    .map(([letter, entries]) => ({
+      letter,
+      entries: entries.sort((a, b) =>
+        a.english.toLowerCase().localeCompare(b.english.toLowerCase())
+      ),
+    }))
+    .sort((a, b) =>
+      a.letter === '#' ? 1 : b.letter === '#' ? -1 : a.letter.localeCompare(b.letter)
+    );
+  browseCache = sections;
+  return sections;
+}
+
+/** Available browse letters, in index order. */
+export function browseLetters(): string[] {
+  return browseSections().map((s) => s.letter);
+}
+
+/** Alphabetically sorted entries whose English headword starts with the letter. */
+export function entriesForLetter(letter: string): DictionaryEntry[] {
+  return browseSections().find((s) => s.letter === letter)?.entries ?? [];
+}

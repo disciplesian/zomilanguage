@@ -3,6 +3,7 @@ package com.rork.zomilanguageportal.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,7 +15,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -47,8 +50,6 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import com.rork.zomilanguageportal.data.DictionaryEntry
 import com.rork.zomilanguageportal.ui.components.GlassCard
 import com.rork.zomilanguageportal.ui.theme.PortalColors
-
-private val SUGGESTIONS = listOf("love", "water", "family", "heart", "God", "thank you", "friend", "house")
 
 /** Chip color per part-of-speech category, tuned for the dark portal theme. */
 private fun categoryColor(category: String): Color = when (category) {
@@ -94,6 +95,17 @@ fun DictionaryScreen(viewModel: DictionaryViewModel = viewModel()) {
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Bold,
                         color = PortalColors.TextPrimary,
+                    )
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        "Offline ready",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PortalColors.Yellow,
+                        modifier = Modifier
+                            .background(PortalColors.Yellow.copy(alpha = 0.12f), RoundedCornerShape(50))
+                            .border(1.dp, PortalColors.Yellow.copy(alpha = 0.35f), RoundedCornerShape(50))
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
                     )
                 }
                 Text(
@@ -177,8 +189,28 @@ fun DictionaryScreen(viewModel: DictionaryViewModel = viewModel()) {
             }
         }
 
-        if (trimmed.isEmpty() && state.results.isEmpty()) {
-            item { EmptyState { viewModel.onQueryChange(it) } }
+        if (trimmed.isEmpty()) {
+            item {
+                LetterIndex(
+                    letters = state.browseLetters,
+                    selected = state.selectedLetter,
+                    onSelect = viewModel::onLetterSelect,
+                )
+            }
+            item {
+                Text(
+                    "${"%,d".format(state.browseEntries.size)} ${if (state.browseEntries.size == 1) "entry" else "entries"} under \"${state.selectedLetter}\"",
+                    fontSize = 12.sp,
+                    color = PortalColors.TextFaint,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+            }
+            items(
+                state.browseEntries.size,
+                key = { i -> "$i|${state.browseEntries[i].english}|${state.browseEntries[i].zomi}" },
+            ) { i ->
+                EntryRow(state.browseEntries[i]) { copy(it) }
+            }
         } else {
             items(state.results.size, key = { i -> "${state.results[i].english}|${state.results[i].pos}|${state.results[i].zomi}" }) { i ->
                 EntryRow(state.results[i]) { copy(it) }
@@ -213,6 +245,40 @@ private fun DirectionChip(label: String, active: Boolean, onClick: () -> Unit) {
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
     )
+}
+
+@Composable
+private fun LetterIndex(letters: List<String>, selected: String, onSelect: (String) -> Unit) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(vertical = 4.dp),
+    ) {
+        letters.forEach { letter ->
+            val active = letter == selected
+            Text(
+                letter,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (active) PortalColors.Cyan else PortalColors.TextSecondary,
+                modifier = Modifier
+                    .size(36.dp)
+                    .background(
+                        if (active) PortalColors.Cyan.copy(alpha = 0.12f) else PortalColors.GlassFill,
+                        RoundedCornerShape(12.dp),
+                    )
+                    .border(
+                        1.dp,
+                        if (active) PortalColors.Cyan.copy(alpha = 0.4f) else PortalColors.GlassBorder,
+                        RoundedCornerShape(12.dp),
+                    )
+                    .clickable { onSelect(letter) }
+                    .wrapContentSize(Alignment.Center),
+            )
+        }
+    }
 }
 
 @Composable
@@ -332,56 +398,6 @@ private fun AICard(state: DictionaryUiState, onCopy: (String) -> Unit) {
                 fontSize = 13.sp,
                 color = PortalColors.TextSecondary,
             )
-        }
-    }
-}
-
-@Composable
-private fun EmptyState(onPick: (String) -> Unit) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 32.dp),
-    ) {
-        Icon(
-            Icons.Filled.MenuBook,
-            contentDescription = null,
-            tint = PortalColors.Cyan,
-            modifier = Modifier.size(40.dp),
-        )
-        Text(
-            "Search the verified dictionary",
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
-            color = PortalColors.TextPrimary,
-            modifier = Modifier.padding(top = 12.dp),
-        )
-        Text(
-            "Every entry is human-verified. Words not in the dictionary are answered by Zomi AI.",
-            fontSize = 13.sp,
-            color = PortalColors.TextSecondary,
-            modifier = Modifier
-                .padding(top = 6.dp)
-                .width(280.dp),
-        )
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(top = 16.dp),
-        ) {
-            SUGGESTIONS.take(4).forEach { word ->
-                Text(
-                    word,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = PortalColors.Cyan,
-                    modifier = Modifier
-                        .background(PortalColors.GlassFill, RoundedCornerShape(50))
-                        .border(1.dp, PortalColors.GlassBorder, RoundedCornerShape(50))
-                        .clickable { onPick(word) }
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
-                )
-            }
         }
     }
 }

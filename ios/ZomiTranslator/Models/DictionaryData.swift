@@ -72,4 +72,57 @@ nonisolated enum DictionaryData {
             $0.english.lowercased() == q || $0.zomi.lowercased() == q
         }
     }
+
+    // MARK: Offline browsing (A–Z index)
+
+    struct BrowseSection {
+        let letter: String
+        let entries: [DictionaryEntry]
+    }
+
+    nonisolated(unsafe) private static var browseCache: [BrowseSection]?
+
+    /// All entries grouped by first letter (A–Z, then "#" for digits/symbols),
+    /// each group sorted alphabetically. Computed once and cached.
+    static func browseSections() -> [BrowseSection] {
+        lock.lock()
+        defer { lock.unlock() }
+        if let browseCache { return browseCache }
+        var buckets: [String: [DictionaryEntry]] = [:]
+        for entry in load() {
+            let first = entry.english.trimmingCharacters(in: .whitespaces).lowercased().first
+            let letter: String
+            if let first, first.isLetter, first.isASCII {
+                letter = String(first).uppercased()
+            } else {
+                letter = "#"
+            }
+            buckets[letter, default: []].append(entry)
+        }
+        let sections = buckets.map { letter, entries -> BrowseSection in
+            BrowseSection(
+                letter: letter,
+                entries: entries.sorted {
+                    $0.english.lowercased() < $1.english.lowercased()
+                }
+            )
+        }
+        .sorted { a, b in
+            if a.letter == "#" { return false }
+            if b.letter == "#" { return true }
+            return a.letter < b.letter
+        }
+        browseCache = sections
+        return sections
+    }
+
+    /// Available browse letters, in index order.
+    static func browseLetters() -> [String] {
+        browseSections().map(\.letter)
+    }
+
+    /// Alphabetically sorted entries whose English headword starts with the letter.
+    static func entries(forLetter letter: String) -> [DictionaryEntry] {
+        browseSections().first { $0.letter == letter }?.entries ?? []
+    }
 }

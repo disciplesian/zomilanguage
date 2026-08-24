@@ -7,6 +7,7 @@ import {
   Loader2,
   Search,
   Sparkles,
+  WifiOff,
   X,
 } from 'lucide-react';
 
@@ -17,6 +18,8 @@ import { streamTranslation, WORD_LIMIT_ERROR } from '@/lib/portalApi';
 import {
   CATEGORY_COLORS,
   DICTIONARY_COUNT,
+  browseLetters,
+  entriesForLetter,
   hasExactMatch,
   posLabel,
   searchDictionary,
@@ -25,9 +28,10 @@ import {
 
 type Direction = 'en-zo' | 'zo-en';
 
-const SUGGESTIONS = ['love', 'water', 'family', 'heart', 'God', 'thank you', 'friend', 'house'];
-
 const AI_DEBOUNCE_MS = 700;
+
+const OFFLINE_MESSAGE =
+  'You appear to be offline. The verified dictionary still works — reconnect for AI answers.';
 
 /** Dictionary — instant search over the 10,620 verified English ⇄ Zomi entries,
  *  with a Zomi AI fallback for words that are not in the verified dataset. */
@@ -38,6 +42,7 @@ export default function Dictionary() {
   const [aiResult, setAiResult] = useState<string | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [selectedLetter, setSelectedLetter] = useState<string>('A');
 
   const { user, getAccessToken } = useAuth();
   const abortRef = useRef<AbortController | null>(null);
@@ -47,6 +52,14 @@ export default function Dictionary() {
   const trimmed = query.trim();
   const results = useMemo(() => searchDictionary(query, 60), [query]);
   const needsAI = trimmed.length >= 2 && results.length === 0 && !hasExactMatch(trimmed);
+
+  // Offline browsing: with no query, list entries alphabetically by letter.
+  const isBrowsing = trimmed.length === 0;
+  const letters = useMemo(() => browseLetters(), []);
+  const browseData = useMemo(
+    () => (isBrowsing ? entriesForLetter(selectedLetter) : []),
+    [isBrowsing, selectedLetter]
+  );
 
   // Debounced AI fallback when the word is not in the verified dictionary.
   useEffect(() => {
@@ -60,6 +73,10 @@ export default function Dictionary() {
     const timer = setTimeout(async () => {
       const current = queryRef.current.trim();
       if (current !== trimmed || current.length < 2) return;
+      if (!navigator.onLine) {
+        setAiError(OFFLINE_MESSAGE);
+        return;
+      }
 
       const controller = new AbortController();
       abortRef.current = controller;
@@ -88,6 +105,8 @@ export default function Dictionary() {
         if (controller.signal.aborted || queryRef.current.trim() !== current) return;
         if (err instanceof Error && err.message === WORD_LIMIT_ERROR) {
           setAiError('You have used your 1,500 free words. Sign in to keep going — it is free.');
+        } else if (!navigator.onLine) {
+          setAiError(OFFLINE_MESSAGE);
         } else {
           setAiError('AI lookup is unavailable right now. Check your connection and try again.');
         }
@@ -137,6 +156,9 @@ export default function Dictionary() {
               {DICTIONARY_COUNT.toLocaleString()} verified entries · English ⇄ Zomi
             </p>
           </div>
+          <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-[#ffb84d]/35 bg-[#ffb84d]/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-[#ffb84d]">
+            <WifiOff className="h-3 w-3" /> Offline ready
+          </span>
         </div>
 
         {/* Search */}
@@ -183,6 +205,32 @@ export default function Dictionary() {
           ))}
         </div>
 
+        {/* Browse letter index (offline) */}
+        {isBrowsing && (
+          <div className="mt-5">
+            <div className="flex gap-1.5 overflow-x-auto pb-1">
+              {letters.map((letter) => (
+                <button
+                  key={letter}
+                  onClick={() => setSelectedLetter(letter)}
+                  aria-label={`Browse entries under ${letter}`}
+                  className={`h-9 w-9 shrink-0 rounded-xl border text-sm font-bold transition ${
+                    selectedLetter === letter
+                      ? 'border-[#00f0ff]/40 bg-[#00f0ff]/10 text-[#00f0ff]'
+                      : 'border-white/10 bg-white/5 text-white/60 hover:text-white/85'
+                  }`}
+                >
+                  {letter}
+                </button>
+              ))}
+            </div>
+            <p className="mt-3 text-xs text-white/40">
+              {browseData.length.toLocaleString()} {browseData.length === 1 ? 'entry' : 'entries'}{' '}
+              under &ldquo;{selectedLetter}&rdquo;
+            </p>
+          </div>
+        )}
+
         {/* Match count */}
         {trimmed && results.length > 0 && (
           <p className="mt-5 text-xs text-white/40">
@@ -191,11 +239,16 @@ export default function Dictionary() {
           </p>
         )}
 
-        {/* Results */}
-        {results.length > 0 && (
+        {/* Results / browse list */}
+        {(trimmed ? results : browseData).length > 0 && (
           <div className="mt-4 flex flex-col gap-2.5">
-            {results.map((entry) => (
-              <ResultRow key={`${entry.english}|${entry.pos}|${entry.zomi}`} entry={entry} onCopy={copy} copyIcon={copyIcon(entry.zomi)} />
+            {(trimmed ? results : browseData).map((entry, i) => (
+              <ResultRow
+                key={`${selectedLetter}-${i}-${entry.english}-${entry.pos}-${entry.zomi}`}
+                entry={entry}
+                onCopy={copy}
+                copyIcon={copyIcon(entry.zomi)}
+              />
             ))}
           </div>
         )}
@@ -236,27 +289,6 @@ export default function Dictionary() {
           </GlassCard>
         )}
 
-        {/* Empty state */}
-        {!trimmed && results.length === 0 && (
-          <div className="mt-16 flex flex-col items-center text-center">
-            <BookOpen className="h-11 w-11 text-[#00f0ff]/70" />
-            <h2 className="mt-4 text-lg font-bold text-white">Search the verified dictionary</h2>
-            <p className="mt-2 max-w-sm text-sm leading-relaxed text-white/55">
-              Every entry is human-verified. Words not in the dictionary are answered by Zomi AI.
-            </p>
-            <div className="mt-6 flex flex-wrap justify-center gap-2">
-              {SUGGESTIONS.map((word) => (
-                <button
-                  key={word}
-                  onClick={() => setQuery(word)}
-                  className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-[#00f0ff] transition hover:border-[#00f0ff]/30 hover:bg-[#00f0ff]/10"
-                >
-                  {word}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </SiteLayout>
   );

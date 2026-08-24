@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.IOException
 
 data class DictionaryUiState(
     val query: String = "",
@@ -30,6 +31,12 @@ data class DictionaryUiState(
     val isAskingAI: Boolean = false,
     val aiResult: String? = null,
     val aiError: String? = null,
+    // Offline A–Z browsing
+    val selectedLetter: String = "A",
+    val browseLetters: List<String> = emptyList(),
+    val browseEntries: List<DictionaryEntry> = emptyList(),
+    /** No query typed — show the A–Z index instead of search results. */
+    val isBrowsing: Boolean = true,
 )
 
 /** State for the Dictionary tab: instant local search over the verified
@@ -46,14 +53,46 @@ class DictionaryViewModel(application: Application) : AndroidViewModel(applicati
             val entries = withContext(Dispatchers.IO) {
                 DictionaryRepository.load(application)
             }
-            _uiState.update { it.copy(totalCount = entries.size) }
+            val letters = withContext(Dispatchers.Default) {
+                DictionaryRepository.browseLetters()
+            }
+            val browse = withContext(Dispatchers.Default) {
+                DictionaryRepository.entriesForLetter("A")
+            }
+            _uiState.update {
+                it.copy(
+                    totalCount = entries.size,
+                    browseLetters = letters,
+                    browseEntries = browse,
+                    isBrowsing = true,
+                )
+            }
+        }
+    }
+
+    /** Selects a browse letter (offline A–Z index). */
+    fun onLetterSelect(letter: String) {
+        _uiState.update { it.copy(selectedLetter = letter) }
+        viewModelScope.launch {
+            val browse = withContext(Dispatchers.Default) {
+                DictionaryRepository.entriesForLetter(letter)
+            }
+            if (_uiState.value.selectedLetter == letter) {
+                _uiState.update { it.copy(browseEntries = browse) }
+            }
         }
     }
 
     fun onQueryChange(value: String) {
         aiJob?.cancel()
         _uiState.update {
-            it.copy(query = value, aiResult = null, aiError = null, isAskingAI = false)
+            it.copy(
+                query = value,
+                aiResult = null,
+                aiError = null,
+                isAskingAI = false,
+                isBrowsing = value.trim().isEmpty(),
+            )
         }
         viewModelScope.launch {
             val results = withContext(Dispatchers.Default) {
@@ -113,6 +152,15 @@ class DictionaryViewModel(application: Application) : AndroidViewModel(applicati
             } catch (e: SessionExpiredException) {
                 if (_uiState.value.query.trim() == text) {
                     _uiState.update { it.copy(isAskingAI = false, aiError = e.message) }
+                }
+            } catch (e: IOException) {
+                if (_uiState.value.query.trim() == text) {
+                    _uiState.update {
+                        it.copy(
+                            isAskingAI = false,
+                            aiError = "You appear to be offline. The verified dictionary still works — reconnect for AI answers.",
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 if (_uiState.value.query.trim() == text) {

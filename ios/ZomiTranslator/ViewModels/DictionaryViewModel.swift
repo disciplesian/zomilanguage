@@ -12,9 +12,21 @@ final class DictionaryViewModel {
     /// AI fallback direction: true = English → Zomi, false = Zomi → English.
     var englishToZomi = true
 
+    /// Selected A–Z browse letter (offline browsing mode).
+    var selectedLetter = "A"
+
     private(set) var results: [DictionaryEntry] = []
     private(set) var entriesLoaded = false
     private(set) var totalCount = 0
+
+    // MARK: Offline browsing state
+    private(set) var browseLetters: [String] = []
+    private(set) var browseEntries: [DictionaryEntry] = []
+
+    /// True when no query is typed — the dictionary shows the A–Z index instead.
+    var isBrowsing: Bool {
+        trimmedQuery.isEmpty
+    }
 
     // MARK: AI fallback state
     private(set) var isAskingAI = false
@@ -37,6 +49,8 @@ final class DictionaryViewModel {
             let all = DictionaryData.load()
             self?.totalCount = all.count
             self?.entriesLoaded = true
+            self?.browseLetters = DictionaryData.browseLetters()
+            self?.refreshBrowse()
             self?.refreshResults()
         }
     }
@@ -48,6 +62,10 @@ final class DictionaryViewModel {
 
     private func refreshResults() {
         results = DictionaryData.search(trimmedQuery, limit: 60)
+    }
+
+    private func refreshBrowse() {
+        browseEntries = DictionaryData.entries(forLetter: selectedLetter)
     }
 
     private func scheduleAIFallback() {
@@ -102,11 +120,25 @@ final class DictionaryViewModel {
                 case "sign_in_required":
                     aiError = "Sign in required — please sign in from the Settings tab."
                 default:
-                    aiError = "AI lookup is unavailable right now. Check your connection and try again."
+                    let lower = message.lowercased()
+                    if lower.contains("offline")
+                        || lower.contains("network")
+                        || lower.contains("internet")
+                        || lower.contains("connect")
+                        || lower.contains("timed out") {
+                        aiError = "You appear to be offline. The verified dictionary still works — reconnect for AI answers."
+                    } else {
+                        aiError = "AI lookup is unavailable right now. Check your connection and try again."
+                    }
                 }
                 return
             }
         }
+    }
+
+    func selectLetter(_ letter: String) {
+        selectedLetter = letter
+        refreshBrowse()
     }
 
     func cancelAI() {

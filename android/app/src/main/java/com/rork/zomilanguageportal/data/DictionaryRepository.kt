@@ -20,11 +20,20 @@ private data class DictionaryPayload(
     val entries: List<List<String>> = emptyList(),
 )
 
+/** One A–Z browse group: a letter and its alphabetically sorted entries. */
+data class BrowseSection(
+    val letter: String,
+    val entries: List<DictionaryEntry>,
+)
+
 /** Loads and searches the bundled dictionary asset (dictionary.json). */
 object DictionaryRepository {
 
     @Volatile
     private var entries: List<DictionaryEntry>? = null
+
+    @Volatile
+    private var browseSections: List<BrowseSection>? = null
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -83,4 +92,33 @@ object DictionaryRepository {
         if (q.isEmpty()) return true
         return all.any { it.english.lowercase() == q || it.zomi.lowercase() == q }
     }
+
+    // MARK: Offline browsing (A–Z index)
+
+    /** All entries grouped by first letter (A–Z, then "#"), sorted alphabetically. */
+    private fun sections(): List<BrowseSection> {
+        browseSections?.let { return it }
+        synchronized(this) {
+            browseSections?.let { return it }
+            val all = entries ?: return emptyList()
+            val buckets = LinkedHashMap<String, MutableList<DictionaryEntry>>()
+            for (e in all) {
+                val first = e.english.trim().lowercase().firstOrNull()
+                val letter = if (first != null && first in 'a'..'z') first.uppercaseChar().toString() else "#"
+                buckets.getOrPut(letter) { mutableListOf() }.add(e)
+            }
+            val computed = buckets.map { (letter, list) ->
+                BrowseSection(letter, list.sortedBy { it.english.lowercase() })
+            }.sortedBy { if (it.letter == "#") "~" else it.letter }
+            browseSections = computed
+            return computed
+        }
+    }
+
+    /** Available browse letters, in index order. */
+    fun browseLetters(): List<String> = sections().map { it.letter }
+
+    /** Alphabetically sorted entries whose English headword starts with the letter. */
+    fun entriesForLetter(letter: String): List<DictionaryEntry> =
+        sections().firstOrNull { it.letter == letter }?.entries ?: emptyList()
 }
