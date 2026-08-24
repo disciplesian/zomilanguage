@@ -13,6 +13,8 @@ import {
   ImageBackground,
   Image,
   Share,
+  Modal,
+  FlatList,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -37,6 +39,10 @@ import {
   Mic2,
   Lightbulb,
   BadgeCheck,
+  ChevronDown,
+  Check,
+  Search,
+  X,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
@@ -45,6 +51,14 @@ import * as ImagePicker from 'expo-image-picker';
 import { generateText } from '@rork-ai/toolkit-sdk';
 import { trpc } from '@/lib/trpc';
 import { buildFallbackPrompt } from '@/constants/zomiPrompt';
+import {
+  ALL_LANGUAGES,
+  OTHER_LANGUAGES,
+  languageLabel,
+  languageTtsCode,
+  isPrimaryLanguage,
+  type LanguageOption,
+} from '@/constants/languages';
 
 
 import GlassCard from '@/components/GlassCard';
@@ -65,7 +79,10 @@ import { createShareLink } from '@/lib/share';
 export default function TranslatorScreen() {
   const [inputText, setInputText] = useState('');
   const [outputText, setOutputText] = useState('');
-  const [isZomiToEnglish, setIsZomiToEnglish] = useState(true);
+  const [sourceLanguage, setSourceLanguage] = useState<'zomi' | 'english'>('zomi');
+  const [targetLanguage, setTargetLanguage] = useState('english');
+  const [showLanguagePicker, setShowLanguagePicker] = useState(false);
+  const [languageSearch, setLanguageSearch] = useState('');
   const [isTranslating, setIsTranslating] = useState(false);
   const [translationQuality, setTranslationQuality] = useState(0);
   
@@ -142,7 +159,10 @@ export default function TranslatorScreen() {
   const translationRequestId = useRef(0);
   const isTranslatingRef = useRef(false);
   const lastTranslatedText = useRef('');
-  const lastDirection = useRef(true);
+  const lastDirection = useRef('zomi→english');
+
+  const sourceLabel = sourceLanguage === 'zomi' ? 'Zomi' : 'English';
+  const targetLabel = languageLabel(targetLanguage);
 
   // Mirror streaming text into the visible output so the user sees token-by-token reveal.
   useEffect(() => {
@@ -178,7 +198,7 @@ export default function TranslatorScreen() {
     if (!outputText || isError) return [] as { text: string; highlighted: boolean }[];
     const phrases: string[] = [];
     for (const t of glossary.terms) {
-      const phrase = (isZomiToEnglish ? t.term : t.meaning).trim();
+      const phrase = (sourceLanguage === 'zomi' ? t.term : t.meaning).trim();
       if (phrase.length >= 2) phrases.push(phrase);
     }
     if (!phrases.length) return [] as { text: string; highlighted: boolean }[];
@@ -188,14 +208,14 @@ export default function TranslatorScreen() {
     const parts = outputText.split(regex).filter(Boolean);
     const lowerSet = new Set(unique.map((p) => p.toLowerCase()));
     return parts.map((p) => ({ text: p, highlighted: lowerSet.has(p.toLowerCase()) }));
-  }, [outputText, glossary.terms, isZomiToEnglish]);
+  }, [outputText, glossary.terms, sourceLanguage]);
 
   const hasGlossaryHighlights = useMemo(
     () => glossarySegments.some((seg) => seg.highlighted),
     [glossarySegments]
   );
 
-  const translate = useCallback(async (text: string, direction: boolean) => {
+  const translate = useCallback(async (text: string, source: 'zomi' | 'english', target: string) => {
     if (!text || !text.trim()) {
       setOutputText('');
       setTranslationQuality(0);
@@ -205,7 +225,7 @@ export default function TranslatorScreen() {
     }
 
     // Skip if same text and direction (prevents unnecessary re-translations)
-    if (text.trim() === lastTranslatedText.current && direction === lastDirection.current) {
+    if (text.trim() === lastTranslatedText.current && `${source}→${target}` === lastDirection.current) {
       return;
     }
 
@@ -214,7 +234,7 @@ export default function TranslatorScreen() {
     
     // Update refs to track current translation
     lastTranslatedText.current = text.trim();
-    lastDirection.current = direction;
+    lastDirection.current = `${source}→${target}`;
     
     // Only show loading if we're not already translating (prevents flicker)
     if (!isTranslatingRef.current) {
@@ -224,10 +244,10 @@ export default function TranslatorScreen() {
     
     console.log(`[Request ${currentRequestId}] Starting translation...`);
     console.log('Input text:', text.substring(0, 50) + (text.length > 50 ? '...' : ''));
-    console.log('Direction:', direction ? 'Zomi → English' : 'English → Zomi');
+    console.log('Direction:', `${source} → ${target}`);
 
-    const targetLang: 'english' | 'zomi' = direction ? 'english' : 'zomi';
-    const sourceLang: 'zomi' | 'english' = direction ? 'zomi' : 'english';
+    const targetLang: string = target;
+    const sourceLang: 'zomi' | 'english' = source;
 
     // Offline / instant cache hit
     const hit = cache.lookup(text.trim(), targetLang);
@@ -368,7 +388,8 @@ export default function TranslatorScreen() {
       console.log('Using client-side AI fallback...');
       const prompt = buildFallbackPrompt(
         text.trim(),
-        direction ? 'zomi-to-english' : 'english-to-zomi'
+        sourceLang === 'zomi' ? 'zomi-to-english' : 'english-to-zomi',
+        isPrimaryLanguage(targetLang) ? undefined : languageLabel(targetLang)
       );
 
       const fallbackResult = await generateText({ messages: [{ role: 'user', content: prompt }] });
@@ -445,11 +466,11 @@ export default function TranslatorScreen() {
       return;
     }
     const timeoutId = setTimeout(() => {
-      translateRef.current(inputText, isZomiToEnglish);
+      translateRef.current(inputText, sourceLanguage, targetLanguage);
     }, 600); 
     
     return () => clearTimeout(timeoutId);
-  }, [inputText, isZomiToEnglish]);
+  }, [inputText, sourceLanguage, targetLanguage]);
 
   const handleSwapLanguages = useCallback(() => {
     if (Platform.OS !== 'web') {
@@ -460,21 +481,79 @@ export default function TranslatorScreen() {
       Animated.timing(pulseAnim, { toValue: 0.8, duration: 100, useNativeDriver: true }),
       Animated.timing(pulseAnim, { toValue: 1, duration: 100, useNativeDriver: true }),
     ]).start();
-    
-    setIsZomiToEnglish(prev => !prev);
+
+    if (!isPrimaryLanguage(targetLanguage)) {
+      // Custom target language: alternate the source (Zomi ⇄ English) and
+      // start fresh — the previous output was in the target language.
+      setSourceLanguage((prev) => (prev === 'zomi' ? 'english' : 'zomi'));
+      lastTranslatedText.current = '';
+      setOutputText('');
+      return;
+    }
+
+    const nextSource: 'zomi' | 'english' = targetLanguage as 'zomi' | 'english';
+    const nextTarget = sourceLanguage;
+    setSourceLanguage(nextSource);
+    setTargetLanguage(nextTarget);
     
     if (outputText && !outputText.startsWith('Translation') && !outputText.startsWith('Service')) {
       const newInput = outputText;
       const newOutput = inputText;
       lastTranslatedText.current = newInput.trim();
-      lastDirection.current = !isZomiToEnglish;
+      lastDirection.current = `${nextSource}→${nextTarget}`;
       setInputText(newInput);
       setOutputText(newOutput);
     } else {
       lastTranslatedText.current = '';
       setOutputText(''); 
     }
-  }, [inputText, outputText, pulseAnim, isZomiToEnglish]);
+  }, [inputText, outputText, pulseAnim, sourceLanguage, targetLanguage]);
+
+  /** Languages shown in the picker: pinned primaries first, then the rest. */
+  const pickerListData = useMemo(() => {
+    const q = languageSearch.trim().toLowerCase();
+    if (!q) return OTHER_LANGUAGES;
+    return ALL_LANGUAGES.filter(
+      (l) =>
+        l.label.toLowerCase().includes(q) ||
+        l.native.toLowerCase().includes(q) ||
+        l.code.includes(q.replace(/\s+/g, '_'))
+    );
+  }, [languageSearch]);
+
+  const handleSelectTargetLanguage = useCallback((code: string) => {
+    setShowLanguagePicker(false);
+    setLanguageSearch('');
+    if (code === targetLanguage) return;
+    if (Platform.OS !== 'web') Haptics.selectionAsync();
+    setTargetLanguage(code);
+    // The source must always differ from the target.
+    if (isPrimaryLanguage(code) && sourceLanguage === code) {
+      setSourceLanguage(code === 'zomi' ? 'english' : 'zomi');
+      setOutputText('');
+    }
+  }, [targetLanguage, sourceLanguage]);
+
+  const renderLanguageRow = useCallback(
+    ({ item }: { item: LanguageOption }) => {
+      const selected = item.code === targetLanguage;
+      return (
+        <TouchableOpacity
+          style={[styles.pickerItem, selected && styles.pickerItemSelected]}
+          onPress={() => handleSelectTargetLanguage(item.code)}
+        >
+          <View style={styles.pickerItemTexts}>
+            <Text style={[styles.pickerItemLabel, selected && styles.pickerItemLabelSelected]}>
+              {item.label}
+            </Text>
+            <Text style={styles.pickerItemNative}>{item.native}</Text>
+          </View>
+          {selected && <Check size={18} color={Colors.primary} />}
+        </TouchableOpacity>
+      );
+    },
+    [targetLanguage, handleSelectTargetLanguage]
+  );
 
   const handleCopy = useCallback(async () => {
     if (outputText && !outputText.startsWith('Translation') && !outputText.startsWith('Service')) {
@@ -518,8 +597,8 @@ export default function TranslatorScreen() {
       shareUrl = await createShareLink({
         sourceText: inputText,
         translatedText: outputText,
-        sourceLanguage: isZomiToEnglish ? 'zomi' : 'english',
-        targetLanguage: isZomiToEnglish ? 'english' : 'zomi',
+        sourceLanguage: sourceLanguage,
+        targetLanguage: targetLanguage,
         confidence: translationQuality,
         model: null,
       });
@@ -528,9 +607,9 @@ export default function TranslatorScreen() {
     }
 
     const message = [
-      `${isZomiToEnglish ? 'Zomi' : 'English'}: ${inputText}`,
+      `${sourceLabel}: ${inputText}`,
       ``,
-      `${isZomiToEnglish ? 'English' : 'Zomi'}: ${outputText}`,
+      `${targetLabel}: ${outputText}`,
       ``,
       shareUrl ? `View this translation: ${shareUrl}` : '',
       `Translated with Zomi Translator`,
@@ -595,7 +674,7 @@ export default function TranslatorScreen() {
         }
       }
     }
-  }, [inputText, outputText, isZomiToEnglish, translationQuality]);
+  }, [inputText, outputText, sourceLanguage, targetLanguage, sourceLabel, targetLabel, translationQuality]);
 
   const handleExport = useCallback(async (format: ExportFormat) => {
     if (!outputText || outputText.startsWith('Translation') || outputText.startsWith('Service')) {
@@ -610,8 +689,8 @@ export default function TranslatorScreen() {
       const data: TranslationData = {
         sourceText: inputText,
         translatedText: outputText,
-        sourceLanguage: isZomiToEnglish ? 'Zomi' : 'English',
-        targetLanguage: isZomiToEnglish ? 'English' : 'Zomi',
+        sourceLanguage: sourceLabel,
+        targetLanguage: targetLabel,
         timestamp: new Date(),
       };
 
@@ -626,7 +705,7 @@ export default function TranslatorScreen() {
     } finally {
       setIsExporting(false);
     }
-  }, [inputText, outputText, isZomiToEnglish]);
+  }, [inputText, outputText, sourceLabel, targetLabel]);
 
   const handlePaste = useCallback(async () => {
     try {
@@ -779,7 +858,7 @@ export default function TranslatorScreen() {
     }
   }, [isRecording, startRecording, stopRecording]);
 
-  const handleSpeak = useCallback((text: string, language: 'en' | 'zomi') => {
+  const handleSpeak = useCallback((text: string, language: string) => {
     if (isSpeaking) {
       stopSpeaking();
     } else {
@@ -841,16 +920,16 @@ export default function TranslatorScreen() {
           <GlassCard variant="cyan" glow style={styles.languageSelector}>
             <View style={styles.languageRow}>
               <TouchableOpacity 
-                style={[styles.languageButton, isZomiToEnglish && styles.languageButtonActive]}
+                style={[styles.languageButton, styles.languageButtonActive]}
                 onPress={() => {
-                  if (!isZomiToEnglish) {
-                    setIsZomiToEnglish(true);
-                    if (Platform.OS !== 'web') Haptics.selectionAsync();
-                  }
+                  const next: 'zomi' | 'english' = sourceLanguage === 'zomi' ? 'english' : 'zomi';
+                  if (next === targetLanguage) return;
+                  setSourceLanguage(next);
+                  if (Platform.OS !== 'web') Haptics.selectionAsync();
                 }}
               >
-                <Text style={[styles.languageText, isZomiToEnglish && styles.languageTextActive]}>
-                  Zomi {isZomiToEnglish ? '+' : ''}
+                <Text style={[styles.languageText, styles.languageTextActive]} numberOfLines={1}>
+                  {sourceLabel}
                 </Text>
               </TouchableOpacity>
               
@@ -869,17 +948,19 @@ export default function TranslatorScreen() {
               </Animated.View>
               
               <TouchableOpacity 
-                style={[styles.languageButton, !isZomiToEnglish && styles.languageButtonActive]}
+                style={[styles.languageButton, styles.languageButtonActive]}
                 onPress={() => {
-                  if (isZomiToEnglish) {
-                    setIsZomiToEnglish(false);
-                    if (Platform.OS !== 'web') Haptics.selectionAsync();
-                  }
+                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setLanguageSearch('');
+                  setShowLanguagePicker(true);
                 }}
               >
-                <Text style={[styles.languageText, !isZomiToEnglish && styles.languageTextActive]}>
-                  English {!isZomiToEnglish ? '+' : ''}
-                </Text>
+                <View style={styles.targetLanguageContent}>
+                  <Text style={[styles.languageText, styles.languageTextActive]} numberOfLines={1}>
+                    {targetLabel}
+                  </Text>
+                  <ChevronDown size={16} color={Colors.text} />
+                </View>
               </TouchableOpacity>
             </View>
           </GlassCard>
@@ -923,7 +1004,7 @@ export default function TranslatorScreen() {
           <GlassCard variant="purple" style={styles.inputCard}>
             <View style={styles.inputHeader}>
               <Text style={styles.inputLabel}>
-                {isZomiToEnglish ? 'Zomi +' : 'English +'}
+                {sourceLabel}
               </Text>
               <View style={styles.inputActions}>
                 <Animated.View style={{ transform: [{ scale: isRecording ? recordingAnim : 1 }] }}>
@@ -968,7 +1049,7 @@ export default function TranslatorScreen() {
             
             <TextInput
               style={styles.textInput}
-              placeholder={`Type ${isZomiToEnglish ? 'Zomi' : 'English'} text...`}
+              placeholder={`Type ${sourceLabel} text...`}
               placeholderTextColor={Colors.textMuted}
               value={inputText}
               onChangeText={setInputText}
@@ -987,7 +1068,7 @@ export default function TranslatorScreen() {
             <View style={styles.outputHeader}>
               <View style={styles.outputLabelRow}>
                 <Text style={styles.inputLabel}>
-                  {isZomiToEnglish ? 'English' : 'Zomi'}
+                  {targetLabel}
                 </Text>
                 {!!outputText && !isTranslating && !stream.isStreaming && !outputText.startsWith('Translation') && !outputText.startsWith('Service') && !outputText.startsWith('Error:') && !outputText.startsWith('Invalid') && !outputText.startsWith('API') && !outputText.startsWith('Network') && !outputText.startsWith('Authentication') && !outputText.startsWith('Sign in') && !outputText.startsWith('Your session') && !outputText.startsWith('Request timed') && (
                   <View style={styles.officialBadge}>
@@ -1025,7 +1106,7 @@ export default function TranslatorScreen() {
                   <Copy size={18} color={copied ? Colors.success : Colors.textSecondary} />
                 </TouchableOpacity>
                 <TouchableOpacity 
-                  onPress={() => handleSpeak(outputText, isZomiToEnglish ? 'en' : 'zomi')} 
+                  onPress={() => handleSpeak(outputText, languageTtsCode(targetLanguage))} 
                   style={styles.actionButton}
                   onLongPress={() => setShowSpeedOptions(true)}
                 >
@@ -1120,7 +1201,7 @@ export default function TranslatorScreen() {
                 <View style={styles.errorContainer}>
                   <AlertCircle size={20} color={Colors.error} />
                   <Text style={styles.errorText}>{outputText}</Text>
-                  <TouchableOpacity onPress={() => translate(inputText, isZomiToEnglish)} style={styles.retryButton}>
+                  <TouchableOpacity onPress={() => translate(inputText, sourceLanguage, targetLanguage)} style={styles.retryButton}>
                     <Text style={styles.retryText}>Retry</Text>
                   </TouchableOpacity>
                 </View>
@@ -1199,6 +1280,82 @@ export default function TranslatorScreen() {
 
         </Animated.View>
       </ScrollView>
+
+      <Modal
+        visible={showLanguagePicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowLanguagePicker(false)}
+      >
+        <View style={styles.pickerOverlay}>
+          <View style={styles.pickerSheet}>
+            <View style={styles.pickerHeader}>
+              <View style={styles.pickerHeaderTexts}>
+                <Text style={styles.pickerTitle}>Translate into</Text>
+                <Text style={styles.pickerSubtitle}>Choose your output language</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.pickerCloseButton}
+                onPress={() => setShowLanguagePicker(false)}
+              >
+                <X size={20} color={Colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.pickerSearchContainer}>
+              <Search size={16} color={Colors.textMuted} />
+              <TextInput
+                style={styles.pickerSearchInput}
+                placeholder="Search languages..."
+                placeholderTextColor={Colors.textMuted}
+                value={languageSearch}
+                onChangeText={setLanguageSearch}
+                autoCorrect={false}
+                autoCapitalize="none"
+              />
+            </View>
+
+            <FlatList
+              data={pickerListData}
+              keyExtractor={(item) => item.code}
+              renderItem={renderLanguageRow}
+              keyboardShouldPersistTaps="handled"
+              style={styles.pickerList}
+              ListHeaderComponent={
+                languageSearch.trim() ? null : (
+                  <View>
+                    <Text style={styles.pickerSectionLabel}>Popular</Text>
+                    {[ALL_LANGUAGES[0], ALL_LANGUAGES[1]].map((item) => (
+                      <TouchableOpacity
+                        key={item.code}
+                        style={[
+                          styles.pickerItem,
+                          item.code === targetLanguage && styles.pickerItemSelected,
+                        ]}
+                        onPress={() => handleSelectTargetLanguage(item.code)}
+                      >
+                        <View style={styles.pickerItemTexts}>
+                          <Text
+                            style={[
+                              styles.pickerItemLabel,
+                              item.code === targetLanguage && styles.pickerItemLabelSelected,
+                            ]}
+                          >
+                            {item.label}
+                          </Text>
+                          <Text style={styles.pickerItemNative}>{item.native}</Text>
+                        </View>
+                        {item.code === targetLanguage && <Check size={18} color={Colors.primary} />}
+                      </TouchableOpacity>
+                    ))}
+                    <Text style={styles.pickerSectionLabel}>All languages</Text>
+                  </View>
+                )
+              }
+            />
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1296,6 +1453,115 @@ const styles = StyleSheet.create({
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  targetLanguageContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 4,
+  },
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(10, 12, 22, 0.65)',
+    justifyContent: 'flex-end',
+  },
+  pickerSheet: {
+    backgroundColor: '#323854',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '82%',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    borderBottomWidth: 0,
+    paddingBottom: 34,
+  },
+  pickerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 14,
+  },
+  pickerHeaderTexts: {
+    flex: 1,
+  },
+  pickerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  pickerSubtitle: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  pickerCloseButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pickerSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 20,
+    marginBottom: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: Colors.surface,
+  },
+  pickerSearchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: Colors.text,
+    padding: 0,
+  },
+  pickerList: {
+    flexGrow: 0,
+  },
+  pickerSectionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 6,
+  },
+  pickerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    borderRadius: 12,
+  },
+  pickerItemSelected: {
+    backgroundColor: 'rgba(0, 240, 255, 0.12)',
+  },
+  pickerItemTexts: {
+    flex: 1,
+    marginRight: 12,
+  },
+  pickerItemLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  pickerItemLabelSelected: {
+    color: Colors.primary,
+  },
+  pickerItemNative: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginTop: 1,
   },
   inputCard: {
     marginBottom: 12,

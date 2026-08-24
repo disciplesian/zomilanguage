@@ -11,7 +11,8 @@ const API_BASE = (() => {
 
 const SHARE_WEB_BASE = 'https://zomi.me';
 
-export type ShareLanguage = 'zomi' | 'english';
+/** Language code — 'zomi', 'english' or any catalog language. */
+export type ShareLanguage = string;
 
 export interface CreateShareLinkInput {
   sourceText: string;

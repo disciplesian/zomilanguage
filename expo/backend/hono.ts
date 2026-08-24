@@ -33,6 +33,7 @@ import {
   ZOMI_SYSTEM_INSTRUCTION,
   ZOMI_GLOSSARY,
   ZOMI_EXAMPLES,
+  promptLanguageName,
 } from "../constants/zomiPrompt";
 
 const app = new Hono();
@@ -174,12 +175,13 @@ app.post("/translate/stream", async (c) => {
   if (!aiProxyConfigured() && !geminiConfigured())
     return c.json({ error: "ai_unavailable" }, 500);
 
-  const targetLang = target === "zomi" ? "Zomi (ISO 639-3: ctd)" : target;
+  const targetLang = promptLanguageName(target);
+  const isZomiTarget = targetLang === "Zomi (ISO 639-3: ctd)";
   const mergedGlossary: Record<string, string> = { ...ZOMI_GLOSSARY, ...extraGlossary };
   const glossaryJson = JSON.stringify({ glossary: mergedGlossary, examples: ZOMI_EXAMPLES });
   const prompt = [
     `Translate the following text into ${targetLang}.`,
-    `Use EXCLUSIVELY standard ${targetLang === "Zomi (ISO 639-3: ctd)" ? "Zomi (ISO 639-3: ctd) — no related variety" : targetLang}.`,
+    `Use EXCLUSIVELY standard ${isZomiTarget ? "Zomi (ISO 639-3: ctd) — no related variety" : targetLang}.`,
     `Ensure the grammar and natural idiom of ${targetLang} are perfect. Translate meaning, not words.`,
     `Return JSON {"translation": string, "confidence": number 0-100}.`,
     "",
@@ -323,18 +325,22 @@ function sanitizeGlossary(input: unknown): unknown[] {
     .filter((t) => t.term && t.meaning);
 }
 
+function sanitizeLanguageCode(v: unknown): string {
+  if (typeof v !== "string") return "english";
+  const t = v.trim().toLowerCase().slice(0, 32);
+  return /^[a-z][a-z_]*$/.test(t) ? t : "english";
+}
+
 function sanitizeTranslations(input: unknown): unknown[] {
   if (!Array.isArray(input)) return [];
-  const lang = (v: unknown): "zomi" | "english" =>
-    v === "zomi" || v === "english" ? v : "english";
   return input
     .slice(0, 100)
     .map((item: Record<string, unknown>) => ({
       key: sanitizeString(item?.key, 64),
       sourceText: sanitizeString(item?.sourceText, 5000),
       translatedText: sanitizeString(item?.translatedText, 5000),
-      sourceLanguage: lang(item?.sourceLanguage),
-      targetLanguage: lang(item?.targetLanguage),
+      sourceLanguage: sanitizeLanguageCode(item?.sourceLanguage),
+      targetLanguage: sanitizeLanguageCode(item?.targetLanguage),
       confidence: typeof item?.confidence === "number" ? Math.round(item.confidence) : 0,
       model: sanitizeString(item?.model, 64) || null,
       createdAt: typeof item?.createdAt === "number" ? item.createdAt : 0,
@@ -425,8 +431,6 @@ app.post("/share", async (c) => {
     return c.json({ error: "invalid_json" }, 400);
   }
 
-  const lang = (v: unknown): "zomi" | "english" =>
-    v === "zomi" || v === "english" ? v : "english";
   const sourceText = sanitizeString(body.sourceText, 5000).trim();
   const translatedText = sanitizeString(body.translatedText, 5000).trim();
   if (!sourceText || !translatedText) {
@@ -440,8 +444,8 @@ app.post("/share", async (c) => {
       shareId,
       sourceText,
       translatedText,
-      sourceLanguage: lang(body.sourceLanguage),
-      targetLanguage: lang(body.targetLanguage),
+      sourceLanguage: sanitizeLanguageCode(body.sourceLanguage),
+      targetLanguage: sanitizeLanguageCode(body.targetLanguage),
       confidence:
         typeof body.confidence === "number" ? Math.round(body.confidence) : 0,
       model: sanitizeString(body.model, 64) || null,
@@ -470,8 +474,8 @@ app.get("/share/:id", async (c) => {
       shareId: String(row.shareId ?? shareId),
       sourceText: String(row.sourceText ?? ""),
       translatedText: String(row.translatedText ?? ""),
-      sourceLanguage: row.sourceLanguage === "zomi" ? "zomi" : "english",
-      targetLanguage: row.targetLanguage === "zomi" ? "zomi" : "english",
+      sourceLanguage: sanitizeLanguageCode(row.sourceLanguage),
+      targetLanguage: sanitizeLanguageCode(row.targetLanguage),
       confidence: Number(row.confidence ?? 0),
       model: (row.model as string | null) ?? null,
       createdAt: String(row.createdAt ?? ""),

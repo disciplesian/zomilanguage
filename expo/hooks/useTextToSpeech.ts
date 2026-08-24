@@ -72,7 +72,8 @@ async function generateSpeechBase64(text: string): Promise<string | null> {
 }
 
 export interface TTSOptions {
-  language: 'en' | 'zomi';
+  /** BCP-47 tag ('en', 'my', 'zh-CN', …) or 'zomi' for the custom Zomi voice. */
+  language: string;
   rate?: number;
 }
 
@@ -194,7 +195,7 @@ export function useTextToSpeech() {
   }, []);
 
   /** Browser speechSynthesis fallback for when the AI engine is unreachable. */
-  const speakWithBrowserTTS = useCallback((text: string, rate: number) => {
+  const speakWithBrowserTTS = useCallback((text: string, rate: number, language: string) => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
       if (mountedRef.current) {
         setError('Speech synthesis is not supported on this platform.');
@@ -209,7 +210,9 @@ export function useTextToSpeech() {
     }
 
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'en-US';
+    // Pass the selected language through so non-English output is spoken with
+    // a matching voice when the browser has one; 'zomi' has no browser voice.
+    utterance.lang = language === 'en' || language === 'zomi' ? 'en-US' : language;
     utterance.rate = rate;
     utterance.pitch = 1.0;
     utterance.volume = 1.0;
@@ -357,7 +360,7 @@ export function useTextToSpeech() {
           if (played) return;
         }
         // Fallback: browser speech synthesis.
-        speakWithBrowserTTS(text, rate);
+        speakWithBrowserTTS(text, rate, options.language);
         return;
       }
 

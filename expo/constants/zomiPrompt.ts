@@ -89,12 +89,27 @@ When the register is ambiguous, use the neutral standard register.
 - NO dialect mixing. Standard Zomi (ISO 639-3: ctd) ONLY when the target is Zomi.`;
 
 /**
+ * Maps a language code (e.g. "zomi", "chinese_simplified") to the display
+ * name used inside AI prompts. Shared by the SSE stream, the tRPC route and
+ * the client-side fallback so every path describes the language identically.
+ */
+export function promptLanguageName(code: string): string {
+  if (code === 'zomi') return 'Zomi (ISO 639-3: ctd)';
+  return code
+    .split('_')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
+/**
  * Build a plain-text fallback prompt for the Rork toolkit (non-Gemini)
- * client-side fallback path.
+ * client-side fallback path. When `customTarget` is provided the prompt
+ * targets that language instead of the two primary ones.
  */
 export function buildFallbackPrompt(
   text: string,
-  direction: 'zomi-to-english' | 'english-to-zomi'
+  direction: 'zomi-to-english' | 'english-to-zomi',
+  customTarget?: string
 ): string {
   const glossaryLines = Object.entries(ZOMI_GLOSSARY)
     .map(([k, v]) => `- "${k}" = ${v}`)
@@ -102,6 +117,17 @@ export function buildFallbackPrompt(
   const exampleLines = ZOMI_EXAMPLES.map((e) =>
     direction === 'english-to-zomi' ? `- "${e.source}" = "${e.target}"` : `- "${e.target}" = "${e.source}"`
   ).join('\n');
+
+  if (customTarget) {
+    const sourceLabel = direction === 'zomi-to-english' ? 'Zomi (ISO 639-3: ctd)' : 'English';
+    return `You are a professional ${sourceLabel} to ${customTarget} translator.
+Translate meaning, not words. Never omit, add, or explain.
+STYLE: Match the register of the input — everyday sentence, song lyrics, news, scripture, or poetry — and mirror it in ${customTarget}. Preserve line breaks for songs and poetry.
+
+Translate: "${text}"
+
+Output ONLY the ${customTarget} translation:`;
+  }
 
   if (direction === 'zomi-to-english') {
     return `You are a professional Zomi (ISO 639-3: ctd) to English translator.

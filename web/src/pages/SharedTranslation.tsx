@@ -17,17 +17,22 @@ interface SharedTranslation {
   shareId: string;
   sourceText: string;
   translatedText: string;
-  sourceLanguage: 'zomi' | 'english';
-  targetLanguage: 'zomi' | 'english';
+  sourceLanguage: string;
+  targetLanguage: string;
   confidence: number;
   model: string | null;
   createdAt: string;
 }
 
-const LANGUAGE_LABELS: Record<'zomi' | 'english', string> = {
-  zomi: 'Zomi',
-  english: 'English',
-};
+/** Display name for a language code ('zomi', 'english', or any other code). */
+function languageLabel(code: string): string {
+  if (code === 'zomi') return 'Zomi';
+  if (code === 'english') return 'English';
+  return code
+    .split('_')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
 
 async function fetchSharedTranslation(id: string): Promise<SharedTranslation> {
   const res = await fetch(`${API_BASE_URL}/api/share/${encodeURIComponent(id)}`);
@@ -163,7 +168,7 @@ const SharedTranslation = () => {
           <GlassCard>
             <div className="space-y-4">
               <TranslationPanel
-                language={LANGUAGE_LABELS[data.sourceLanguage]}
+                language={languageLabel(data.sourceLanguage)}
                 text={data.sourceText}
               />
 
@@ -174,7 +179,7 @@ const SharedTranslation = () => {
               </div>
 
               <TranslationPanel
-                language={LANGUAGE_LABELS[data.targetLanguage]}
+                language={languageLabel(data.targetLanguage)}
                 text={data.translatedText}
                 confidence={data.confidence}
               />

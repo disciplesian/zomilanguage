@@ -9,6 +9,7 @@ import {
   ZOMI_SYSTEM_INSTRUCTION,
   ZOMI_GLOSSARY,
   ZOMI_EXAMPLES,
+  promptLanguageName,
 } from '../../../../constants/zomiPrompt';
 
 /**
@@ -217,8 +218,7 @@ export async function runTranslation(
     throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'No AI provider configured.' });
   }
 
-  const targetLang =
-    targetLanguage === 'zomi' ? 'Zomi (ISO 639-3: ctd)' : targetLanguage;
+  const targetLang = promptLanguageName(targetLanguage);
 
   const key = cacheKey(text, targetLang);
   const cached = cacheGet(key);

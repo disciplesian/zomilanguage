@@ -9,7 +9,8 @@ export interface CachedTranslation {
   sourceText: string;
   translatedText: string;
   sourceLanguage: 'zomi' | 'english';
-  targetLanguage: 'zomi' | 'english';
+  /** Target language code — 'zomi', 'english' or any catalog language. */
+  targetLanguage: string;
   confidence: number;
   model: string | null;
   createdAt: number;

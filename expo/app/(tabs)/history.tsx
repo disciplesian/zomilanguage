@@ -27,6 +27,7 @@ import * as Haptics from 'expo-haptics';
 
 import GlassCard from '@/components/GlassCard';
 import Colors from '@/constants/colors';
+import { languageLabel } from '@/constants/languages';
 import { trpc } from '@/lib/trpc';
 import { useUserProfile } from '@/contexts/UserProfileContext';
 
@@ -228,7 +229,7 @@ export default function HistoryScreen() {
                   <View style={styles.historyType}>
                     {getTypeIcon(item.translationType)}
                     <Text style={styles.historyTypeText}>
-                      {item.sourceLanguage === 'zomi' ? 'Zomi → English' : 'English → Zomi'}
+                      {`${languageLabel(item.sourceLanguage)} → ${languageLabel(item.targetLanguage)}`}
                     </Text>
                   </View>
                   <View style={styles.historyActions}>
