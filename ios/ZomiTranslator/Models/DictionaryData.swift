@@ -21,7 +21,9 @@ nonisolated enum DictionaryData {
 
     /// Cached decoded entries (loaded once per process).
     nonisolated(unsafe) private static var cached: [DictionaryEntry]?
-    private static let lock = NSLock()
+    /// Recursive: `browseSections()` holds the lock while calling `load()`,
+    /// which locks again — a plain NSLock would deadlock the main thread there.
+    private static let lock = NSRecursiveLock()
 
     /// Version of the dataset currently in use (the bundled asset is version 1).
     nonisolated(unsafe) private static var activeVersionValue: Int = 1
