@@ -147,9 +147,11 @@ final class DictionaryViewModel {
             switch event {
             case .start:
                 break
+            case .connecting:
+                break
             case .delta:
                 break
-            case .done(let full, _, _):
+            case .done(let full, _, _, _):
                 let trimmed = full.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty {
                     aiResult = trimmed

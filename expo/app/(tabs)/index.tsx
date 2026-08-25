@@ -87,6 +87,7 @@ export default function TranslatorScreen() {
   const [languageSearch, setLanguageSearch] = useState('');
   const [isTranslating, setIsTranslating] = useState(false);
   const [translationQuality, setTranslationQuality] = useState(0);
+  const [alternatives, setAlternatives] = useState<string[]>([]);
   const [isOfflineResult, setIsOfflineResult] = useState(false);
   const [offlineNote, setOfflineNote] = useState<string | null>(null);
   
@@ -277,6 +278,7 @@ export default function TranslatorScreen() {
     lastDirection.current = `${source}→${target}`;
     setIsOfflineResult(false);
     setOfflineNote(null);
+    setAlternatives([]);
     
     // Only show loading if we're not already translating (prevents flicker)
     if (!isTranslatingRef.current) {
@@ -323,6 +325,7 @@ export default function TranslatorScreen() {
         setOutputText(streamResult.text);
         const conf = streamResult.confidence > 0 ? streamResult.confidence : 95;
         setTranslationQuality(conf);
+        setAlternatives(streamResult.alternatives ?? []);
         setIsTranslating(false);
         isTranslatingRef.current = false;
         cache.save({
@@ -385,6 +388,7 @@ export default function TranslatorScreen() {
       const conf = (result as any).confidence;
       const finalConf = typeof conf === 'number' && conf > 0 ? conf : 95;
       setTranslationQuality(finalConf);
+      setAlternatives(Array.isArray((result as any).alternatives) ? (result as any).alternatives : []);
       setIsTranslating(false);
       isTranslatingRef.current = false;
       cache.save({
@@ -1260,7 +1264,9 @@ export default function TranslatorScreen() {
               {isTranslating && !outputText ? (
                 <View style={styles.loadingContainer}>
                   <TypingDots color={Colors.accent} dotSize={9} />
-                  <Text style={styles.loadingText}>Translating with Zomi AI...</Text>
+                  <Text style={styles.loadingText}>
+                    {stream.isRetrying ? 'Connecting...' : 'Translating with Zomi AI...'}
+                  </Text>
                 </View>
               ) : outputText.startsWith('Translation') || outputText.startsWith('Service') || outputText.startsWith('Error:') || outputText.startsWith('Invalid') || outputText.startsWith('API') || outputText.startsWith('Network') || outputText.startsWith('Authentication') || outputText.startsWith('Sign in') || outputText.startsWith('Your session') || outputText.startsWith('Request timed') ? (
                 <View style={styles.errorContainer}>
@@ -1288,6 +1294,32 @@ export default function TranslatorScreen() {
                 </Text>
               )}
             </Animated.View>
+
+            {alternatives.length > 0 && !isTranslating && !stream.isStreaming && (
+              <View style={styles.alternativesSection}>
+                <Text style={styles.alternativesLabel}>Also common</Text>
+                <View style={styles.alternativesRow}>
+                  {alternatives.map((alt, i) => (
+                    <TouchableOpacity
+                      key={`${alt}-${i}`}
+                      style={styles.alternativeChip}
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        // Promote the tapped alternative to the main translation.
+                        const previous = outputText;
+                        setOutputText(alt);
+                        setAlternatives(alternatives.map((a, idx) => (idx === i ? previous : a)));
+                        if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      }}
+                    >
+                      <Text style={styles.alternativeChipText} numberOfLines={2}>
+                        {alt}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
 
             {isOfflineResult && !!outputText && !isTranslating && (
               <View style={styles.offlineNotice}>
@@ -2002,6 +2034,39 @@ const styles = StyleSheet.create({
   },
   qualitySection: {
     marginTop: 14,
+  },
+  alternativesSection: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: Colors.surface,
+  },
+  alternativesLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    color: Colors.textSecondary,
+    marginBottom: 8,
+  },
+  alternativesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  alternativeChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.surfaceMedium,
+    maxWidth: '100%',
+  },
+  alternativeChipText: {
+    fontSize: 14,
+    color: Colors.text,
+    lineHeight: 20,
   },
   qualityHeader: {
     flexDirection: 'row',

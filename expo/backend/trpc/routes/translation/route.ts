@@ -61,7 +61,7 @@ const MAX_INPUT_CHARS = 10000;
 
 /** Simple in-memory LRU cache by hash(source|target|text). */
 const CACHE_SIZE = 256;
-type CacheEntry = { translatedText: string; confidence: number; model: string };
+type CacheEntry = { translatedText: string; confidence: number; model: string; alternatives: string[] };
 const cache = new Map<string, CacheEntry>();
 
 function cacheKey(text: string, source: string, target: string): string {
@@ -158,16 +158,24 @@ function buildMessages(
 }
 
 /** Parse the model's JSON response, recovering plain text if the schema is ignored. */
-function parseTranslation(raw: string): { translation: string; confidence: number } {
+function parseTranslation(raw: string): { translation: string; confidence: number; alternatives: string[] } {
   const trimmed = raw.trim().replace(/```[a-z]*\s*/gi, '').replace(/```/g, '').trim();
   try {
-    const parsed = JSON.parse(trimmed) as { translation?: string; confidence?: unknown };
+    const parsed = JSON.parse(trimmed) as { translation?: string; confidence?: unknown; alternatives?: unknown };
+    const primary = (parsed.translation ?? '').trim();
+    const alternatives = Array.isArray(parsed.alternatives)
+      ? parsed.alternatives
+          .map((a) => (typeof a === 'string' ? a.trim() : ''))
+          .filter((a) => a.length > 0 && a !== primary)
+          .slice(0, 2)
+      : [];
     return {
-      translation: (parsed.translation ?? '').trim(),
+      translation: primary,
       confidence: Math.max(0, Math.min(100, Math.round(Number(parsed.confidence ?? 90)))),
+      alternatives: [...new Set(alternatives)],
     };
   } catch {
-    return { translation: trimmed, confidence: 90 };
+    return { translation: trimmed, confidence: 90, alternatives: [] };
   }
 }
 
@@ -185,7 +193,7 @@ async function refineTranslation(
   sourceLang: string,
   targetLang: string,
   draft: string
-): Promise<{ translation: string; confidence: number } | null> {
+): Promise<{ translation: string; confidence: number; alternatives: string[] } | null> {
   const involvesZomi =
     sourceLang === 'Zomi (ISO 639-3: ctd)' || targetLang === 'Zomi (ISO 639-3: ctd)';
   const reviewerLine = involvesZomi
@@ -251,6 +259,7 @@ export async function runTranslation(
 
       let translatedText = parsed.translation;
       let confidence = parsed.confidence;
+      let alternatives = parsed.alternatives;
       let refined = false;
 
       // Second-pass expert review for low-confidence longer texts.
@@ -278,7 +287,7 @@ export async function runTranslation(
         }
       }
 
-      const entry: CacheEntry = { translatedText, confidence, model };
+      const entry: CacheEntry = { translatedText, confidence, model, alternatives };
       cacheSet(key, entry);
 
       logTelemetry({
@@ -376,6 +385,7 @@ export default createTRPCRouter({
       return {
         translatedText: result.translatedText,
         confidence: result.confidence,
+        alternatives: result.alternatives,
         detectedSource: sourceLanguage?.trim() || 'Auto',
         model: result.model,
         cached: result.cached,

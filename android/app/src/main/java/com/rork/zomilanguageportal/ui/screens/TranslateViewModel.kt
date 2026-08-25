@@ -20,7 +20,11 @@ data class TranslateUiState(
     val zomiToEnglish: Boolean = true,
     val targetLanguage: String = "english",
     val isTranslating: Boolean = false,
+    /** True while an automatic retry reconnects after a network blip. */
+    val isConnecting: Boolean = false,
     val confidence: Int = 0,
+    /** Alternative phrasings for inputs with multiple common senses. */
+    val alternatives: List<String> = emptyList(),
     val error: String? = null,
 )
 
@@ -95,7 +99,16 @@ class TranslateViewModel : ViewModel() {
 
         translateJob?.cancel()
         translateJob = viewModelScope.launch {
-            _uiState.update { it.copy(isTranslating = true, error = null, output = "", confidence = 0) }
+            _uiState.update {
+                it.copy(
+                    isTranslating = true,
+                    isConnecting = false,
+                    error = null,
+                    output = "",
+                    confidence = 0,
+                    alternatives = emptyList(),
+                )
+            }
             try {
                 // Signed-in members translate without limits; guests draw down
                 // their 1,500-word free allowance tracked by a stable device ID.
@@ -107,29 +120,49 @@ class TranslateViewModel : ViewModel() {
                     text = text,
                     sourceLanguage = if (state.zomiToEnglish) "zomi" else "english",
                     targetLanguage = state.targetLanguage,
-                ) { piece ->
-                    _uiState.update { it.copy(output = it.output + piece) }
-                }
+                    onConnecting = {
+                        // A transient network blip is being retried.
+                        _uiState.update { it.copy(isConnecting = true) }
+                    },
+                    onDelta = { piece ->
+                        _uiState.update { it.copy(output = it.output + piece, isConnecting = false) }
+                    },
+                )
 
                 _uiState.update {
                     it.copy(
                         output = result.text,
                         confidence = result.confidence,
+                        alternatives = result.alternatives,
                         isTranslating = false,
+                        isConnecting = false,
                     )
                 }
             } catch (e: WordLimitException) {
-                _uiState.update { it.copy(isTranslating = false, error = e.message) }
+                _uiState.update { it.copy(isTranslating = false, isConnecting = false, error = e.message) }
             } catch (e: SessionExpiredException) {
-                _uiState.update { it.copy(isTranslating = false, error = e.message) }
+                _uiState.update { it.copy(isTranslating = false, isConnecting = false, error = e.message) }
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
                         isTranslating = false,
+                        isConnecting = false,
                         error = e.message ?: "Translation failed. Please try again.",
                     )
                 }
             }
+        }
+    }
+
+    /** Promotes an alternative phrasing to the main translation. */
+    fun promoteAlternative(alternative: String) {
+        val current = _uiState.value
+        if (alternative.isEmpty() || !current.alternatives.contains(alternative)) return
+        _uiState.update { state ->
+            state.copy(
+                output = alternative,
+                alternatives = state.alternatives.map { if (it == alternative) state.output else it },
+            )
         }
     }
 

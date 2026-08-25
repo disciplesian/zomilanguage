@@ -11,7 +11,10 @@ nonisolated struct StreamResult {
 nonisolated enum TranslationEvent {
     case start(model: String)
     case delta(text: String)
-    case done(text: String, model: String, confidence: Int)
+    /// Emitted when a transient network failure triggers an automatic retry —
+    /// the UI shows a "Connecting..." indicator while this is in flight.
+    case connecting
+    case done(text: String, model: String, confidence: Int, alternatives: [String])
     case failure(message: String)
 }
 
@@ -46,8 +49,24 @@ nonisolated final class TranslationService: Sendable {
         return created
     }
 
+    /// Normalizes the "alternatives" payload from the done event: at most 2
+    /// unique, non-empty strings that differ from the primary translation.
+    private static func normalizeAlternatives(_ raw: Any?, primary: String) -> [String] {
+        guard let list = raw as? [Any] else { return [] }
+        var out: [String] = []
+        for item in list {
+            guard let value = (item as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !value.isEmpty, value != primary, !out.contains(value) else { continue }
+            out.append(value)
+            if out.count == 2 { break }
+        }
+        return out
+    }
+
     /// Streams a translation. Emits events as they arrive; the stream finishes
-    /// after a `.done` or `.failure` event.
+    /// after a `.done` or `.failure` event. Transient connection failures are
+    /// retried automatically (up to 2 times) with a `.connecting` event before
+    /// each retry so the UI can show a "Connecting..." indicator.
     func stream(
         text: String,
         sourceLanguage: String,
@@ -56,112 +75,143 @@ nonisolated final class TranslationService: Sendable {
     ) -> AsyncStream<TranslationEvent> {
         AsyncStream { continuation in
             let task = Task {
-                do {
-                    // Free tier: members translate without limits; guests draw
-                    // down a 1,500-word allowance tracked by anonymous ID.
-                    let accessToken = KeychainHelper.get("access_token")
-                    let guestId = anonymousId
-                    guard let url = URL(string: "\(baseURL)/api/translate/stream") else {
-                        continuation.yield(.failure(message: "invalid_url"))
-                        continuation.finish()
-                        return
-                    }
-                    var request = URLRequest(url: url)
-                    request.httpMethod = "POST"
-                    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                    request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
-                    request.setValue(guestId, forHTTPHeaderField: "X-Anonymous-Id")
-                    if let accessToken {
-                        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-                    }
-                    request.timeoutInterval = 60
+                // Free tier: members translate without limits; guests draw
+                // down a 1,500-word allowance tracked by anonymous ID.
+                let accessToken = KeychainHelper.get("access_token")
+                let guestId = anonymousId
+                guard let url = URL(string: "\(baseURL)/api/translate/stream") else {
+                    continuation.yield(.failure(message: "invalid_url"))
+                    continuation.finish()
+                    return
+                }
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+                request.setValue(guestId, forHTTPHeaderField: "X-Anonymous-Id")
+                if let accessToken {
+                    request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+                }
+                request.timeoutInterval = 60
 
-                    let body: [String: Any] = [
-                        "text": text,
-                        "sourceLanguage": sourceLanguage,
-                        "targetLanguage": targetLanguage,
-                        "extraGlossary": extraGlossary,
-                        "anonymousId": guestId,
-                    ]
-                    request.httpBody = try JSONSerialization.data(withJSONObject: body)
+                let body: [String: Any] = [
+                    "text": text,
+                    "sourceLanguage": sourceLanguage,
+                    "targetLanguage": targetLanguage,
+                    "extraGlossary": extraGlossary,
+                    "anonymousId": guestId,
+                ]
+                request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
-                    let (bytes, response) = try await URLSession.shared.bytes(for: request)
-                    guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-                        let code = (response as? HTTPURLResponse)?.statusCode ?? -1
-                        if code == 401 {
-                            // Read the JSON error body to tell an exhausted free
-                            // tier apart from an expired member session.
-                            var raw = ""
-                            for try await line in bytes.lines {
-                                raw += line
-                                if raw.count > 512 { break }
+                let maxRetries = 2
+                var attempt = 0
+
+                streamLoop: while true {
+                    do {
+                        let (bytes, response) = try await URLSession.shared.bytes(for: request)
+                        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                            let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+                            if code == 401 {
+                                // Read the JSON error body to tell an exhausted free
+                                // tier apart from an expired member session.
+                                var raw = ""
+                                for try await line in bytes.lines {
+                                    raw += line
+                                    if raw.count > 512 { break }
+                                }
+                                let errorCode = ((try? JSONSerialization.jsonObject(with: Data(raw.utf8))) as? [String: Any])?["error"] as? String
+                                continuation.yield(.failure(message: errorCode ?? "sign_in_required"))
+                                break streamLoop
                             }
-                            let errorCode = ((try? JSONSerialization.jsonObject(with: Data(raw.utf8))) as? [String: Any])?["error"] as? String
-                            continuation.yield(.failure(message: errorCode ?? "sign_in_required"))
-                        } else {
+                            // Transient 5xx: retry with backoff before failing.
+                            if attempt < maxRetries, code >= 500 {
+                                attempt += 1
+                                continuation.yield(.connecting)
+                                try? await Task.sleep(for: .milliseconds(800 << (attempt - 1)))
+                                continue streamLoop
+                            }
                             continuation.yield(.failure(message: "HTTP \(code)"))
+                            break streamLoop
                         }
-                        continuation.finish()
-                        return
-                    }
 
-                    var accumulated = ""
-                    var model = ""
-                    var confidence = 0
-                    var currentEvent = "message"
-                    var sawDone = false
+                        var accumulated = ""
+                        var model = ""
+                        var confidence = 0
+                        var alternatives: [String] = []
+                        var currentEvent = "message"
+                        var sawDone = false
 
-                    for try await line in bytes.lines {
-                        if Task.isCancelled { break }
-                        if line.hasPrefix("event:") {
-                            currentEvent = line.dropFirst(6).trimmingCharacters(in: .whitespaces)
-                        } else if line.hasPrefix("data:") {
-                            let payload = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
-                            guard let data = payload.data(using: .utf8),
-                                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-                            else { continue }
+                        for try await line in bytes.lines {
+                            if Task.isCancelled { break }
+                            if line.hasPrefix("event:") {
+                                currentEvent = line.dropFirst(6).trimmingCharacters(in: .whitespaces)
+                            } else if line.hasPrefix("data:") {
+                                let payload = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
+                                guard let data = payload.data(using: .utf8),
+                                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+                                else { continue }
 
-                            switch currentEvent {
-                            case "start":
-                                if let m = json["model"] as? String {
-                                    model = m
-                                    continuation.yield(.start(model: m))
+                                switch currentEvent {
+                                case "start":
+                                    if let m = json["model"] as? String {
+                                        model = m
+                                        continuation.yield(.start(model: m))
+                                    }
+                                case "delta":
+                                    if let piece = json["text"] as? String {
+                                        accumulated += piece
+                                        continuation.yield(.delta(text: piece))
+                                    }
+                                case "confidence":
+                                    if let c = json["confidence"] as? Int { confidence = c }
+                                case "done":
+                                    let full = (json["text"] as? String) ?? accumulated
+                                    let m = (json["model"] as? String) ?? model
+                                    if let c = json["confidence"] as? Int, c > 0 { confidence = c }
+                                    alternatives = Self.normalizeAlternatives(json["alternatives"], primary: full)
+                                    sawDone = true
+                                    continuation.yield(.done(text: full, model: m, confidence: confidence > 0 ? confidence : 95, alternatives: alternatives))
+                                case "error":
+                                    let message = (json["message"] as? String) ?? (json["code"] as? String) ?? "stream_error"
+                                    sawDone = true
+                                    continuation.yield(.failure(message: message))
+                                default:
+                                    break
                                 }
-                            case "delta":
-                                if let piece = json["text"] as? String {
-                                    accumulated += piece
-                                    continuation.yield(.delta(text: piece))
+                            }
+                            if sawDone { break }
+                        }
+
+                        if !sawDone {
+                            if accumulated.isEmpty {
+                                // Server closed with nothing streamed — usually a
+                                // transient blip, so retry before giving up.
+                                if attempt < maxRetries {
+                                    attempt += 1
+                                    continuation.yield(.connecting)
+                                    try? await Task.sleep(for: .milliseconds(800 << (attempt - 1)))
+                                    continue streamLoop
                                 }
-                            case "confidence":
-                                if let c = json["confidence"] as? Int { confidence = c }
-                            case "done":
-                                let full = (json["text"] as? String) ?? accumulated
-                                let m = (json["model"] as? String) ?? model
-                                if let c = json["confidence"] as? Int, c > 0 { confidence = c }
-                                sawDone = true
-                                continuation.yield(.done(text: full, model: m, confidence: confidence > 0 ? confidence : 95))
-                            case "error":
-                                let message = (json["message"] as? String) ?? (json["code"] as? String) ?? "stream_error"
-                                sawDone = true
-                                continuation.yield(.failure(message: message))
-                            default:
-                                break
+                                continuation.yield(.failure(message: "no_data"))
+                            } else {
+                                continuation.yield(.done(text: accumulated, model: model, confidence: confidence > 0 ? confidence : 90, alternatives: alternatives))
                             }
                         }
-                        if sawDone { break }
-                    }
-
-                    if !sawDone {
-                        if accumulated.isEmpty {
-                            continuation.yield(.failure(message: "no_data"))
-                        } else {
-                            continuation.yield(.done(text: accumulated, model: model, confidence: confidence > 0 ? confidence : 90))
+                        break streamLoop
+                    } catch is CancellationError {
+                        continuation.yield(.failure(message: "cancelled"))
+                        break streamLoop
+                    } catch {
+                        // Network-level failure — retry before surfacing an error.
+                        if attempt < maxRetries {
+                            attempt += 1
+                            continuation.yield(.connecting)
+                            try? await Task.sleep(for: .milliseconds(800 << (attempt - 1)))
+                            continue streamLoop
                         }
+                        continuation.yield(.failure(message: error.localizedDescription))
+                        break streamLoop
                     }
-                } catch is CancellationError {
-                    continuation.yield(.failure(message: "cancelled"))
-                } catch {
-                    continuation.yield(.failure(message: error.localizedDescription))
                 }
                 continuation.finish()
             }

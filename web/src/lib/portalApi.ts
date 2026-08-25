@@ -54,7 +54,8 @@ export interface AdminOverview {
 async function fetchWithRetry(
   input: RequestInfo | URL,
   init?: RequestInit,
-  retries = 2
+  retries = 2,
+  onRetry?: () => void
 ): Promise<Response> {
   let lastError: Error | undefined;
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -62,6 +63,7 @@ async function fetchWithRetry(
       const res = await fetch(input, init);
       // Retry on 5xx / 0-ish network errors, but not on 4xx (auth/bad request).
       if (res.status >= 500 && res.status < 600 && attempt < retries) {
+        onRetry?.();
         await new Promise((r) => setTimeout(r, 800 * 2 ** attempt));
         continue;
       }
@@ -73,6 +75,7 @@ async function fetchWithRetry(
         throw lastError;
       }
       if (attempt < retries) {
+        onRetry?.();
         await new Promise((r) => setTimeout(r, 800 * 2 ** attempt));
       }
     }
@@ -379,6 +382,7 @@ export interface TranslationResult {
   text: string;
   model: string | null;
   confidence: number;
+  alternatives: string[];
   usage?: UsageInfo;
 }
 
@@ -405,7 +409,8 @@ export async function streamTranslation(
     anonymousId?: string | null;
   },
   onDelta: (chunk: string) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onRetry?: () => void
 ): Promise<TranslationResult> {
   let res: Response;
   try {
@@ -429,7 +434,8 @@ export async function streamTranslation(
         }),
         signal,
       },
-      3
+      3,
+      onRetry
     );
   } catch (err) {
     if (signal?.aborted) throw err;
@@ -447,7 +453,7 @@ export async function streamTranslation(
   const decoder = new TextDecoder();
   let buffer = '';
   let streamed = '';
-  let result: TranslationResult = { text: '', model: null, confidence: 0 };
+  let result: TranslationResult = { text: '', model: null, confidence: 0, alternatives: [] };
 
   const handleEvent = (rawEvent: string): void => {
     let eventName = 'message';
@@ -469,10 +475,17 @@ export async function streamTranslation(
       onDelta(piece);
     } else if (eventName === 'done') {
       const finalText = String(payload.text ?? '') || streamed;
+      const alternatives = Array.isArray(payload.alternatives)
+        ? payload.alternatives
+            .map((a) => (typeof a === 'string' ? a.trim() : ''))
+            .filter((a) => a.length > 0 && a !== finalText)
+            .slice(0, 2)
+        : [];
       result = {
         text: finalText,
         model: (payload.model as string | null) ?? null,
         confidence: Number(payload.confidence ?? 0),
+        alternatives: [...new Set(alternatives)],
       };
     } else if (eventName === 'usage') {
       result = {
@@ -501,7 +514,7 @@ export async function streamTranslation(
   }
   if (buffer.trim().length > 0) handleEvent(buffer);
 
-  if (!result.text) result = { text: streamed, model: result.model, confidence: 90 };
+  if (!result.text) result = { text: streamed, model: result.model, confidence: 90, alternatives: result.alternatives };
   if (!result.text) throw new Error('No translation was returned. Please try again.');
   return result;
 }

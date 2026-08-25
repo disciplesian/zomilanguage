@@ -73,7 +73,7 @@ You are a professional, high-fidelity translation system for the Zomi language (
 
 ### REGISTER & VERSION INTELLIGENCE (ALL CATEGORIES):
 Automatically detect the register of the source text and match it in the translation:
-1. **Dictionary version:** Single word or short phrase → give the most accurate, standard Zomi equivalent; if a word has several senses, translate the most common meaning.
+1. **Dictionary version:** Single word or short phrase → give the most accurate, standard Zomi equivalent; if a word has several senses, translate the most common meaning and list up to 2 other common senses in "alternatives".
 2. **Everyday sentence version:** Natural conversational Zomi with correct polite terminal particles (e, na, maw, ve aw).
 3. **Music & song version:** Lyrics, hymns, choruses → preserve line breaks, rhythm, repetition and emotional tone so lines stay singable; prefer compact, flowing phrasing.
 4. **Journalist version:** News and reporting → formal, factual, clear register with precise, neutral wording.
@@ -85,6 +85,7 @@ When the register is ambiguous, use the neutral standard register.
 ### OUTPUT PROTOCOL:
 - Return ONLY the translated text in the JSON field "translation".
 - Provide a "confidence" score (0-100) reflecting your certainty.
+- If the input is a single word or short phrase with several common senses in the target language, return an "alternatives" array of up to 2 other common, natural renderings — the most common sense goes in "translation". For longer text with one clear meaning, return "alternatives": [].
 - NO conversational preamble, explanations, romanization notes, or labels.
 - NO dialect mixing. Standard Zomi (ISO 639-3: ctd) ONLY when the target is Zomi.`;
 
@@ -106,6 +107,7 @@ You are a professional, high-fidelity translation system. You translate at the q
 ### OUTPUT PROTOCOL:
 - Return ONLY the translated text in the JSON field "translation".
 - Provide a "confidence" score (0-100) reflecting your certainty.
+- If the input is a single word or short phrase with several common senses in the target language, return an "alternatives" array of up to 2 other common, natural renderings — the most common sense goes in "translation". For longer text with one clear meaning, return "alternatives": [].
 - NO conversational preamble, explanations, notes, or labels.`;
 
 /**
@@ -156,7 +158,7 @@ export function buildUserPrompt(
   lines.push(
     '',
     `Ensure the grammar and natural idiom of ${targetName} are perfect. Translate meaning, not words. Never omit, add, or explain.`,
-    `Return JSON {"translation": string, "confidence": number 0-100}.`,
+    `Return JSON {"translation": string, "confidence": number 0-100, "alternatives": string[] (up to 2, or [] for unambiguous text)}.`,
     '',
     `INPUT_TEXT:\n"${text}"`
   );

@@ -481,6 +481,10 @@ struct TranslatorView: View {
 
                 outputContent
 
+                if !viewModel.alternatives.isEmpty && !viewModel.isTranslating && !viewModel.isStreaming {
+                    alternativesSection
+                }
+
                 if viewModel.quality > 0 && !viewModel.isTranslating && !viewModel.isStreaming {
                     qualitySection
                 }
@@ -493,12 +497,13 @@ struct TranslatorView: View {
         if viewModel.isTranslating && viewModel.outputText.isEmpty {
             VStack(spacing: 12) {
                 TypingDotsIndicator(color: colors.accent, dotSize: 9)
-                Text("Translating with Zomi AI...")
+                Text(viewModel.isConnecting ? "Connecting..." : "Translating with Zomi AI...")
                     .font(.system(size: 14))
                     .foregroundStyle(colors.textSecondary)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 24)
+            .animation(.easeInOut(duration: 0.2), value: viewModel.isConnecting)
         } else if let error = viewModel.errorText {
             VStack(spacing: 10) {
                 Image(systemName: "exclamationmark.circle")
@@ -556,6 +561,43 @@ struct TranslatorView: View {
         }
         .transition(.opacity)
         .animation(.easeInOut(duration: 0.2), value: viewModel.isStreaming)
+    }
+
+    /// Alternative phrasings for inputs with multiple common senses — tapping
+    /// one promotes it to the main translation.
+    private var alternativesSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Also common")
+                .font(.system(size: 11, weight: .bold))
+                .textCase(.uppercase)
+                .tracking(0.5)
+                .foregroundStyle(colors.textSecondary)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: 8)], alignment: .leading, spacing: 8) {
+                ForEach(viewModel.alternatives, id: \.self) { alternative in
+                    Button {
+                        Haptics.light()
+                        viewModel.promoteAlternative(alternative)
+                    } label: {
+                        Text(alternative)
+                            .font(.system(size: 14))
+                            .foregroundStyle(colors.text)
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(colors.surface)
+                            .clipShape(.rect(cornerRadius: 20))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 20)
+                                    .stroke(colors.glassBorder, lineWidth: 1)
+                            }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 2)
     }
 
     private var speakButton: some View {

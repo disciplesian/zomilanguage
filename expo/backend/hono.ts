@@ -119,7 +119,7 @@ function extractDisplayText(raw: string): string | null {
   // is complete so braces and key names never leak into the displayed words.
   if (s.startsWith("{")) return null;
   // Not JSON output — plain text, minus any trailing incomplete JSON tail.
-  const cut = s.search(/\s*[,}]?\s*"(confidence|model)"\s*:/);
+  const cut = s.search(/\s*[,}]?\s*"(confidence|alternatives|model)"\s*:/);
   const trimmed = (cut === -1 ? s : s.slice(0, cut)).trim();
   return trimmed || null;
 }
@@ -129,6 +129,24 @@ function extractConfidence(raw: string): number | null {
   const m = stripFences(raw).match(/"confidence"\s*:\s*(\d+(?:\.\d+)?)/);
   if (!m) return null;
   return Math.max(0, Math.min(100, Math.round(Number(m[1]))));
+}
+
+/**
+ * Extracts alternative renderings from JSON model output. Kept to at most 2
+ * unique, non-empty strings that differ from the primary translation.
+ */
+function extractAlternatives(raw: string, primary: string): string[] {
+  const s = stripFences(raw);
+  const m = s.match(/"alternatives"\s*:\s*\[([^\]]*)\]/);
+  if (!m) return [];
+  const out: string[] = [];
+  const itemRe = /"((?:[^"\\]|\\.)*)"/g;
+  let item: RegExpExecArray | null;
+  while ((item = itemRe.exec(m[1])) !== null && out.length < 2) {
+    const val = unescapeJsonText(item[1]).trim();
+    if (val && val !== primary && !out.includes(val)) out.push(val);
+  }
+  return out;
 }
 
 app.post("/translate/stream", async (c) => {
@@ -241,13 +259,14 @@ app.post("/translate/stream", async (c) => {
           (trimmed.length > 0 && !/\b(sorry|cannot|unable)\b/i.test(trimmed)
             ? Math.min(98, 88 + Math.min(10, Math.floor(trimmed.length / 80)))
             : 60);
+        const alternatives = extractAlternatives(raw, trimmed);
         await stream.writeSSE({
           event: "confidence",
           data: JSON.stringify({ confidence }),
         });
         await stream.writeSSE({
           event: "done",
-          data: JSON.stringify({ text: trimmed, model, confidence }),
+          data: JSON.stringify({ text: trimmed, model, confidence, alternatives }),
         });
         // Report the caller's free-tier usage so clients can show remaining words.
         try {

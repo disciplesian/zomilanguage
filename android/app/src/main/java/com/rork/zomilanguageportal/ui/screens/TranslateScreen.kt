@@ -7,6 +7,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -63,7 +65,7 @@ import com.rork.zomilanguageportal.data.LanguageOption
 import com.rork.zomilanguageportal.ui.components.GlassCard
 import com.rork.zomilanguageportal.ui.theme.PortalColors
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun TranslateScreen(
     modifier: Modifier = Modifier,
@@ -330,13 +332,45 @@ fun TranslateScreen(
                                 modifier = Modifier.size(16.dp),
                             )
                             Spacer(Modifier.size(8.dp))
-                            Text("Translating…", color = PortalColors.TextFaint, fontSize = 15.sp)
+                            Text(
+                                if (state.isConnecting) "Connecting…" else "Translating…",
+                                color = PortalColors.TextFaint,
+                                fontSize = 15.sp,
+                            )
                         }
                         else -> Text(
                             "Your translation will appear here.",
                             color = PortalColors.TextFaint,
                             fontSize = 17.sp,
                         )
+                    }
+                }
+
+                if (state.alternatives.isNotEmpty() && !state.isTranslating) {
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "ALSO COMMON",
+                        color = PortalColors.TextFaint,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        state.alternatives.forEach { alternative ->
+                            Text(
+                                alternative,
+                                color = PortalColors.TextSecondary,
+                                fontSize = 14.sp,
+                                modifier = Modifier
+                                    .background(PortalColors.Cyan.copy(alpha = 0.08f), RoundedCornerShape(50))
+                                    .border(1.dp, PortalColors.Cyan.copy(alpha = 0.25f), RoundedCornerShape(50))
+                                    .clickable { viewModel.promoteAlternative(alternative) }
+                                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                            )
+                        }
                     }
                 }
 

@@ -46,6 +46,8 @@ const Translate = () => {
   const [input, setInput] = useState<string>('');
   const [output, setOutput] = useState<string>('');
   const [confidence, setConfidence] = useState<number>(0);
+  const [alternatives, setAlternatives] = useState<string[]>([]);
+  const [isConnecting, setIsConnecting] = useState<boolean>(false);
   const [isTranslating, setIsTranslating] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [needsSignIn, setNeedsSignIn] = useState<boolean>(false);
@@ -70,6 +72,8 @@ const Translate = () => {
     setNeedsSignIn(false);
     setOutput('');
     setConfidence(0);
+    setAlternatives([]);
+    setIsConnecting(false);
 
     try {
       // Signed-in members translate without limits; guests draw down their
@@ -83,11 +87,17 @@ const Translate = () => {
           token,
           anonymousId: getAnonymousId(),
         },
-        (chunk) => setOutput((prev) => prev + chunk),
-        controller.signal
+        (chunk) => {
+          setIsConnecting(false);
+          setOutput((prev) => prev + chunk);
+        },
+        controller.signal,
+        // Fires when a transient network blip triggers an automatic retry.
+        () => setIsConnecting(true)
       );
       setOutput(result.text);
       setConfidence(result.confidence);
+      setAlternatives(result.alternatives);
       if (result.usage) setUsage(result.usage);
     } catch (err) {
       if (controller.signal.aborted) return;
@@ -98,7 +108,10 @@ const Translate = () => {
         setError(err instanceof Error ? err.message : 'Translation failed. Please try again.');
       }
     } finally {
-      if (!controller.signal.aborted) setIsTranslating(false);
+      if (!controller.signal.aborted) {
+        setIsTranslating(false);
+        setIsConnecting(false);
+      }
     }
   }, [input, sourceLanguage, targetLanguage, getAccessToken, user]);
 
@@ -120,6 +133,7 @@ const Translate = () => {
       setSourceLanguage((prev) => (prev === 'zomi' ? 'english' : 'zomi'));
       setOutput('');
       setConfidence(0);
+      setAlternatives([]);
     }
     setError(null);
   }, [sourceLanguage, targetLanguage, input, output]);
@@ -142,6 +156,7 @@ const Translate = () => {
     setPickerSearch('');
     setOutput('');
     setConfidence(0);
+    setAlternatives([]);
     setError(null);
   }, [sourceLanguage]);
 
@@ -162,9 +177,20 @@ const Translate = () => {
     setInput('');
     setOutput('');
     setConfidence(0);
+    setAlternatives([]);
     setError(null);
     setIsTranslating(false);
+    setIsConnecting(false);
   }, []);
+
+  const swapAlternatives = useCallback((index: number): void => {
+    // Promote the tapped alternative to the main translation.
+    const chosen = alternatives[index];
+    if (!chosen) return;
+    const previous = output;
+    setOutput(chosen);
+    setAlternatives(alternatives.map((a, i) => (i === index ? previous : a)));
+  }, [alternatives, output]);
 
   const copyOutput = useCallback(async (): Promise<void> => {
     if (!output) return;
@@ -385,16 +411,38 @@ const Translate = () => {
             </div>
             <div className="min-h-[13rem] flex-1 px-5 py-4">
               {output ? (
-                <p className="whitespace-pre-wrap text-[17px] leading-relaxed text-white/95">
-                  {output}
-                  {isTranslating && (
-                    <span className="ml-0.5 inline-block h-[1.1em] w-[2px] animate-pulse bg-[#00f0ff] align-middle" />
+                <>
+                  <p className="whitespace-pre-wrap text-[17px] leading-relaxed text-white/95">
+                    {output}
+                    {isTranslating && (
+                      <span className="ml-0.5 inline-block h-[1.1em] w-[2px] animate-pulse bg-[#00f0ff] align-middle" />
+                    )}
+                  </p>
+                  {alternatives.length > 0 && !isTranslating && (
+                    <div className="mt-4 border-t border-white/10 pt-3">
+                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-white/40">
+                        Also common
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {alternatives.map((alt, i) => (
+                          <button
+                            key={`${alt}-${i}`}
+                            type="button"
+                            onClick={() => swapAlternatives(i)}
+                            title="Use this phrasing"
+                            className="rounded-full border border-white/15 bg-white/5 px-3.5 py-1.5 text-sm text-white/70 transition-colors hover:border-[#00f0ff]/40 hover:bg-[#00f0ff]/10 hover:text-[#00f0ff]"
+                          >
+                            {alt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   )}
-                </p>
+                </>
               ) : isTranslating ? (
                 <div className="flex items-center gap-2 text-white/40">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Translating…
+                  {isConnecting ? 'Connecting…' : 'Translating…'}
                 </div>
               ) : (
                 <p className="text-[17px] text-white/25">Your translation will appear here.</p>

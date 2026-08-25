@@ -27,7 +27,11 @@ final class TranslatorViewModel {
     private(set) var isStreaming = false
     /// True once any streamed token has arrived for the current request.
     private(set) var hasStreamedText = false
+    /// True while an automatic retry reconnects after a transient network blip.
+    private(set) var isConnecting = false
     private(set) var quality = 0
+    /// Alternative phrasings returned when the input has multiple common senses.
+    private(set) var alternatives: [String] = []
     private(set) var errorText: String?
 
     /// Completed translations from the current app session (chronological,
@@ -97,6 +101,7 @@ final class TranslatorViewModel {
             lastTranslatedText = ""
             outputText = ""
             quality = 0
+            alternatives = []
         }
     }
 
@@ -118,6 +123,7 @@ final class TranslatorViewModel {
         targetLanguageCode = code
         outputText = ""
         quality = 0
+        alternatives = []
     }
 
     func clear() {
@@ -126,11 +132,22 @@ final class TranslatorViewModel {
         inputText = ""
         outputText = ""
         quality = 0
+        alternatives = []
         errorText = nil
         isTranslating = false
         isStreaming = false
+        isConnecting = false
         hasStreamedText = false
         lastTranslatedText = ""
+    }
+
+    /// Promotes one of the alternative phrasings to the main translation,
+    /// demoting the current text back into the alternatives list.
+    func promoteAlternative(_ alternative: String) {
+        guard !alternative.isEmpty else { return }
+        let previous = outputText
+        outputText = alternative
+        alternatives = alternatives.map { $0 == alternative ? previous : $0 }
     }
 
     func retry() {
@@ -157,9 +174,11 @@ final class TranslatorViewModel {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             outputText = ""
             quality = 0
+            alternatives = []
             errorText = nil
             isTranslating = false
             isStreaming = false
+            isConnecting = false
             hasStreamedText = false
             lastTranslatedText = ""
             return
@@ -197,6 +216,8 @@ final class TranslatorViewModel {
         lastDirection = directionKey
         errorText = nil
         hasStreamedText = false
+        isConnecting = false
+        alternatives = []
 
         let target = targetLanguageCode
         let source = sourceLanguage
@@ -234,19 +255,24 @@ final class TranslatorViewModel {
                 guard currentRequest == self.requestId, !Task.isCancelled else { return }
                 switch event {
                 case .start:
-                    break
+                    self.isConnecting = false
+                case .connecting:
+                    self.isConnecting = true
                 case .delta(let piece):
                     streamedText += piece
                     self.outputText = streamedText
                     self.isTranslating = false
+                    self.isConnecting = false
                     self.hasStreamedText = true
-                case .done(let full, let model, let confidence):
+                case .done(let full, let model, let confidence, let alts):
                     let final = full.isEmpty ? streamedText : full
                     guard !final.isEmpty else { break }
                     self.outputText = final
                     self.quality = confidence
+                    self.alternatives = alts
                     self.isTranslating = false
                     self.isStreaming = false
+                    self.isConnecting = false
                     finished = true
                     self.translationStore?.save(SavedTranslation(
                         sourceText: trimmed,
@@ -297,8 +323,10 @@ final class TranslatorViewModel {
                 guard currentRequest == self.requestId else { return }
                 self.outputText = fallback
                 self.quality = 92
+                self.alternatives = []
                 self.isTranslating = false
                 self.isStreaming = false
+                self.isConnecting = false
                 self.translationStore?.save(SavedTranslation(
                     sourceText: trimmed,
                     translatedText: fallback,
@@ -319,6 +347,7 @@ final class TranslatorViewModel {
                 guard currentRequest == self.requestId else { return }
                 self.isTranslating = false
                 self.isStreaming = false
+                self.isConnecting = false
 
                 // Last resort: any cached entry.
                 if let hit = self.translationStore?.lookup(text: trimmed, target: target) {

@@ -3,6 +3,7 @@ package com.rork.zomilanguageportal.data
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.android.Android
+import io.ktor.client.plugins.ClientRequestException
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -16,8 +17,13 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.utils.io.readUTF8Line
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -109,7 +115,12 @@ private data class TranslateBody(
     val anonymousId: String? = null,
 )
 
-data class TranslationResult(val text: String, val model: String?, val confidence: Int)
+data class TranslationResult(
+    val text: String,
+    val model: String?,
+    val confidence: Int,
+    val alternatives: List<String> = emptyList(),
+)
 
 /** Raised when the backend rejects the session; the UI prompts a fresh sign-in. */
 class SessionExpiredException : Exception("Your session expired. Please sign in again.")
@@ -168,6 +179,10 @@ object PortalApi {
      * the result as it arrives. Signed-in members translate without limits;
      * anonymous visitors draw down their 1,500-word free allowance via
      * [anonymousId] and hit [WordLimitException] once it runs out.
+     *
+     * Transient connection failures (network blips, 5xx) are retried up to 2
+     * times; [onConnecting] fires before each retry so the UI can show a
+     * "Connecting..." indicator.
      */
     suspend fun streamTranslation(
         token: String?,
@@ -176,82 +191,124 @@ object PortalApi {
         sourceLanguage: String,
         targetLanguage: String,
         onDelta: (String) -> Unit,
+        onConnecting: () -> Unit = {},
     ): TranslationResult {
-        val streamed = StringBuilder()
-        var finalResult: TranslationResult? = null
+        val maxRetries = 2
+        var attempt = 0
+        while (true) {
+            val streamed = StringBuilder()
+            var finalResult: TranslationResult? = null
+            try {
+                PortalHttp.client.preparePost("${AppConfig.API_BASE_URL}/api/translate/stream") {
+                    token?.let { header(HttpHeaders.Authorization, "Bearer $it") }
+                    header("X-Anonymous-Id", anonymousId)
+                    header(HttpHeaders.Accept, "text/event-stream")
+                    contentType(ContentType.Application.Json)
+                    setBody(TranslateBody(text, sourceLanguage, targetLanguage, anonymousId))
+                }.execute { response ->
+                    if (response.status.value == 401) {
+                        // Read the JSON error body to tell an exhausted free tier apart
+                        // from an expired member session.
+                        val errBody = StringBuilder()
+                        val errChannel = response.bodyAsChannel()
+                        while (true) {
+                            errBody.append(errChannel.readUTF8Line() ?: break)
+                            if (errBody.length > 512) break
+                        }
+                        val errorCode = runCatching {
+                            PortalHttp.json.parseToJsonElement(errBody.toString()).jsonObject["error"]
+                                ?.jsonPrimitive?.content
+                        }.getOrNull()
+                        if (errorCode == "word_limit_reached") throw WordLimitException()
+                        throw SessionExpiredException()
+                    }
 
-        PortalHttp.client.preparePost("${AppConfig.API_BASE_URL}/api/translate/stream") {
-            token?.let { header(HttpHeaders.Authorization, "Bearer $it") }
-            header("X-Anonymous-Id", anonymousId)
-            header(HttpHeaders.Accept, "text/event-stream")
-            contentType(ContentType.Application.Json)
-            setBody(TranslateBody(text, sourceLanguage, targetLanguage, anonymousId))
-        }.execute { response ->
-            if (response.status.value == 401) {
-                // Read the JSON error body to tell an exhausted free tier apart
-                // from an expired member session.
-                val errBody = StringBuilder()
-                val errChannel = response.bodyAsChannel()
-                while (true) {
-                    errBody.append(errChannel.readUTF8Line() ?: break)
-                    if (errBody.length > 512) break
-                }
-                val errorCode = runCatching {
-                    PortalHttp.json.parseToJsonElement(errBody.toString()).jsonObject["error"]
-                        ?.jsonPrimitive?.content
-                }.getOrNull()
-                if (errorCode == "word_limit_reached") throw WordLimitException()
-                throw SessionExpiredException()
-            }
+                    val channel = response.bodyAsChannel()
+                    var eventName = "message"
+                    val data = StringBuilder()
 
-            val channel = response.bodyAsChannel()
-            var eventName = "message"
-            val data = StringBuilder()
-
-            fun dispatch() {
-                if (data.isEmpty()) return
-                val payload = runCatching {
-                    PortalHttp.json.parseToJsonElement(data.toString()).jsonObject
-                }.getOrNull()
-                if (payload != null) {
-                    when (eventName) {
-                        "delta" -> {
-                            val piece = payload["text"]?.jsonPrimitive?.content.orEmpty()
-                            if (piece.isNotEmpty()) {
-                                streamed.append(piece)
-                                onDelta(piece)
+                    fun dispatch() {
+                        if (data.isEmpty()) return
+                        val payload = runCatching {
+                            PortalHttp.json.parseToJsonElement(data.toString()).jsonObject
+                        }.getOrNull()
+                        if (payload != null) {
+                            when (eventName) {
+                                "delta" -> {
+                                    val piece = payload["text"]?.jsonPrimitive?.content.orEmpty()
+                                    if (piece.isNotEmpty()) {
+                                        streamed.append(piece)
+                                        onDelta(piece)
+                                    }
+                                }
+                                "done" -> {
+                                    val full = payload["text"]?.jsonPrimitive?.content.orEmpty()
+                                    val alternatives = payload["alternatives"]?.jsonArray
+                                        ?.mapNotNull { item ->
+                                            (item as? JsonPrimitive)?.contentOrNull?.trim()
+                                        }
+                                        ?.filter { it.isNotEmpty() && it != full }
+                                        ?.distinct()
+                                        ?.take(2)
+                                        .orEmpty()
+                                    finalResult = TranslationResult(
+                                        text = full.ifEmpty { streamed.toString() },
+                                        model = payload["model"]?.jsonPrimitive?.content,
+                                        confidence = payload["confidence"]?.jsonPrimitive?.content
+                                            ?.toIntOrNull() ?: 0,
+                                        alternatives = alternatives,
+                                    )
+                                }
                             }
                         }
-                        "done" -> {
-                            val full = payload["text"]?.jsonPrimitive?.content.orEmpty()
-                            finalResult = TranslationResult(
-                                text = full.ifEmpty { streamed.toString() },
-                                model = payload["model"]?.jsonPrimitive?.content,
-                                confidence = payload["confidence"]?.jsonPrimitive?.content
-                                    ?.toIntOrNull() ?: 0,
-                            )
+                        data.clear()
+                        eventName = "message"
+                    }
+
+                    while (true) {
+                        val line = channel.readUTF8Line() ?: break
+                        when {
+                            line.startsWith("event:") -> eventName = line.removePrefix("event:").trim()
+                            line.startsWith("data:") -> data.append(line.removePrefix("data:").trim())
+                            line.isBlank() -> dispatch()
                         }
                     }
+                    dispatch()
                 }
-                data.clear()
-                eventName = "message"
-            }
 
-            while (true) {
-                val line = channel.readUTF8Line() ?: break
-                when {
-                    line.startsWith("event:") -> eventName = line.removePrefix("event:").trim()
-                    line.startsWith("data:") -> data.append(line.removePrefix("data:").trim())
-                    line.isBlank() -> dispatch()
+                val result = finalResult
+                    ?: TranslationResult(streamed.toString(), null, if (streamed.isEmpty()) 0 else 90)
+                if (result.text.isEmpty()) {
+                    // Server closed without any data — usually a transient blip.
+                    if (attempt < maxRetries) {
+                        attempt++
+                        onConnecting()
+                        delay(800L shl (attempt - 1))
+                        continue
+                    }
+                    error("No translation was returned. Please try again.")
                 }
+                return result
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: WordLimitException) {
+                throw e
+            } catch (e: SessionExpiredException) {
+                throw e
+            } catch (e: ClientRequestException) {
+                // 4xx responses are never transient — fail immediately.
+                throw e
+            } catch (e: Exception) {
+                // Network-level failure — retry only while nothing has streamed.
+                if (attempt < maxRetries && streamed.isEmpty()) {
+                    attempt++
+                    onConnecting()
+                    delay(800L shl (attempt - 1))
+                    continue
+                }
+                throw e
             }
-            dispatch()
         }
-
-        val result = finalResult
-            ?: TranslationResult(streamed.toString(), null, if (streamed.isEmpty()) 0 else 90)
-        if (result.text.isEmpty()) error("No translation was returned. Please try again.")
-        return result
     }
 
     /**

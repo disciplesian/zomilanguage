@@ -259,7 +259,8 @@ class DictionaryViewModel(application: Application) : AndroidViewModel(applicati
                     text = text,
                     sourceLanguage = source,
                     targetLanguage = target,
-                ) { }
+                    onDelta = { },
+                )
                 if (_uiState.value.query.trim() == text) {
                     val answer = result.text.trim().takeIf { it.isNotEmpty() }
                     _uiState.update {
