@@ -409,22 +409,28 @@ export async function streamTranslation(
 ): Promise<TranslationResult> {
   let res: Response;
   try {
-    res = await fetchWithRetry(`${API_BASE_URL}/api/translate/stream`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'text/event-stream',
-        ...(input.token ? { Authorization: `Bearer ${input.token}` } : {}),
-        ...(input.anonymousId ? { 'X-Anonymous-Id': input.anonymousId } : {}),
+    // 3 retries: the backend host occasionally returns transient 503s under
+    // capacity pressure, so ride out short blips instead of failing fast.
+    res = await fetchWithRetry(
+      `${API_BASE_URL}/api/translate/stream`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
+          ...(input.token ? { Authorization: `Bearer ${input.token}` } : {}),
+          ...(input.anonymousId ? { 'X-Anonymous-Id': input.anonymousId } : {}),
+        },
+        body: JSON.stringify({
+          text: input.text,
+          sourceLanguage: input.sourceLanguage ?? 'auto',
+          targetLanguage: input.targetLanguage,
+          anonymousId: input.anonymousId ?? undefined,
+        }),
+        signal,
       },
-      body: JSON.stringify({
-        text: input.text,
-        sourceLanguage: input.sourceLanguage ?? 'auto',
-        targetLanguage: input.targetLanguage,
-        anonymousId: input.anonymousId ?? undefined,
-      }),
-      signal,
-    });
+      3
+    );
   } catch (err) {
     if (signal?.aborted) throw err;
     throw new Error('Translation service is unreachable. Please check your connection and try again.');
