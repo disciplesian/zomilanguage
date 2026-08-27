@@ -27,12 +27,14 @@ type Attempt = { model: string; run: (req: ChatRequest) => Promise<string> };
 
 async function buildAttempts(): Promise<Attempt[]> {
   const attempts: Attempt[] = [];
-  const modelNames = await translationModelChain();
+  // Fast-first chain capped to a short list (matching /api/translate/stream)
+  // so a failing request never churns through every candidate model.
+  const modelNames = (await translationModelChain()).slice(0, 3);
   if (geminiConfigured()) {
     for (const m of modelNames) attempts.push({ model: m, run: chatCompletionDirect });
   }
   if (aiProxyConfigured()) {
-    for (const m of modelNames) attempts.push({ model: `google/${m}`, run: chatCompletion });
+    for (const m of modelNames.slice(0, 2)) attempts.push({ model: `google/${m}`, run: chatCompletion });
   }
   return attempts;
 }

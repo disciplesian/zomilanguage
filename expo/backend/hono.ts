@@ -209,23 +209,32 @@ app.post("/translate/stream", async (c) => {
   const prompt = buildUserPrompt(text, source, target, extraGlossary);
 
   return streamSSE(c, async (stream) => {
-    // Model chain: auto-discovered from the Gemini ListModels endpoint (newest
-    // capable models first, refreshed hourly) with a static fallback. Direct
-    // Gemini is preferred when the project key is configured; the Rork AI
-    // proxy is the fallback path.
+    // Fast-by-default chain: auto-discovered newest models (Flash first),
+    // capped to a short list so a failing request never churns through every
+    // candidate. Direct Gemini is preferred; the Rork AI proxy is the fallback.
     const modelNames = await translationModelChain();
+    const primaryModels = modelNames.slice(0, 3);
     type Attempt = {
       model: string;
       run: (req: ChatRequest, onDelta: (piece: string) => void | Promise<void>) => Promise<string>;
     };
     const attempts: Attempt[] = [];
     if (geminiConfigured()) {
-      for (const m of modelNames) attempts.push({ model: m, run: streamChatCompletionDirect });
+      for (const m of primaryModels) attempts.push({ model: m, run: streamChatCompletionDirect });
     }
     if (aiProxyConfigured()) {
-      for (const m of modelNames) attempts.push({ model: `google/${m}`, run: streamChatCompletion });
+      for (const m of primaryModels.slice(0, 2)) attempts.push({ model: `google/${m}`, run: streamChatCompletion });
     }
+    // Whole-request ceiling: if every realistic attempt cannot finish inside
+    // this window, answer with an error instead of keeping the client waiting.
+    const OVERALL_DEADLINE_MS = 60_000;
+    const startedAt = Date.now();
+    // Propagate browser/app disconnects: once the user cancels or leaves,
+    // upstream model calls are aborted instead of running to completion.
+    const clientSignal = c.req.raw.signal;
     for (const { model, run } of attempts) {
+      if (clientSignal?.aborted) return;
+      if (Date.now() - startedAt > OVERALL_DEADLINE_MS) break;
       try {
         await stream.writeSSE({ event: "start", data: JSON.stringify({ model }) });
         // Models may emit JSON ("translation": "...") despite the plain-text
@@ -240,6 +249,7 @@ app.post("/translate/stream", async (c) => {
               { role: "system", content: systemInstruction },
               { role: "user", content: prompt },
             ],
+            ...(clientSignal ? { signal: clientSignal } : {}),
           },
           async (piece) => {
             full += piece;

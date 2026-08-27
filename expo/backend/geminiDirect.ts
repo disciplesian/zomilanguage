@@ -14,6 +14,8 @@ export interface ChatRequest {
   messages: ChatMessage[];
   maxTokens?: number;
   temperature?: number;
+  /** Optional caller-side cancellation signal (streaming client disconnects). */
+  signal?: AbortSignal;
 }
 
 const API_BASE = "https://generativelanguage.googleapis.com/v1beta";
@@ -61,23 +63,38 @@ async function proxyError(res: Response): Promise<Error> {
   return new Error(`Gemini error ${res.status}: ${text.slice(0, 300)}`);
 }
 
+/** Request-scoped abort signal: the caller's timeout plus any extra signal. */
+function callSignal(req: ChatRequest): AbortSignal {
+  return req.signal ? AbortSignal.any([req.signal, AbortSignal.timeout(MODEL_CALL_TIMEOUT_MS)]) : AbortSignal.timeout(MODEL_CALL_TIMEOUT_MS);
+}
+
 /**
- * Static fallback model chain (newest first, August 2026). Used until the
- * ListModels auto-discovery below completes, and whenever it is unavailable.
- * Accuracy first: Pro tier leads, then the newest Flash generations.
+ * Static fallback model chain, used until the ListModels auto-discovery below
+ * completes and whenever it is unavailable. Fast first: the newest Flash
+ * generation leads because it returns translations several times faster than
+ * the Pro/thinking class with near-Pro translation quality; Pro stays in the
+ * chain as an upgrade attempt, not the default wait.
  */
 export const FALLBACK_TRANSLATION_MODELS: readonly string[] = [
-  "gemini-3.1-pro-preview",
   "gemini-3.7-flash",
   "gemini-3.6-flash",
+  "gemini-3.1-pro-preview",
   "gemini-3.5-flash",
   "gemini-2.5-flash",
 ];
+
+/** Hard ceiling on a single model call, so one hung request never stalls the SSE stream. */
+const MODEL_CALL_TIMEOUT_MS = 30_000;
+
+/** Auto-discovery must resolve almost instantly or we proceed with the cached/static chain. */
+const DISCOVERY_TIMEOUT_MS = 3_000;
 
 /** Lists every model this API key can call that supports generateContent. */
 async function listAvailableModels(): Promise<string[]> {
   const res = await fetch(`${API_BASE}/models?pageSize=1000`, {
     headers: { "x-goog-api-key": apiKey() },
+    // Discovery must never delay a live translation — bail out fast instead.
+    signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
   });
   if (!res.ok) throw await proxyError(res);
   const payload = (await res.json()) as {
@@ -91,21 +108,23 @@ async function listAvailableModels(): Promise<string[]> {
 }
 
 /**
- * Ranks discovered chat models for translation quality: Pro tier first, then
- * Flash, then Flash-Lite; within a tier newer versions win. Thinking-preview
- * and experimental builds rank below their stable siblings.
+ * Ranks discovered chat models for interactive translation — speed matters as
+ * much as accuracy, so the NEWEST generation always wins its tier and Flash
+ * outranks Pro (Pro/thinking models add many seconds of latency). Within the
+ * newest generation the order is Flash → Pro → Flash-Lite; experimental,
+ * deprecated, and preview/thinking builds sink below their stable siblings.
  */
 function rankModels(models: string[]): string[] {
   const score = (id: string): number => {
-    const version = Number(id.match(/^gemini-(\d+(?:\.\d+)?)/)?.[1] ?? 0) * 10;
-    let tier = 0;
-    if (/pro/.test(id)) tier = 300;
-    else if (/flash-lite/.test(id)) tier = 100;
-    else if (/flash/.test(id)) tier = 200;
+    const version = Math.round(Number(id.match(/^gemini-(\d+(?:\.\d+)?)/)?.[1] ?? 0) * 10);
+    // Within one generation: Flash first (fast + high quality), Pro second
+    // (accurate but slow), Flash-Lite last (fast but weakest).
+    const tier = /flash-lite/.test(id) ? 0 : /flash/.test(id) ? 20 : /pro/.test(id) ? 10 : 5;
     let penalty = 0;
-    if (/exp|deprecated|thinking/.test(id)) penalty = 5;
-    else if (/preview/.test(id)) penalty = 1;
-    return version + tier - penalty;
+    if (/exp|deprecated/.test(id)) penalty = 15;
+    else if (/thinking/.test(id)) penalty = 12;
+    else if (/preview/.test(id)) penalty = 3;
+    return version * 1000 + tier - penalty;
   };
   return [...models].sort((a, b) => score(b) - score(a));
 }
@@ -127,16 +146,18 @@ export async function translationModelChain(): Promise<string[]> {
   if (modelListPromise) return modelListPromise;
   modelListPromise = (async () => {
     try {
-      const ranked = rankModels(await listAvailableModels()).slice(0, 6);
+      const ranked = rankModels(await listAvailableModels()).slice(0, 5);
       if (ranked.length > 0) {
         modelListCache = { models: ranked, fetchedAt: Date.now() };
         return ranked;
       }
     } catch (err) {
-      console.warn("[gemini] model auto-discovery failed, using static chain", err);
+      console.warn("[gemini] model auto-discovery failed, using known chain", err);
     } finally {
       modelListPromise = null;
     }
+    // Stale-if-error: an outdated cached chain beats an unnecessary round trip.
+    if (modelListCache) return modelListCache.models;
     return [...FALLBACK_TRANSLATION_MODELS];
   })();
   return modelListPromise;
@@ -148,6 +169,7 @@ export async function chatCompletionDirect(req: ChatRequest): Promise<string> {
     method: "POST",
     headers: { "x-goog-api-key": apiKey(), "Content-Type": "application/json" },
     body: JSON.stringify(toPayload(req)),
+    signal: callSignal(req),
   });
   if (!res.ok) throw await proxyError(res);
   const payload = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
@@ -170,6 +192,7 @@ export async function streamChatCompletionDirect(
     method: "POST",
     headers: { "x-goog-api-key": apiKey(), "Content-Type": "application/json", Accept: "text/event-stream" },
     body: JSON.stringify(toPayload(req)),
+    signal: callSignal(req),
   });
   if (!res.ok || !res.body) throw await proxyError(res);
 

@@ -17,6 +17,18 @@ export interface ChatRequest {
   messages: ChatMessage[];
   maxTokens?: number;
   temperature?: number;
+  /** Optional caller-side cancellation signal (streaming client disconnects). */
+  signal?: AbortSignal;
+}
+
+/** Hard ceiling on a single proxy model call, matching the direct-Gemini path. */
+const MODEL_CALL_TIMEOUT_MS = 30_000;
+
+/** Request-scoped abort signal: the caller's signal plus the hard timeout. */
+function callSignal(req: ChatRequest): AbortSignal {
+  return req.signal
+    ? AbortSignal.any([req.signal, AbortSignal.timeout(MODEL_CALL_TIMEOUT_MS)])
+    : AbortSignal.timeout(MODEL_CALL_TIMEOUT_MS);
 }
 
 interface ProxyConfig {
@@ -63,6 +75,7 @@ export async function chatCompletion(req: ChatRequest): Promise<string> {
       max_tokens: req.maxTokens ?? 8192,
       ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
     }),
+    signal: callSignal(req),
   });
   if (!res.ok) throw await proxyError(res);
   const payload = (await res.json()) as { choices?: { message?: { content?: string } }[] };
@@ -94,6 +107,7 @@ export async function streamChatCompletion(
       max_tokens: req.maxTokens ?? 8192,
       stream: true,
     }),
+    signal: callSignal(req),
   });
   if (!res.ok || !res.body) throw await proxyError(res);
 
