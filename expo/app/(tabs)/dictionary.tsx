@@ -37,8 +37,7 @@ import {
   suggestTerms,
   relatedEntries,
   hasExactMatch,
-  browseLetters,
-  entriesForLetter,
+  randomEntries,
   type DictionaryEntry,
 } from '@/constants/dictionaryData';
 import { checkDictionaryUpdate } from '@/lib/dictionaryUpdate';
@@ -50,8 +49,9 @@ import { getAnonymousId } from '@/lib/anonymousId';
 type Direction = 'en-zo' | 'zo-en';
 
 const AI_DEBOUNCE_MS = 700;
-/** Entries shown per letter in browse mode before the user expands the list. */
-const BROWSE_PREVIEW_COUNT = 4;
+/** Random word sets shown on the Dictionary page when not searching.
+ *  The rest of the dataset stays hidden — search surfaces it on demand. */
+const RANDOM_SET_COUNT = 4;
 
 /** Splits text into segments so the part matching the current search query can
  *  be rendered bold/accented inside the word. Case-insclusive. */
@@ -78,10 +78,8 @@ export default function DictionaryScreen() {
   const [aiResult, setAiResult] = useState<string | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
-  const [selectedLetter, setSelectedLetter] = useState('A');
-  /** Whether the browse list shows every entry for the selected letter.
-   *  Collapsed by default so the page shows a clean 4-entry preview. */
-  const [browseExpanded, setBrowseExpanded] = useState(false);
+  /** Bumped to reshuffle the random discovery word sets (pull-to-refresh). */
+  const [shuffleSeed, setShuffleSeed] = useState(0);
   /** Bumped when an over-the-air dataset update is applied, so the search and
    *  browse memos recompute against the refreshed dictionary. */
   const [datasetVersion, setDatasetVersion] = useState(0);
@@ -106,21 +104,17 @@ export default function DictionaryScreen() {
   const hasMatches = results.length > 0;
   const needsAi = query.trim().length >= 2 && !hasMatches && !hasExactMatch(query);
 
-  // Offline browsing: with no query, list entries alphabetically by letter.
+  // Discovery: with no query, show a handful of random word sets only.
   const isBrowsing = query.trim().length === 0;
-  const letters = useMemo(() => browseLetters(), [datasetVersion]);
-  const fullBrowseData = useMemo(
-    () => (isBrowsing ? entriesForLetter(selectedLetter) : []),
-    [isBrowsing, selectedLetter, datasetVersion]
-  );
-  const browseData = useMemo(
-    () => (browseExpanded ? fullBrowseData : fullBrowseData.slice(0, BROWSE_PREVIEW_COUNT)),
-    [fullBrowseData, browseExpanded]
+  const randomPicks = useMemo(
+    () => (isBrowsing ? randomEntries(RANDOM_SET_COUNT) : []),
+    [isBrowsing, shuffleSeed, datasetVersion]
   );
 
   /** Immediate OTA dictionary update check. Used at startup and on pull-to-refresh. */
   const refreshDictionary = useCallback(async (): Promise<void> => {
     setRefreshing(true);
+    setShuffleSeed((s) => s + 1);
     try {
       const version = await checkDictionaryUpdate();
       setDatasetVersion(version);
@@ -325,7 +319,7 @@ export default function DictionaryScreen() {
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        data={isBrowsing ? browseData : results}
+        data={isBrowsing ? randomPicks : results}
         keyExtractor={(item, i) => `${item.english}-${item.pos}-${i}`}
         renderItem={renderEntry}
         refreshControl={
@@ -419,41 +413,9 @@ export default function DictionaryScreen() {
             </View>
 
             {isBrowsing && (
-              <View>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.letterRow}
-                >
-                  {letters.map((letter) => (
-                    <TouchableOpacity
-                      key={letter}
-                      style={[
-                        styles.letterChip,
-                        selectedLetter === letter && styles.letterChipActive,
-                      ]}
-                      onPress={() => {
-                        setSelectedLetter(letter);
-                        setBrowseExpanded(false);
-                        Haptics.selectionAsync();
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.letterChipText,
-                          selectedLetter === letter && styles.letterChipTextActive,
-                        ]}
-                      >
-                        {letter}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-                <Text style={styles.resultCount}>
-                  {fullBrowseData.length.toLocaleString()}{' '}
-                  {fullBrowseData.length === 1 ? 'entry' : 'entries'} under “{selectedLetter}”
-                </Text>
-              </View>
+              <Text style={styles.resultCount}>
+                Word sets to explore · pull down to shuffle
+              </Text>
             )}
 
             {trimmed.length > 0 && hasMatches && (
@@ -498,27 +460,7 @@ export default function DictionaryScreen() {
             </View>
           ) : null
         }
-        ListFooterComponent={
-          <>
-            {isBrowsing && fullBrowseData.length > BROWSE_PREVIEW_COUNT && (
-              <TouchableOpacity
-                style={styles.showAllButton}
-                activeOpacity={0.7}
-                onPress={() => {
-                  setBrowseExpanded(!browseExpanded);
-                  Haptics.selectionAsync();
-                }}
-              >
-                <Text style={styles.showAllText}>
-                  {browseExpanded
-                    ? 'Show fewer entries'
-                    : `Show all ${fullBrowseData.length.toLocaleString()} entries`}
-                </Text>
-              </TouchableOpacity>
-            )}
-            <View style={{ height: 24 }} />
-          </>
-        }
+        ListFooterComponent={<View style={{ height: 24 }} />}
       />
 
       {/* Expanded entry detail: definition, grammatical category, AI example
@@ -885,35 +827,6 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     marginBottom: 8,
   },
-  letterRow: {
-    flexDirection: 'row',
-    gap: 6,
-    paddingVertical: 4,
-    paddingRight: 8,
-    marginBottom: 4,
-  },
-  letterChip: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.glassBorder,
-  },
-  letterChipActive: {
-    backgroundColor: 'rgba(0, 240, 255, 0.12)',
-    borderColor: 'rgba(0, 240, 255, 0.4)',
-  },
-  letterChipText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.textSecondary,
-  },
-  letterChipTextActive: {
-    color: Colors.primary,
-  },
   entryCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -984,21 +897,6 @@ const styles = StyleSheet.create({
   },
   copyIcon: {
     padding: 8,
-  },
-  showAllButton: {
-    alignSelf: 'center',
-    marginTop: 4,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.glassBorder,
-  },
-  showAllText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.primaryLight,
   },
   aiCard: {
     backgroundColor: Colors.surface,

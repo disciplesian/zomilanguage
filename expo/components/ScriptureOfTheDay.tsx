@@ -13,7 +13,6 @@ interface ScriptureOfTheDayProps {
 
 export default function ScriptureOfTheDay({ showRefresh = true, compact = false }: ScriptureOfTheDayProps) {
   const [scripture, setScripture] = useState<Scripture>(getScriptureOfTheDay());
-  const [showZomi, setShowZomi] = useState(true);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const fadeAnim = useState(new Animated.Value(1))[0];
 
@@ -40,13 +39,6 @@ export default function ScriptureOfTheDay({ showRefresh = true, compact = false 
     }, 150);
   };
 
-  const toggleLanguage = () => {
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    setShowZomi(!showZomi);
-  };
-
   const speakVerse = async () => {
     if (isSpeaking) {
       await Speech.stop();
@@ -54,11 +46,11 @@ export default function ScriptureOfTheDay({ showRefresh = true, compact = false 
       return;
     }
 
-    const text = showZomi ? scripture.verseZomi : scripture.verseEnglish;
+    const text = scripture.verseEnglish;
     setIsSpeaking(true);
-    
+
     Speech.speak(text, {
-      language: showZomi ? 'en-US' : 'en-US',
+      language: 'en-US',
       rate: 0.9,
       onDone: () => setIsSpeaking(false),
       onError: () => setIsSpeaking(false),
@@ -73,12 +65,12 @@ export default function ScriptureOfTheDay({ showRefresh = true, compact = false 
 
   if (compact) {
     return (
-      <TouchableOpacity style={styles.compactContainer} onPress={toggleLanguage}>
+      <View style={styles.compactContainer}>
         <Book size={16} color={Colors.primary} />
         <Text style={styles.compactText} numberOfLines={2}>
-          {showZomi ? scripture.verseZomi : scripture.verseEnglish}
+          {scripture.verseEnglish}
         </Text>
-      </TouchableOpacity>
+      </View>
     );
   }
 
@@ -102,15 +94,10 @@ export default function ScriptureOfTheDay({ showRefresh = true, compact = false 
       </View>
 
       <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
-        <TouchableOpacity onPress={toggleLanguage} activeOpacity={0.7}>
-          <Text style={styles.verse}>
-            {`"${showZomi ? scripture.verseZomi : scripture.verseEnglish}"`}
-          </Text>
-          <Text style={styles.reference}>— {scripture.reference}</Text>
-          <Text style={styles.languageHint}>
-            Tap to see in {showZomi ? 'English' : 'Zomi'}
-          </Text>
-        </TouchableOpacity>
+        <Text style={styles.verse}>
+          {`"${scripture.verseEnglish}"`}
+        </Text>
+        <Text style={styles.reference}>— {scripture.reference}</Text>
       </Animated.View>
     </View>
   );
@@ -162,11 +149,6 @@ const styles = StyleSheet.create({
     color: Colors.primary,
     marginTop: 8,
     fontWeight: '500' as const,
-  },
-  languageHint: {
-    fontSize: 11,
-    color: Colors.textSecondary,
-    marginTop: 8,
   },
   compactContainer: {
     flexDirection: 'row',

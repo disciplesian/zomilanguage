@@ -50,6 +50,22 @@ export const DICTIONARY_COUNT: number = data.count;
 let activeEntries: DictionaryEntry[] = DICTIONARY_ENTRIES;
 let activeVersion: number = data.version;
 
+/** Picks `count` random entries from the active dataset via partial
+ *  Fisher–Yates — used for the Dictionary page's discovery cards. */
+export function randomEntries(count: number): DictionaryEntry[] {
+  const pool = activeEntries;
+  const n = Math.min(count, pool.length);
+  const used = new Set<number>();
+  const picked: DictionaryEntry[] = [];
+  while (picked.length < n) {
+    const idx = Math.floor(Math.random() * pool.length);
+    if (used.has(idx)) continue;
+    used.add(idx);
+    picked.push(pool[idx]!);
+  }
+  return picked;
+}
+
 export function activeDictionaryCount(): number {
   return activeEntries.length;
 }
