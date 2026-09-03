@@ -187,7 +187,8 @@ export const [ThemeProvider, useTheme] = createContextHook(() => {
       : true)
     : (Appearance.getColorScheme?.() ?? 'dark') === 'dark';
 
-  const [mode, setModeState] = useState<ThemeMode>('system');
+  // Dark is the default appearance; a persisted user choice overrides it.
+  const [mode, setModeState] = useState<ThemeMode>('dark');
   const [systemIsDark, setSystemIsDark] = useState<boolean>(initialSystemDark);
 
   // Load persisted mode once.

@@ -27,6 +27,6 @@ export const API_BASE_URL: string = pick(
   'https://dev-c71czcicbp014dj0l1fu3.rorktest.dev'
 );
 
-export const SUPPORT_EMAIL = 'support@zomi.net';
+export const SUPPORT_EMAIL = 'support@zomitranslator.com';
 
 export const APP_NAME = 'Zomi Language Portal';

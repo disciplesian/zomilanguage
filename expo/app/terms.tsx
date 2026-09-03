@@ -174,7 +174,7 @@ export default function TermsScreen() {
             • Moderation decisions are at moderator/admin discretion{'\n'}
             • Repeated violations may result in permanent account termination{'\n'}
 
-            • Appeals can be submitted to admin@zomitranslator.com
+            • Appeals can be submitted to support@zomitranslator.com
           </Text>
         </GlassCard>
 

@@ -156,7 +156,8 @@ final class ThemeManager {
 
     init() {
         let saved = UserDefaults.standard.string(forKey: Self.storageKey)
-        mode = ThemeMode(rawValue: saved ?? "") ?? .system
+        // Dark is the default appearance; a persisted user choice overrides it.
+        mode = ThemeMode(rawValue: saved ?? "") ?? .dark
     }
 
     var isDark: Bool {

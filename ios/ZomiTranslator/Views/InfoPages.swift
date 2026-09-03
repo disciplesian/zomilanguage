@@ -273,7 +273,7 @@ struct ContactView: View {
         .alert("Mail Unavailable", isPresented: $showMailUnavailable) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text("Please fill in a message first, or email us directly at support@zomilanguage.app")
+            Text("Please fill in a message first, or email us directly at support@zomitranslator.com")
         }
     }
 
@@ -303,7 +303,7 @@ struct ContactView: View {
         let body = "Name: \(name)\nEmail: \(email)\n\n\(trimmed)"
         let encodedSubject = subject.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
         let encodedBody = body.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        if let url = URL(string: "mailto:support@zomilanguage.app?subject=\(encodedSubject)&body=\(encodedBody)"),
+        if let url = URL(string: "mailto:support@zomitranslator.com?subject=\(encodedSubject)&body=\(encodedBody)"),
            UIApplication.shared.canOpenURL(url) {
             UIApplication.shared.open(url)
             sent = true
