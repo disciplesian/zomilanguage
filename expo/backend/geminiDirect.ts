@@ -34,7 +34,23 @@ interface GeminiPayload {
   contents: { role: string; parts: { text: string }[] }[];
   // NOTE: sampling params (temperature/top_p/top_k) were deprecated by the
   // Gemini API in July 2026 and are intentionally not sent.
-  generationConfig: { maxOutputTokens: number };
+  generationConfig: {
+    maxOutputTokens: number;
+    thinkingConfig?: { thinkingBudget: number };
+  };
+}
+
+/**
+ * Gemini 2.5+ Flash models think by default, which adds seconds of latency
+ * before the first translation token. Interactive translation doesn't need
+ * deep reasoning — the specialist prompt already encodes the expertise — so
+ * thinking is disabled for Flash-class models. Pro models require a minimum
+ * budget, so they keep their default behavior.
+ */
+function thinkingOffFor(model: string): { thinkingConfig: { thinkingBudget: number } } | null {
+  return /flash/i.test(model) && /^gemini-(2\.5|[3-9])/.test(model)
+    ? { thinkingConfig: { thinkingBudget: 0 } }
+    : null;
 }
 
 function toPayload(req: ChatRequest): GeminiPayload {
@@ -47,6 +63,7 @@ function toPayload(req: ChatRequest): GeminiPayload {
     contents,
     generationConfig: {
       maxOutputTokens: req.maxTokens ?? 8192,
+      ...(thinkingOffFor(req.model) ?? {}),
     },
   };
 }
@@ -136,31 +153,36 @@ let modelListPromise: Promise<string[]> | null = null;
 /**
  * The translation model chain, kept up to date automatically: the live model
  * list is fetched from the Gemini ListModels endpoint and cached for an hour,
- * so newly released models are picked up without a code change. Falls back to
- * FALLBACK_TRANSLATION_MODELS when the key is missing or discovery fails.
+ * so newly released models are picked up without a code change.
+ *
+ * Stale-while-revalidate: discovery NEVER blocks a live translation. A cold
+ * instance answers instantly with the pinned fast chain and refreshes in the
+ * background, so the first request pays zero discovery latency.
  */
 export async function translationModelChain(): Promise<string[]> {
   if (modelListCache && Date.now() - modelListCache.fetchedAt < MODEL_LIST_TTL_MS) {
     return modelListCache.models;
   }
-  if (modelListPromise) return modelListPromise;
-  modelListPromise = (async () => {
-    try {
-      const ranked = rankModels(await listAvailableModels()).slice(0, 5);
-      if (ranked.length > 0) {
-        modelListCache = { models: ranked, fetchedAt: Date.now() };
-        return ranked;
+  if (!modelListPromise) {
+    modelListPromise = (async () => {
+      try {
+        const ranked = rankModels(await listAvailableModels()).slice(0, 5);
+        if (ranked.length > 0) {
+          modelListCache = { models: ranked, fetchedAt: Date.now() };
+          return ranked;
+        }
+      } catch (err) {
+        console.warn("[gemini] model auto-discovery failed, using known chain", err);
+      } finally {
+        modelListPromise = null;
       }
-    } catch (err) {
-      console.warn("[gemini] model auto-discovery failed, using known chain", err);
-    } finally {
-      modelListPromise = null;
-    }
-    // Stale-if-error: an outdated cached chain beats an unnecessary round trip.
-    if (modelListCache) return modelListCache.models;
-    return [...FALLBACK_TRANSLATION_MODELS];
-  })();
-  return modelListPromise;
+      // Stale-if-error: an outdated cached chain beats an unnecessary round trip.
+      if (modelListCache) return modelListCache.models;
+      return [...FALLBACK_TRANSLATION_MODELS];
+    })();
+  }
+  if (modelListCache) return modelListCache.models;
+  return [...FALLBACK_TRANSLATION_MODELS];
 }
 
 /** Non-streaming completion. Returns the assistant text. */

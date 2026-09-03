@@ -124,6 +124,64 @@ function extractDisplayText(raw: string): string | null {
   return trimmed || null;
 }
 
+/**
+ * Strips a matching pair of quotes the model may wrap around the whole
+ * translation (e.g. `"Zingsang hoih"` instead of `Zingsang hoih`). Only a
+ * full matching pair at both ends is removed, so legitimate inner or
+ * asymmetric quotes are preserved.
+ */
+function stripWrapQuotes(s: string): string {
+  const t = s.trim();
+  if (t.length >= 2) {
+    const first = t[0];
+    const last = t[t.length - 1];
+    if (
+      first === last &&
+      (first === '"' || first === "\u201c" || first === "\u2018" || first === "'")
+    ) {
+      return t.slice(1, -1).trim();
+    }
+  }
+  return t;
+}
+
+/**
+ * Incremental variant of extractDisplayText for live streaming: starts
+ * returning the JSON "translation" value BEFORE its closing quote arrives,
+ * trimming any trailing partial escape sequence (lone backslash, partial
+ * \uXXXX) so an incomplete escape is never rendered. This is what makes text
+ * appear word-by-word while the model is still generating — Google Translate
+ * style perceived latency. Plain-text model output streams the same way.
+ * Returns null only while nothing displayable exists yet ("" is meaningful:
+ * the value has started but is still empty).
+ */
+function incrementalDisplayText(raw: string): string | null {
+  const s = stripFences(raw);
+  const started = s.match(/"translation"\s*:\s*"((?:[^"\\]|\\.)*)/);
+  if (started) {
+    let val = started[1];
+    // Drop a trailing lone backslash (escape sequence still arriving).
+    const trailingBackslashes = val.length - val.replace(/\\+$/, "").length;
+    if (trailingBackslashes % 2 === 1) val = val.slice(0, -1);
+    // Drop a partial \uXXXX escape (one to three hex digits so far).
+    const partialUnicode = val.match(/\\u[0-9a-fA-F]{0,3}$/);
+    if (partialUnicode) val = val.slice(0, val.length - partialUnicode[0].length);
+    if (!val) return "";
+    const display = unescapeJsonText(val);
+    // Models sometimes wrap the whole translation in quotes; drop the leading
+    // one immediately so it never flashes on screen mid-stream.
+    return display.startsWith('"') || display.startsWith("\u201c")
+      ? display.slice(1)
+      : display;
+  }
+  // JSON arriving but the translation value hasn't opened yet.
+  if (s.startsWith("{")) return null;
+  // Plain-text output — stream it as it arrives, minus any JSON tail.
+  const cut = s.search(/\s*[,}]?\s*"(confidence|alternatives|model)"\s*:/);
+  const trimmed = (cut === -1 ? s : s.slice(0, cut)).trim();
+  return trimmed || null;
+}
+
 /** Extracts a confidence value from JSON model output, if present. */
 function extractConfidence(raw: string): number | null {
   const m = stripFences(raw).match(/"confidence"\s*:\s*(\d+(?:\.\d+)?)/);
@@ -253,7 +311,7 @@ app.post("/translate/stream", async (c) => {
           },
           async (piece) => {
             full += piece;
-            const display = extractDisplayText(full);
+            const display = incrementalDisplayText(full);
             if (display === null) return;
             const newPart = display.slice(emitted.length);
             if (newPart) {
@@ -262,7 +320,7 @@ app.post("/translate/stream", async (c) => {
             }
           }
         );
-        const trimmed = extractDisplayText(raw) || emitted;
+        const trimmed = stripWrapQuotes(extractDisplayText(raw) || emitted);
         const jsonConfidence = extractConfidence(raw);
         const confidence =
           jsonConfidence ??

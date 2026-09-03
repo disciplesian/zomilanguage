@@ -84,6 +84,7 @@ When the register is ambiguous, use the neutral standard register.
 
 ### OUTPUT PROTOCOL:
 - Return ONLY the translated text in the JSON field "translation".
+- Output the translation text EXACTLY — never wrap it in quotation marks or add quotes around it.
 - Provide a "confidence" score (0-100) reflecting your certainty.
 - If the input is a single word or short phrase with several common senses in the target language, return an "alternatives" array of up to 2 other common, natural renderings — the most common sense goes in "translation". For longer text with one clear meaning, return "alternatives": [].
 - NO conversational preamble, explanations, romanization notes, or labels.
@@ -106,6 +107,7 @@ You are a professional, high-fidelity translation system. You translate at the q
 
 ### OUTPUT PROTOCOL:
 - Return ONLY the translated text in the JSON field "translation".
+- Output the translation text EXACTLY — never wrap it in quotation marks or add quotes around it.
 - Provide a "confidence" score (0-100) reflecting your certainty.
 - If the input is a single word or short phrase with several common senses in the target language, return an "alternatives" array of up to 2 other common, natural renderings — the most common sense goes in "translation". For longer text with one clear meaning, return "alternatives": [].
 - NO conversational preamble, explanations, notes, or labels.`;
