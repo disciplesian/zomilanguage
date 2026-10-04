@@ -18,6 +18,7 @@ import {
   geminiConfigured,
   translationModelChain,
 } from "./geminiDirect";
+import { lookupVerified } from "./verifiedDictionary";
 import {
   FREE_WORD_LIMIT,
   anonymousWordsUsed,
@@ -256,7 +257,20 @@ app.post("/translate/stream", async (c) => {
   const extraGlossary =
     body.extraGlossary && typeof body.extraGlossary === 'object' ? body.extraGlossary : {};
   if (!text) return c.json({ error: "missing_text" }, 400);
-  if (!aiProxyConfigured() && !geminiConfigured())
+
+  // Verified-dictionary integration: an exact word/short-phrase match in the
+  // human-verified dataset is answered instantly (fast path, zero model
+  // latency), and matched entries are injected into the prompt otherwise so
+  // the AI translation always agrees with the verified dictionary.
+  const verified = lookupVerified(text);
+  const verifiedFastPath =
+    verified !== null &&
+    ((verified.side === "english" && target === "zomi" && (source === "english" || source === "auto")) ||
+      (verified.side === "zomi" && target === "english" && (source === "zomi" || source === "auto")));
+
+  // The fast path needs no AI provider — verified words still translate even
+  // when every model is unavailable.
+  if (!aiProxyConfigured() && !geminiConfigured() && !verifiedFastPath)
     return c.json({ error: "ai_unavailable" }, 500);
 
   // Pair-aware prompt: the Zomi specialist instruction and glossary are used
@@ -264,9 +278,86 @@ app.post("/translate/stream", async (c) => {
   // generic professional-translation context. The source language is always
   // stated explicitly so the model never has to guess.
   const systemInstruction = buildSystemInstruction(source, target);
-  const prompt = buildUserPrompt(text, source, target, extraGlossary);
+  const prompt = buildUserPrompt(
+    text,
+    source,
+    target,
+    extraGlossary,
+    verified && !verifiedFastPath && (source === "zomi" || target === "zomi")
+      ? verified.matches
+      : undefined
+  );
 
   return streamSSE(c, async (stream) => {
+    // Shared tail for both answer paths (verified fast path and model path):
+    // free-tier usage reporting plus the per-user admin log. Best-effort.
+    const reportUsageAndLog = async (
+      answerText: string,
+      answerModel: string,
+      answerConfidence: number
+    ): Promise<void> => {
+      try {
+        if (auth) {
+          await stream.writeSSE({
+            event: "usage",
+            data: JSON.stringify({ authed: true, wordsUsed: 0, wordLimit: 0 }),
+          });
+        } else {
+          const db = await getDB();
+          const wordsUsed = await recordAnonymousWords(db, anonymousId, countWords(text));
+          await stream.writeSSE({
+            event: "usage",
+            data: JSON.stringify({ authed: false, wordsUsed, wordLimit: FREE_WORD_LIMIT }),
+          });
+        }
+      } catch {
+        // usage reporting is best-effort
+      }
+      if (auth) {
+        try {
+          const db = await getDB();
+          await logTranslation(db, auth, {
+            sourceText: text,
+            translatedText: answerText,
+            targetLanguage: target,
+            model: answerModel,
+            confidence: answerConfidence,
+          });
+        } catch {
+          // ignore logging failures
+        }
+      }
+    };
+
+    // Instant verified answer: the input is an exact headword in the
+    // human-verified dataset and the pair is English ⇄ Zomi. Emit the
+    // verified rendering directly — Google-Translate dictionary behavior
+    // with zero model latency — and never call a model.
+    if (verifiedFastPath && verified) {
+      const primary = verified.matches[0];
+      const answer = verified.side === "english" ? primary.zomi : primary.english;
+      const seen = new Set<string>([answer.trim().toLowerCase()]);
+      const alternatives: string[] = [];
+      for (const m of verified.matches.slice(1)) {
+        const other = verified.side === "english" ? m.zomi : m.english;
+        const key = other.trim().toLowerCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          alternatives.push(other);
+        }
+        if (alternatives.length >= 2) break;
+      }
+      await stream.writeSSE({ event: "start", data: JSON.stringify({ model: "verified-dictionary" }) });
+      await stream.writeSSE({ event: "delta", data: JSON.stringify({ text: answer }) });
+      await stream.writeSSE({ event: "confidence", data: JSON.stringify({ confidence: 100 }) });
+      await stream.writeSSE({
+        event: "done",
+        data: JSON.stringify({ text: answer, model: "verified-dictionary", confidence: 100, alternatives }),
+      });
+      await reportUsageAndLog(answer, "verified-dictionary", 100);
+      return;
+    }
+
     // Fast-by-default chain: auto-discovered newest models (Flash first),
     // capped to a short list so a failing request never churns through every
     // candidate. Direct Gemini is preferred; the Rork AI proxy is the fallback.
@@ -293,12 +384,25 @@ app.post("/translate/stream", async (c) => {
     for (const { model, run } of attempts) {
       if (clientSignal?.aborted) return;
       if (Date.now() - startedAt > OVERALL_DEADLINE_MS) break;
+      // Fail over fast when a model hangs before its first token: if nothing
+      // displayable arrives within this window the attempt is aborted and the
+      // next model in the chain takes over, instead of the user waiting out
+      // the full per-model timeout.
+      const FIRST_TOKEN_TIMEOUT_MS = 8_000;
+      let gotFirstToken = false;
+      const firstTokenController = new AbortController();
+      const firstTokenTimer = setTimeout(() => {
+        if (!gotFirstToken) firstTokenController.abort();
+      }, FIRST_TOKEN_TIMEOUT_MS);
       try {
         await stream.writeSSE({ event: "start", data: JSON.stringify({ model }) });
         // Models may emit JSON ("translation": "...") despite the plain-text
         // instruction; deltas are filtered so users only ever see the words.
         let full = "";
         let emitted = "";
+        const requestSignal = clientSignal
+          ? AbortSignal.any([clientSignal, firstTokenController.signal])
+          : firstTokenController.signal;
         const raw = await run(
           {
             model,
@@ -307,9 +411,13 @@ app.post("/translate/stream", async (c) => {
               { role: "system", content: systemInstruction },
               { role: "user", content: prompt },
             ],
-            ...(clientSignal ? { signal: clientSignal } : {}),
+            signal: requestSignal,
           },
           async (piece) => {
+            if (!gotFirstToken) {
+              gotFirstToken = true;
+              clearTimeout(firstTokenTimer);
+            }
             full += piece;
             const display = incrementalDisplayText(full);
             if (display === null) return;
@@ -336,39 +444,7 @@ app.post("/translate/stream", async (c) => {
           event: "done",
           data: JSON.stringify({ text: trimmed, model, confidence, alternatives }),
         });
-        // Report the caller's free-tier usage so clients can show remaining words.
-        try {
-          if (auth) {
-            await stream.writeSSE({
-              event: "usage",
-              data: JSON.stringify({ authed: true, wordsUsed: 0, wordLimit: 0 }),
-            });
-          } else {
-            const db = await getDB();
-            const wordsUsed = await recordAnonymousWords(db, anonymousId, countWords(text));
-            await stream.writeSSE({
-              event: "usage",
-              data: JSON.stringify({ authed: false, wordsUsed, wordLimit: FREE_WORD_LIMIT }),
-            });
-          }
-        } catch {
-          // usage reporting is best-effort
-        }
-        // Per-user usage log for the admin dashboard. Non-fatal on failure.
-        if (auth) {
-          try {
-            const db = await getDB();
-            await logTranslation(db, auth, {
-              sourceText: text,
-              translatedText: trimmed,
-              targetLanguage: target,
-              model,
-              confidence,
-            });
-          } catch {
-            // ignore logging failures
-          }
-        }
+        await reportUsageAndLog(trimmed, model, confidence);
         return;
       } catch (err) {
         console.error(`[stream] model ${model} failed`, err);
@@ -381,6 +457,8 @@ app.post("/translate/stream", async (c) => {
           });
           return;
         }
+      } finally {
+        clearTimeout(firstTokenTimer);
       }
     }
     await stream.writeSSE({

@@ -122,17 +122,27 @@ export function buildSystemInstruction(source: string, target: string): string {
   return involvesZomi ? ZOMI_SYSTEM_INSTRUCTION : GENERIC_SYSTEM_INSTRUCTION;
 }
 
+/** A verified English ⇄ Zomi entry injected into the prompt as trusted data. */
+export interface VerifiedPromptEntry {
+  english: string;
+  pos: string;
+  zomi: string;
+}
+
 /**
  * Builds the user message for a translation request. The source language is
  * always stated explicitly (models frequently mis-detect low-resource
  * languages such as Zomi), and the Zomi glossary/examples are included only
- * when Zomi is part of the pair.
+ * when Zomi is part of the pair. `verifiedEntries` (exact matches from the
+ * human-verified dataset, looked up server-side) are injected as trusted data
+ * so the AI translation agrees with the verified dictionary.
  */
 export function buildUserPrompt(
   text: string,
   source: string,
   target: string,
-  extraGlossary?: Record<string, string>
+  extraGlossary?: Record<string, string>,
+  verifiedEntries?: VerifiedPromptEntry[]
 ): string {
   const sourceName = promptLanguageName(source);
   const targetName = promptLanguageName(target);
@@ -155,6 +165,13 @@ export function buildUserPrompt(
     );
     const mergedGlossary: Record<string, string> = { ...ZOMI_GLOSSARY, ...(extraGlossary ?? {}) };
     lines.push('', `GLOSSARY_DATA_JSON:\n${JSON.stringify({ glossary: mergedGlossary, examples: ZOMI_EXAMPLES })}`);
+  }
+
+  if (verifiedEntries && verifiedEntries.length > 0) {
+    lines.push(
+      '',
+      `VERIFIED_DICTIONARY_DATA_JSON (authoritative human-verified English ⇄ Zomi entries; when one covers the input's meaning, use exactly that rendering as "translation" and put the other senses in "alternatives"):\n${JSON.stringify(verifiedEntries.slice(0, 6))}`
+    );
   }
 
   lines.push(
