@@ -20,6 +20,7 @@ import { useAuth } from '@/lib/auth';
 import { getAnonymousId } from '@/lib/anonymousId';
 import {
   ALL_LANGUAGES,
+  OTHER_LANGUAGES,
   PRIMARY_LANGUAGES,
   isPrimaryLanguage,
   languageLabel,
@@ -320,7 +321,7 @@ const Translate = () => {
                       onSelect={() => selectLanguage(l.code)}
                     />
                   ))}
-                  {!pickerSearch.trim() && (
+                  {!pickerSearch.trim() && OTHER_LANGUAGES.length > 0 && (
                     <p className="px-4 pb-1 pt-3 text-[10px] font-bold uppercase tracking-wider text-white/35">
                       All languages
                     </p>

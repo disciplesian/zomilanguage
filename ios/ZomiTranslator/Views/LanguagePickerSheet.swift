@@ -34,9 +34,11 @@ struct LanguagePickerSheet: View {
                             row(option)
                         }
                     }
-                    Section("All languages") {
-                        ForEach(LanguageCatalog.others) { option in
-                            row(option)
+                    if !LanguageCatalog.others.isEmpty {
+                        Section("All languages") {
+                            ForEach(LanguageCatalog.others) { option in
+                                row(option)
+                            }
                         }
                     }
                 } else {

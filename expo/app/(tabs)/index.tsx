@@ -1468,7 +1468,9 @@ export default function TranslatorScreen() {
                         {item.code === targetLanguage && <Check size={18} color={Colors.primary} />}
                       </TouchableOpacity>
                     ))}
-                    <Text style={styles.pickerSectionLabel}>All languages</Text>
+                    {OTHER_LANGUAGES.length > 0 && (
+                      <Text style={styles.pickerSectionLabel}>All languages</Text>
+                    )}
                   </View>
                 )
               }

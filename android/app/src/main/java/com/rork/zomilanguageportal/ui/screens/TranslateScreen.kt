@@ -529,8 +529,10 @@ private fun LanguagePickerSheet(
                     items(LanguageCatalog.PRIMARY) { option ->
                         LanguageRow(option, option.code == selected, onSelect)
                     }
-                    item {
-                        SectionLabel("All languages")
+                    if (LanguageCatalog.OTHERS.isNotEmpty()) {
+                        item {
+                            SectionLabel("All languages")
+                        }
                     }
                     items(LanguageCatalog.OTHERS) { option ->
                         LanguageRow(option, option.code == selected, onSelect)

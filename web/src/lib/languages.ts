@@ -2,8 +2,9 @@
  * Language catalog for the translator's target-language picker.
  *
  * `code` is the stable identifier sent to the backend; `tts` is the BCP-47
- * tag used for browser speech synthesis. Zomi and English are always pinned
- * at the top of the picker; everything else follows alphabetically.
+ * tag used for browser speech synthesis. Translation is currently offered in
+ * two directions only — Zomi ⇄ English — so the catalog contains just those
+ * two.
  */
 export interface LanguageOption {
   code: string;
@@ -29,46 +30,12 @@ export const ENGLISH_LANGUAGE: LanguageOption = {
 /** The two primary languages pinned at the top of the picker. */
 export const PRIMARY_LANGUAGES: LanguageOption[] = [ZOMI_LANGUAGE, ENGLISH_LANGUAGE];
 
-/** Additional target languages, sorted by display name. */
-export const OTHER_LANGUAGES: LanguageOption[] = [
-  { code: 'amharic', label: 'Amharic', native: 'አማርኛ', tts: 'am' },
-  { code: 'arabic', label: 'Arabic', native: 'العربية', tts: 'ar' },
-  { code: 'bengali', label: 'Bengali', native: 'বাংলা', tts: 'bn' },
-  { code: 'burmese', label: 'Burmese', native: 'မြန်မာ', tts: 'my' },
-  { code: 'chinese_simplified', label: 'Chinese (Simplified)', native: '简体中文', tts: 'zh-CN' },
-  { code: 'chinese_traditional', label: 'Chinese (Traditional)', native: '繁體中文', tts: 'zh-TW' },
-  { code: 'dutch', label: 'Dutch', native: 'Nederlands', tts: 'nl' },
-  { code: 'filipino', label: 'Filipino', native: 'Filipino', tts: 'fil' },
-  { code: 'french', label: 'French', native: 'Français', tts: 'fr' },
-  { code: 'german', label: 'German', native: 'Deutsch', tts: 'de' },
-  { code: 'greek', label: 'Greek', native: 'Ελληνικά', tts: 'el' },
-  { code: 'hausa', label: 'Hausa', native: 'Hausa', tts: 'ha' },
-  { code: 'hebrew', label: 'Hebrew', native: 'עברית', tts: 'he' },
-  { code: 'hindi', label: 'Hindi', native: 'हिन्दी', tts: 'hi' },
-  { code: 'indonesian', label: 'Indonesian', native: 'Bahasa Indonesia', tts: 'id' },
-  { code: 'italian', label: 'Italian', native: 'Italiano', tts: 'it' },
-  { code: 'japanese', label: 'Japanese', native: '日本語', tts: 'ja' },
-  { code: 'khmer', label: 'Khmer', native: 'ខ្មែរ', tts: 'km' },
-  { code: 'korean', label: 'Korean', native: '한국어', tts: 'ko' },
-  { code: 'lao', label: 'Lao', native: 'ລາວ', tts: 'lo' },
-  { code: 'malay', label: 'Malay', native: 'Bahasa Melayu', tts: 'ms' },
-  { code: 'nepali', label: 'Nepali', native: 'नेपाली', tts: 'ne' },
-  { code: 'persian', label: 'Persian', native: 'فارسی', tts: 'fa' },
-  { code: 'polish', label: 'Polish', native: 'Polski', tts: 'pl' },
-  { code: 'portuguese', label: 'Portuguese', native: 'Português', tts: 'pt' },
-  { code: 'russian', label: 'Russian', native: 'Русский', tts: 'ru' },
-  { code: 'sinhala', label: 'Sinhala', native: 'සිංහල', tts: 'si' },
-  { code: 'somali', label: 'Somali', native: 'Soomaali', tts: 'so' },
-  { code: 'spanish', label: 'Spanish', native: 'Español', tts: 'es' },
-  { code: 'swahili', label: 'Swahili', native: 'Kiswahili', tts: 'sw' },
-  { code: 'tamil', label: 'Tamil', native: 'தமிழ்', tts: 'ta' },
-  { code: 'thai', label: 'Thai', native: 'ไทย', tts: 'th' },
-  { code: 'turkish', label: 'Turkish', native: 'Türkçe', tts: 'tr' },
-  { code: 'ukrainian', label: 'Ukrainian', native: 'Українська', tts: 'uk' },
-  { code: 'urdu', label: 'Urdu', native: 'اردو', tts: 'ur' },
-  { code: 'vietnamese', label: 'Vietnamese', native: 'Tiếng Việt', tts: 'vi' },
-  { code: 'yoruba', label: 'Yoruba', native: 'Yorùbá', tts: 'yo' },
-];
+/**
+ * Additional target languages. TEMPORARILY EMPTY: translation is limited to
+ * Zomi ⇄ English only. Restore the full list here when other directions are
+ * enabled again.
+ */
+export const OTHER_LANGUAGES: LanguageOption[] = [];
 
 /** Every supported target language, primary languages first. */
 export const ALL_LANGUAGES: LanguageOption[] = [...PRIMARY_LANGUAGES, ...OTHER_LANGUAGES];

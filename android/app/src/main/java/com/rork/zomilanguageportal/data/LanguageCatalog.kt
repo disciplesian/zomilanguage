@@ -22,46 +22,12 @@ object LanguageCatalog {
     /** The two primary languages pinned at the top of the picker. */
     val PRIMARY: List<LanguageOption> = listOf(ZOMI, ENGLISH)
 
-    /** Additional target languages, sorted by display name. */
-    val OTHERS: List<LanguageOption> = listOf(
-        LanguageOption("amharic", "Amharic", "አማርኛ", "am"),
-        LanguageOption("arabic", "Arabic", "العربية", "ar"),
-        LanguageOption("bengali", "Bengali", "বাংলা", "bn"),
-        LanguageOption("burmese", "Burmese", "မြန်မာ", "my"),
-        LanguageOption("chinese_simplified", "Chinese (Simplified)", "简体中文", "zh-CN"),
-        LanguageOption("chinese_traditional", "Chinese (Traditional)", "繁體中文", "zh-TW"),
-        LanguageOption("dutch", "Dutch", "Nederlands", "nl"),
-        LanguageOption("filipino", "Filipino", "Filipino", "fil"),
-        LanguageOption("french", "French", "Français", "fr"),
-        LanguageOption("german", "German", "Deutsch", "de"),
-        LanguageOption("greek", "Greek", "Ελληνικά", "el"),
-        LanguageOption("hausa", "Hausa", "Hausa", "ha"),
-        LanguageOption("hebrew", "Hebrew", "עברית", "he"),
-        LanguageOption("hindi", "Hindi", "हिन्दी", "hi"),
-        LanguageOption("indonesian", "Indonesian", "Bahasa Indonesia", "id"),
-        LanguageOption("italian", "Italian", "Italiano", "it"),
-        LanguageOption("japanese", "Japanese", "日本語", "ja"),
-        LanguageOption("khmer", "Khmer", "ខ្មែរ", "km"),
-        LanguageOption("korean", "Korean", "한국어", "ko"),
-        LanguageOption("lao", "Lao", "ລາວ", "lo"),
-        LanguageOption("malay", "Malay", "Bahasa Melayu", "ms"),
-        LanguageOption("nepali", "Nepali", "नेपाली", "ne"),
-        LanguageOption("persian", "Persian", "فارسی", "fa"),
-        LanguageOption("polish", "Polish", "Polski", "pl"),
-        LanguageOption("portuguese", "Portuguese", "Português", "pt"),
-        LanguageOption("russian", "Russian", "Русский", "ru"),
-        LanguageOption("sinhala", "Sinhala", "සිංහල", "si"),
-        LanguageOption("somali", "Somali", "Soomaali", "so"),
-        LanguageOption("spanish", "Spanish", "Español", "es"),
-        LanguageOption("swahili", "Swahili", "Kiswahili", "sw"),
-        LanguageOption("tamil", "Tamil", "தமிழ்", "ta"),
-        LanguageOption("thai", "Thai", "ไทย", "th"),
-        LanguageOption("turkish", "Turkish", "Türkçe", "tr"),
-        LanguageOption("ukrainian", "Ukrainian", "Українська", "uk"),
-        LanguageOption("urdu", "Urdu", "اردو", "ur"),
-        LanguageOption("vietnamese", "Vietnamese", "Tiếng Việt", "vi"),
-        LanguageOption("yoruba", "Yoruba", "Yorùbá", "yo"),
-    )
+    /**
+     * Additional target languages. TEMPORARILY EMPTY: translation is limited
+     * to Zomi ⇄ English only. Restore the full list here when other
+     * directions are enabled again.
+     */
+    val OTHERS: List<LanguageOption> = emptyList()
 
     /** Every supported target language, primary languages first. */
     val ALL: List<LanguageOption> = PRIMARY + OTHERS
