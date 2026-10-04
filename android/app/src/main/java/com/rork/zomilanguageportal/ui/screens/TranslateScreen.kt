@@ -74,7 +74,6 @@ fun TranslateScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val user by AuthManager.user.collectAsStateWithLifecycle()
     val clipboard = LocalClipboardManager.current
-    var showLanguagePicker by remember { mutableStateOf(false) }
 
     val sourceLabel = if (state.zomiToEnglish) "Zomi" else "English"
     val targetLabel = LanguageCatalog.label(state.targetLanguage)
@@ -103,7 +102,7 @@ fun TranslateScreen(
 
         Spacer(Modifier.height(16.dp))
 
-        // Language selector: source chip, swap, and searchable target picker
+        // Language selector: source chip, swap, and fixed target label (Zomi ⇄ English only)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -128,35 +127,12 @@ fun TranslateScreen(
                     tint = PortalColors.Cyan,
                 )
             }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .clickable { showLanguagePicker = true }
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
-            ) {
-                Text(
-                    targetLabel,
-                    color = PortalColors.Cyan,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Icon(
-                    Icons.Filled.KeyboardArrowDown,
-                    contentDescription = "Choose target language",
-                    tint = PortalColors.Cyan,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-        }
-
-        if (showLanguagePicker) {
-            LanguagePickerSheet(
-                selected = state.targetLanguage,
-                onSelect = { code ->
-                    viewModel.selectTargetLanguage(code)
-                    showLanguagePicker = false
-                },
-                onDismiss = { showLanguagePicker = false },
+            Text(
+                targetLabel,
+                color = PortalColors.Cyan,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
             )
         }
 
@@ -429,184 +405,6 @@ fun TranslateScreen(
                         .padding(horizontal = 16.dp, vertical = 9.dp),
                 )
             }
-        }
-    }
-}
-
-/** Searchable target-language picker sheet mirroring the Expo/iOS pickers. */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun LanguagePickerSheet(
-    selected: String,
-    onSelect: (String) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    var search by remember { mutableStateOf("") }
-    val sheetState = rememberModalBottomSheetState()
-    val query = search.trim().lowercase()
-    val filtered = if (query.isEmpty()) {
-        LanguageCatalog.ALL
-    } else {
-        LanguageCatalog.ALL.filter {
-            it.label.lowercase().contains(query) ||
-                it.native.lowercase().contains(query) ||
-                it.code.contains(query)
-        }
-    }
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = Color(0xFF1C2136),
-    ) {
-        Column(modifier = Modifier.padding(bottom = 24.dp)) {
-            Text(
-                "Translate into",
-                color = PortalColors.TextPrimary,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 20.dp),
-            )
-            Text(
-                "Choose your output language",
-                color = PortalColors.TextFaint,
-                fontSize = 13.sp,
-                modifier = Modifier.padding(start = 20.dp, top = 2.dp),
-            )
-
-            Spacer(Modifier.height(12.dp))
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-                    .background(PortalColors.GlassFill, RoundedCornerShape(12.dp))
-                    .border(1.dp, PortalColors.GlassBorder, RoundedCornerShape(12.dp))
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-            ) {
-                Icon(
-                    Icons.Filled.Search,
-                    contentDescription = null,
-                    tint = PortalColors.TextFaint,
-                    modifier = Modifier.size(16.dp),
-                )
-                Spacer(Modifier.size(8.dp))
-                BasicTextField(
-                    value = search,
-                    onValueChange = { search = it },
-                    singleLine = true,
-                    textStyle = LocalTextStyle.current.copy(
-                        color = PortalColors.TextPrimary,
-                        fontSize = 15.sp,
-                    ),
-                    cursorBrush = SolidColor(PortalColors.Cyan),
-                    modifier = Modifier.weight(1f),
-                ) {
-                    if (search.isEmpty()) {
-                        Text("Search languages…", color = PortalColors.TextFaint, fontSize = 15.sp)
-                    } else {
-                        it()
-                    }
-                }
-                if (search.isNotEmpty()) {
-                    IconButton(onClick = { search = "" }, modifier = Modifier.size(24.dp)) {
-                        Icon(
-                            Icons.Filled.Close,
-                            contentDescription = "Clear search",
-                            tint = PortalColors.TextFaint,
-                            modifier = Modifier.size(16.dp),
-                        )
-                    }
-                }
-            }
-
-            LazyColumn(modifier = Modifier.heightIn(max = 420.dp)) {
-                if (query.isEmpty()) {
-                    item {
-                        SectionLabel("Popular")
-                    }
-                    items(LanguageCatalog.PRIMARY) { option ->
-                        LanguageRow(option, option.code == selected, onSelect)
-                    }
-                    if (LanguageCatalog.OTHERS.isNotEmpty()) {
-                        item {
-                            SectionLabel("All languages")
-                        }
-                    }
-                    items(LanguageCatalog.OTHERS) { option ->
-                        LanguageRow(option, option.code == selected, onSelect)
-                    }
-                } else {
-                    items(filtered) { option ->
-                        LanguageRow(option, option.code == selected, onSelect)
-                    }
-                    if (filtered.isEmpty()) {
-                        item {
-                            Text(
-                                "No languages found.",
-                                color = PortalColors.TextFaint,
-                                fontSize = 14.sp,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 24.dp),
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SectionLabel(title: String) {
-    Text(
-        title.uppercase(),
-        color = PortalColors.TextFaint,
-        fontSize = 11.sp,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(start = 20.dp, top = 12.dp, bottom = 4.dp),
-    )
-}
-
-@Composable
-private fun LanguageRow(
-    option: LanguageOption,
-    isSelected: Boolean,
-    onSelect: (String) -> Unit,
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onSelect(option.code) }
-            .background(
-                if (isSelected) PortalColors.Cyan.copy(alpha = 0.12f) else Color.Transparent
-            )
-            .padding(horizontal = 20.dp, vertical = 11.dp),
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                option.label,
-                color = if (isSelected) PortalColors.Cyan else PortalColors.TextPrimary,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                option.native,
-                color = PortalColors.TextFaint,
-                fontSize = 12.sp,
-            )
-        }
-        if (isSelected) {
-            Icon(
-                Icons.Filled.Check,
-                contentDescription = null,
-                tint = PortalColors.Cyan,
-                modifier = Modifier.size(18.dp),
-            )
         }
     }
 }

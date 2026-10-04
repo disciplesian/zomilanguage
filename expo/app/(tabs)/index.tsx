@@ -13,8 +13,6 @@ import {
   ImageBackground,
   Image,
   Share,
-  Modal,
-  FlatList,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -39,10 +37,7 @@ import {
   Mic2,
   Lightbulb,
   BadgeCheck,
-  ChevronDown,
   Check,
-  Search,
-  X,
   CloudOff,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
@@ -53,12 +48,8 @@ import { generateText } from '@rork-ai/toolkit-sdk';
 import { trpc } from '@/lib/trpc';
 import { buildFallbackPrompt } from '@/constants/zomiPrompt';
 import {
-  ALL_LANGUAGES,
-  OTHER_LANGUAGES,
   languageLabel,
   languageTtsCode,
-  isPrimaryLanguage,
-  type LanguageOption,
 } from '@/constants/languages';
 import { offlineLookup, OFFLINE_ENTRY_COUNT } from '@/constants/offlineDictionary';
 
@@ -83,8 +74,6 @@ export default function TranslatorScreen() {
   const [outputText, setOutputText] = useState('');
   const [sourceLanguage, setSourceLanguage] = useState<'zomi' | 'english'>('zomi');
   const [targetLanguage, setTargetLanguage] = useState('english');
-  const [showLanguagePicker, setShowLanguagePicker] = useState(false);
-  const [languageSearch, setLanguageSearch] = useState('');
   const [isTranslating, setIsTranslating] = useState(false);
   const [translationQuality, setTranslationQuality] = useState(0);
   const [alternatives, setAlternatives] = useState<string[]>([]);
@@ -544,15 +533,6 @@ export default function TranslatorScreen() {
       Animated.timing(pulseAnim, { toValue: 1, duration: 100, useNativeDriver: true }),
     ]).start();
 
-    if (!isPrimaryLanguage(targetLanguage)) {
-      // Custom target language: alternate the source (Zomi ⇄ English) and
-      // start fresh — the previous output was in the target language.
-      setSourceLanguage((prev) => (prev === 'zomi' ? 'english' : 'zomi'));
-      lastTranslatedText.current = '';
-      setOutputText('');
-      return;
-    }
-
     const nextSource: 'zomi' | 'english' = targetLanguage as 'zomi' | 'english';
     const nextTarget = sourceLanguage;
     setSourceLanguage(nextSource);
@@ -570,52 +550,6 @@ export default function TranslatorScreen() {
       setOutputText(''); 
     }
   }, [inputText, outputText, pulseAnim, sourceLanguage, targetLanguage]);
-
-  /** Languages shown in the picker: pinned primaries first, then the rest. */
-  const pickerListData = useMemo(() => {
-    const q = languageSearch.trim().toLowerCase();
-    if (!q) return OTHER_LANGUAGES;
-    return ALL_LANGUAGES.filter(
-      (l) =>
-        l.label.toLowerCase().includes(q) ||
-        l.native.toLowerCase().includes(q) ||
-        l.code.includes(q.replace(/\s+/g, '_'))
-    );
-  }, [languageSearch]);
-
-  const handleSelectTargetLanguage = useCallback((code: string) => {
-    setShowLanguagePicker(false);
-    setLanguageSearch('');
-    if (code === targetLanguage) return;
-    if (Platform.OS !== 'web') Haptics.selectionAsync();
-    setTargetLanguage(code);
-    // The source must always differ from the target.
-    if (isPrimaryLanguage(code) && sourceLanguage === code) {
-      setSourceLanguage(code === 'zomi' ? 'english' : 'zomi');
-      setOutputText('');
-    }
-  }, [targetLanguage, sourceLanguage]);
-
-  const renderLanguageRow = useCallback(
-    ({ item }: { item: LanguageOption }) => {
-      const selected = item.code === targetLanguage;
-      return (
-        <TouchableOpacity
-          style={[styles.pickerItem, selected && styles.pickerItemSelected]}
-          onPress={() => handleSelectTargetLanguage(item.code)}
-        >
-          <View style={styles.pickerItemTexts}>
-            <Text style={[styles.pickerItemLabel, selected && styles.pickerItemLabelSelected]}>
-              {item.label}
-            </Text>
-            <Text style={styles.pickerItemNative}>{item.native}</Text>
-          </View>
-          {selected && <Check size={18} color={Colors.primary} />}
-        </TouchableOpacity>
-      );
-    },
-    [targetLanguage, handleSelectTargetLanguage]
-  );
 
   const handleCopy = useCallback(async () => {
     if (outputText && !outputText.startsWith('Translation') && !outputText.startsWith('Service')) {
@@ -986,9 +920,11 @@ export default function TranslatorScreen() {
                 style={[styles.languageButton, styles.languageButtonActive]}
                 onPress={() => {
                   const next: 'zomi' | 'english' = sourceLanguage === 'zomi' ? 'english' : 'zomi';
-                  if (next === targetLanguage) return;
-                  setSourceLanguage(next);
                   if (Platform.OS !== 'web') Haptics.selectionAsync();
+                  setSourceLanguage(next);
+                  setTargetLanguage(next === 'zomi' ? 'english' : 'zomi');
+                  lastTranslatedText.current = '';
+                  setOutputText('');
                 }}
               >
                 <Text style={[styles.languageText, styles.languageTextActive]} numberOfLines={1}>
@@ -1010,21 +946,11 @@ export default function TranslatorScreen() {
                 </TouchableOpacity>
               </Animated.View>
               
-              <TouchableOpacity 
-                style={[styles.languageButton, styles.languageButtonActive]}
-                onPress={() => {
-                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setLanguageSearch('');
-                  setShowLanguagePicker(true);
-                }}
-              >
-                <View style={styles.targetLanguageContent}>
-                  <Text style={[styles.languageText, styles.languageTextActive]} numberOfLines={1}>
-                    {targetLabel}
-                  </Text>
-                  <ChevronDown size={16} color={Colors.text} />
-                </View>
-              </TouchableOpacity>
+              <View style={[styles.languageButton, styles.languageButtonActive]}>
+                <Text style={[styles.languageText, styles.languageTextActive]} numberOfLines={1}>
+                  {targetLabel}
+                </Text>
+              </View>
             </View>
           </GlassCard>
 
@@ -1400,84 +1326,6 @@ export default function TranslatorScreen() {
           <Text style={styles.toastText}>Copied!</Text>
         </View>
       </Animated.View>
-
-      <Modal
-        visible={showLanguagePicker}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowLanguagePicker(false)}
-      >
-        <View style={styles.pickerOverlay}>
-          <View style={styles.pickerSheet}>
-            <View style={styles.pickerHeader}>
-              <View style={styles.pickerHeaderTexts}>
-                <Text style={styles.pickerTitle}>Translate into</Text>
-                <Text style={styles.pickerSubtitle}>Choose your output language</Text>
-              </View>
-              <TouchableOpacity
-                style={styles.pickerCloseButton}
-                onPress={() => setShowLanguagePicker(false)}
-              >
-                <X size={20} color={Colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.pickerSearchContainer}>
-              <Search size={16} color={Colors.textMuted} />
-              <TextInput
-                style={styles.pickerSearchInput}
-                placeholder="Search languages..."
-                placeholderTextColor={Colors.textMuted}
-                value={languageSearch}
-                onChangeText={setLanguageSearch}
-                autoCorrect={false}
-                autoCapitalize="none"
-              />
-            </View>
-
-            <FlatList
-              data={pickerListData}
-              keyExtractor={(item) => item.code}
-              renderItem={renderLanguageRow}
-              keyboardShouldPersistTaps="handled"
-              style={styles.pickerList}
-              ListHeaderComponent={
-                languageSearch.trim() ? null : (
-                  <View>
-                    <Text style={styles.pickerSectionLabel}>Popular</Text>
-                    {[ALL_LANGUAGES[0], ALL_LANGUAGES[1]].map((item) => (
-                      <TouchableOpacity
-                        key={item.code}
-                        style={[
-                          styles.pickerItem,
-                          item.code === targetLanguage && styles.pickerItemSelected,
-                        ]}
-                        onPress={() => handleSelectTargetLanguage(item.code)}
-                      >
-                        <View style={styles.pickerItemTexts}>
-                          <Text
-                            style={[
-                              styles.pickerItemLabel,
-                              item.code === targetLanguage && styles.pickerItemLabelSelected,
-                            ]}
-                          >
-                            {item.label}
-                          </Text>
-                          <Text style={styles.pickerItemNative}>{item.native}</Text>
-                        </View>
-                        {item.code === targetLanguage && <Check size={18} color={Colors.primary} />}
-                      </TouchableOpacity>
-                    ))}
-                    {OTHER_LANGUAGES.length > 0 && (
-                      <Text style={styles.pickerSectionLabel}>All languages</Text>
-                    )}
-                  </View>
-                )
-              }
-            />
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }

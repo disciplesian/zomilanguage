@@ -47,12 +47,13 @@ export const ZOMI_EXAMPLES: { source: string; target: string }[] = [
   { source: 'My family is well', target: 'Ka innkuan dam uh' },
 ];
 
-export const ZOMI_SYSTEM_INSTRUCTION = `### ROLE: EXPERT TRANSLATION ENGINE — ZOMI (ISO 639-3: ctd) SPECIALIST
-You are a professional, high-fidelity translation system for the Zomi language (ISO 639-3: ctd) — the standard written Zomi of Chin State, Myanmar and of Zomi communities worldwide, as used in the Zomi Bible, the Zomi hymnal, and modern Zomi publications. You translate at the quality of a certified professional translator.
+export const ZOMI_SYSTEM_INSTRUCTION = `### ROLE: EXPERT TRANSLATION ENGINE — ZOMI (TEDIM CHIN, ISO 639-3: ctd) SPECIALIST
+You are a professional, high-fidelity translation system for the Zomi language — internationally catalogued as TEDIM CHIN (ISO 639-3: ctd) and known natively and exclusively as Zomi — the standard written Zomi of Chin State, Myanmar and of Zomi communities worldwide, as used in the Zomi Bible, the Zomi hymnal, and modern Zomi publications. You translate at the quality of a certified professional translator.
 
-### ABSOLUTE DIALECT RULE:
-- Use ONLY standard Zomi (ISO 639-3: ctd) vocabulary, grammar, spelling, and phonology.
-- NEVER use words, spellings, or grammatical patterns from related varieties such as Paite, Mizo (Lushai), Hakha Chin, Falam Chin, Lai, Mara, or any other Kuki-Chin variety.
+### ABSOLUTE LANGUAGE IDENTITY & DIALECT RULE:
+- The target language "Zomi" means EXACTLY Tedim Chin (ISO 639-3: ctd) — no other variety.
+- Use ONLY standard Zomi (Tedim Chin, ISO 639-3: ctd) vocabulary, grammar, spelling, and phonology.
+- NEVER use words, spellings, or grammatical patterns from related varieties such as Paite (pck), Mizo/Lushai (lus), Hakha/Lai Chin (cnh), Falam Chin (cfm), Mara (mrh), Zou (zom), or any other Kuki-Chin variety. They are DIFFERENT languages — mixing them in is a failure.
 - If no established Zomi word exists for a term, build a clear descriptive Zomi phrase. NEVER borrow from related varieties.
 
 ### CORE TRANSLATION PROTOCOL:
@@ -88,7 +89,7 @@ When the register is ambiguous, use the neutral standard register.
 - Provide a "confidence" score (0-100) reflecting your certainty.
 - If the input is a single word or short phrase with several common senses in the target language, return an "alternatives" array of up to 2 other common, natural renderings — the most common sense goes in "translation". For longer text with one clear meaning, return "alternatives": [].
 - NO conversational preamble, explanations, romanization notes, or labels.
-- NO dialect mixing. Standard Zomi (ISO 639-3: ctd) ONLY when the target is Zomi.`;
+- NO dialect mixing. Standard Zomi (Tedim Chin, ISO 639-3: ctd) ONLY when the target is Zomi.`;
 
 /**
  * System instruction for language pairs where NEITHER side is Zomi
@@ -161,7 +162,7 @@ export function buildUserPrompt(
 
   if (involvesZomi) {
     lines.push(
-      `When translating INTO Zomi, use EXCLUSIVELY standard Zomi (ISO 639-3: ctd) — never a related variety such as Paite, Mizo, Hakha Chin, Falam Chin, Lai, or Mara.`
+      `When translating INTO Zomi, use EXCLUSIVELY standard Zomi (Tedim Chin, ISO 639-3: ctd) — never a related variety such as Paite, Mizo/Lushai, Hakha/Lai Chin, Falam Chin, Mara, or Zou. Zomi = Tedim Chin (ctd) ONLY.`,
     );
     const mergedGlossary: Record<string, string> = { ...ZOMI_GLOSSARY, ...(extraGlossary ?? {}) };
     lines.push('', `GLOSSARY_DATA_JSON:\n${JSON.stringify({ glossary: mergedGlossary, examples: ZOMI_EXAMPLES })}`);
@@ -191,7 +192,7 @@ export function buildUserPrompt(
  * the client-side fallback so every path describes the language identically.
  */
 export function promptLanguageName(code: string): string {
-  if (code === 'zomi') return 'Zomi (ISO 639-3: ctd)';
+  if (code === 'zomi') return 'Zomi (Tedim Chin, ISO 639-3: ctd)';
   return code
     .split('_')
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
@@ -203,11 +204,11 @@ export function promptLanguageName(code: string): string {
  * beginner-friendly example sentence pairs for a verified entry.
  */
 export const ENTRY_EXAMPLES_SYSTEM_INSTRUCTION = `### ROLE: ZOMI DICTIONARY EXAMPLE WRITER
-You write learning examples for a verified English–Zomi (ISO 639-3: ctd) dictionary.
+You write learning examples for a verified English–Zomi dictionary. "Zomi" means exactly Tedim Chin (ISO 639-3: ctd) — no other variety.
 
-### ABSOLUTE DIALECT RULE:
-- Use ONLY standard Zomi (ISO 639-3: ctd) vocabulary, grammar, spelling, and phonology.
-- NEVER use words, spellings, or grammatical patterns from related varieties such as Paite, Mizo (Lushai), Hakha Chin, Falam Chin, Lai, Mara, or any other Kuki-Chin variety.
+### ABSOLUTE LANGUAGE IDENTITY & DIALECT RULE:
+- Use ONLY standard Zomi (Tedim Chin, ISO 639-3: ctd) vocabulary, grammar, spelling, and phonology.
+- NEVER use words, spellings, or grammatical patterns from related varieties such as Paite, Mizo/Lushai, Hakha/Lai Chin, Falam Chin, Mara, or Zou.
 
 ### GRAMMAR (Zomi sentences):
 - Strict SOV (Subject–Object–Verb) word order.
@@ -229,7 +230,7 @@ export function buildEntryExamplesPrompt(english: string, zomi: string, pos: str
   return [
     'Write exactly 2 example sentences for this verified dictionary entry:',
     `English headword: "${english}"`,
-    `Standard Zomi (ISO 639-3: ctd) equivalent: "${zomi}"`,
+    `Standard Zomi (Tedim Chin, ISO 639-3: ctd) equivalent: "${zomi}"`,
     pos ? `Part of speech: ${pos}` : '',
     'Each English sentence must use the headword; each Zomi sentence must use the Zomi equivalent with the same meaning.',
     '',
@@ -256,7 +257,7 @@ export function buildFallbackPrompt(
   const involvesZomi = sourceLanguage === 'zomi' || targetLanguage === 'zomi';
   const zomiOnly =
     involvesZomi
-      ? `\nUse EXCLUSIVELY standard Zomi (ISO 639-3: ctd) when the output is Zomi. Never use Paite, Mizo, Hakha, Falam, Lai, or any other related variety.\nGRAMMAR (Zomi target): SOV word order; negation with "kei"/"lo" after the verb; future "ding", past "zo", progressive "lai"; questions end with "hiam"/"maw".`
+      ? `\n"Zomi" means exactly Tedim Chin (ISO 639-3: ctd). Use EXCLUSIVELY standard Zomi (Tedim Chin, ISO 639-3: ctd) when the output is Zomi. Never use Paite, Mizo/Lushai, Hakha/Lai Chin, Falam, Mara, Zou, or any other related variety — they are different languages.\nGRAMMAR (Zomi target): SOV word order; negation with "kei"/"lo" after the verb; future "ding", past "zo", progressive "lai"; questions end with "hiam"/"maw".`
       : '';
   const glossaryBlock =
     involvesZomi

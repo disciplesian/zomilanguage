@@ -59,8 +59,9 @@ nonisolated enum ZomiPrompt {
 
         if targetLanguage == "zomi" {
             return """
-            You are a professional English to Zomi (ISO 639-3: ctd) translator.
-            Use EXCLUSIVELY standard Zomi (ISO 639-3: ctd). NEVER use Paite, Mizo, Hakha Chin, Falam, or any other related variety.
+            You are a professional English to Zomi translator.
+            "Zomi" means exactly TEDIM CHIN (ISO 639-3: ctd) — no other variety.
+            Use EXCLUSIVELY standard Zomi (Tedim Chin, ISO 639-3: ctd). NEVER use Paite, Mizo/Lushai, Hakha/Lai Chin, Falam, Mara, Zou, or any other related variety — they are different languages.
             Translate meaning, not words. Never omit, add, or explain.
 
             ZOMI GLOSSARY:
@@ -80,8 +81,8 @@ nonisolated enum ZomiPrompt {
 
         if targetLanguage == "english" {
             return """
-            You are a professional Zomi (ISO 639-3: ctd) to English translator.
-            Use EXCLUSIVELY standard Zomi (ISO 639-3: ctd). No related variety (Paite, Mizo, Hakha, Falam, Lai, Mara).
+            You are a professional Zomi (Tedim Chin, ISO 639-3: ctd) to English translator.
+            The source language is exactly Tedim Chin (ISO 639-3: ctd) — trust this and do not re-detect it. No related variety (Paite, Mizo/Lushai, Hakha/Lai, Falam, Mara, Zou).
             Translate meaning, not words. Never omit, add, or explain.
             STYLE: Match the register of the input — dictionary word, everyday sentence, song lyrics, news, scripture/theology, prayer/religious, or poetry — and mirror it in English. Use terminology consistent with the Zomi Bible for religious text. Preserve line breaks for songs and poetry.
 
@@ -98,7 +99,7 @@ nonisolated enum ZomiPrompt {
         }
 
         // Custom target language: name both languages explicitly.
-        let sourceName = sourceLanguage == "zomi" ? "Zomi (ISO 639-3: ctd)" : LanguageCatalog.label(sourceLanguage)
+        let sourceName = sourceLanguage == "zomi" ? "Zomi (Tedim Chin, ISO 639-3: ctd)" : LanguageCatalog.label(sourceLanguage)
         let targetName = LanguageCatalog.label(targetLanguage)
         return """
         You are a professional \(sourceName) to \(targetName) translator.

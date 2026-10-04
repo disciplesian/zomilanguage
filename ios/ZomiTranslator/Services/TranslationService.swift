@@ -127,7 +127,7 @@ nonisolated final class TranslationService: Sendable {
                             if attempt < maxRetries, code >= 500 {
                                 attempt += 1
                                 continuation.yield(.connecting)
-                                try? await Task.sleep(for: .milliseconds(800 << (attempt - 1)))
+                                try? await Task.sleep(for: .milliseconds(400 << (attempt - 1)))
                                 continue streamLoop
                             }
                             continuation.yield(.failure(message: "HTTP \(code)"))
@@ -189,7 +189,7 @@ nonisolated final class TranslationService: Sendable {
                                 if attempt < maxRetries {
                                     attempt += 1
                                     continuation.yield(.connecting)
-                                    try? await Task.sleep(for: .milliseconds(800 << (attempt - 1)))
+                                    try? await Task.sleep(for: .milliseconds(400 << (attempt - 1)))
                                     continue streamLoop
                                 }
                                 continuation.yield(.failure(message: "no_data"))

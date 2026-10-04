@@ -1,17 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowLeftRight,
   Copy,
   Check,
-  ChevronDown,
   Loader2,
   Trash2,
   AlertCircle,
-  Search,
   Sparkles,
   Volume2,
   BadgeCheck,
-  X,
 } from 'lucide-react';
 
 import { SiteLayout, GlassCard } from '@/components/SiteLayout';
@@ -19,13 +16,8 @@ import { SignInPanel } from '@/components/SignInPanel';
 import { useAuth } from '@/lib/auth';
 import { getAnonymousId } from '@/lib/anonymousId';
 import {
-  ALL_LANGUAGES,
-  OTHER_LANGUAGES,
-  PRIMARY_LANGUAGES,
-  isPrimaryLanguage,
   languageLabel,
   languageTtsCode,
-  type LanguageOption,
 } from '@/lib/languages';
 import { streamTranslation, WORD_LIMIT_ERROR, type UsageInfo } from '@/lib/portalApi';
 
@@ -42,8 +34,6 @@ const Translate = () => {
   const { user, isLoading, getAccessToken } = useAuth();
   const [sourceLanguage, setSourceLanguage] = useState<'zomi' | 'english'>('zomi');
   const [targetLanguage, setTargetLanguage] = useState<string>('english');
-  const [pickerOpen, setPickerOpen] = useState<boolean>(false);
-  const [pickerSearch, setPickerSearch] = useState<string>('');
   const [input, setInput] = useState<string>('');
   const [output, setOutput] = useState<string>('');
   const [confidence, setConfidence] = useState<number>(0);
@@ -55,7 +45,6 @@ const Translate = () => {
   const [usage, setUsage] = useState<UsageInfo | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
   const abortRef = useRef<AbortController | null>(null);
-  const pickerRef = useRef<HTMLDivElement | null>(null);
 
   const sourceLabel = sourceLanguage === 'zomi' ? 'Zomi' : 'English';
   const targetLabel = languageLabel(targetLanguage);
@@ -121,57 +110,13 @@ const Translate = () => {
   }, []);
 
   const swap = useCallback((): void => {
-    // With a primary target the direction fully reverses; with a custom
-    // target only the source alternates (previous output was in the target
-    // language, so it cannot become the new input).
-    if (isPrimaryLanguage(targetLanguage)) {
-      const reversed = targetLanguage === 'zomi' ? 'english' : 'zomi';
-      setSourceLanguage(reversed as 'zomi' | 'english');
-      setTargetLanguage(sourceLanguage);
-      setInput(output);
-      setOutput(input);
-    } else {
-      setSourceLanguage((prev) => (prev === 'zomi' ? 'english' : 'zomi'));
-      setOutput('');
-      setConfidence(0);
-      setAlternatives([]);
-    }
+    // Full reversal: the previous output becomes the new input.
+    setSourceLanguage(targetLanguage as 'zomi' | 'english');
+    setTargetLanguage(sourceLanguage);
+    setInput(output);
+    setOutput(input);
     setError(null);
   }, [sourceLanguage, targetLanguage, input, output]);
-
-  const filteredLanguages = useMemo((): LanguageOption[] => {
-    const q = pickerSearch.trim().toLowerCase();
-    if (!q) return ALL_LANGUAGES;
-    return ALL_LANGUAGES.filter(
-      (l) => l.label.toLowerCase().includes(q) || l.native.toLowerCase().includes(q) || l.code.includes(q)
-    );
-  }, [pickerSearch]);
-
-  const selectLanguage = useCallback((code: string): void => {
-    if (code === sourceLanguage) {
-      // Keep source and target distinct by flipping the source.
-      setSourceLanguage(sourceLanguage === 'zomi' ? 'english' : 'zomi');
-    }
-    setTargetLanguage(code);
-    setPickerOpen(false);
-    setPickerSearch('');
-    setOutput('');
-    setConfidence(0);
-    setAlternatives([]);
-    setError(null);
-  }, [sourceLanguage]);
-
-  useEffect(() => {
-    if (!pickerOpen) return;
-    const handlePointerDown = (e: MouseEvent): void => {
-      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
-        setPickerOpen(false);
-        setPickerSearch('');
-      }
-    };
-    document.addEventListener('mousedown', handlePointerDown);
-    return () => document.removeEventListener('mousedown', handlePointerDown);
-  }, [pickerOpen]);
 
   const clearAll = useCallback((): void => {
     abortRef.current?.abort();
@@ -251,99 +196,32 @@ const Translate = () => {
               <span className="text-xs text-white/35">Sign in anytime for unlimited translation</span>
             </div>
           )}
-          <div ref={pickerRef} className="relative">
-            <div className="flex items-center gap-2 rounded-xl border border-white/15 p-1.5">
-              <button
-                type="button"
-                onClick={() => setSourceLanguage(sourceLanguage === 'zomi' ? 'english' : 'zomi')}
-                className="rounded-lg px-3.5 py-2 text-sm font-semibold text-white/80 transition-colors hover:bg-white/5 hover:text-[#00f0ff]"
-              >
-                {sourceLabel}
-              </button>
-              <button
-                type="button"
-                onClick={swap}
-                aria-label="Swap languages"
-                className="rounded-lg p-2 text-white/50 transition-colors hover:bg-white/5 hover:text-[#00f0ff]"
-              >
-                <ArrowLeftRight className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setPickerOpen((prev) => !prev)}
-                aria-expanded={pickerOpen}
-                aria-haspopup="listbox"
-                className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold text-white/80 transition-colors hover:bg-white/5 hover:text-[#00f0ff]"
-              >
-                {targetLabel}
-                <ChevronDown
-                  className={`h-4 w-4 transition-transform ${pickerOpen ? 'rotate-180' : ''}`}
-                />
-              </button>
-            </div>
-
-            {pickerOpen && (
-              <div
-                role="listbox"
-                className="absolute right-0 z-30 mt-2 w-72 overflow-hidden rounded-2xl border border-white/15 bg-[#161a2b] shadow-2xl shadow-black/50"
-              >
-                <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
-                  <Search className="h-4 w-4 shrink-0 text-white/35" />
-                  <input
-                    autoFocus
-                    value={pickerSearch}
-                    onChange={(e) => setPickerSearch(e.target.value)}
-                    placeholder="Search languages…"
-                    className="w-full bg-transparent text-sm text-white placeholder:text-white/30 focus:outline-none"
-                  />
-                  {pickerSearch && (
-                    <button
-                      type="button"
-                      onClick={() => setPickerSearch('')}
-                      aria-label="Clear search"
-                      className="text-white/35 transition-colors hover:text-white"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  )}
-                </div>
-                <div className="max-h-72 overflow-y-auto py-1.5">
-                  {!pickerSearch.trim() && (
-                    <p className="px-4 pb-1 pt-2 text-[10px] font-bold uppercase tracking-wider text-white/35">
-                      Popular
-                    </p>
-                  )}
-                  {(pickerSearch.trim() ? filteredLanguages : PRIMARY_LANGUAGES).map((l) => (
-                    <LanguageRow
-                      key={l.code}
-                      language={l}
-                      selected={l.code === targetLanguage}
-                      onSelect={() => selectLanguage(l.code)}
-                    />
-                  ))}
-                  {!pickerSearch.trim() && OTHER_LANGUAGES.length > 0 && (
-                    <p className="px-4 pb-1 pt-3 text-[10px] font-bold uppercase tracking-wider text-white/35">
-                      All languages
-                    </p>
-                  )}
-                  {pickerSearch.trim()
-                    ? null
-                    : filteredLanguages
-                        .filter((l) => !PRIMARY_LANGUAGES.some((p) => p.code === l.code))
-                        .map((l) => (
-                          <LanguageRow
-                            key={l.code}
-                            language={l}
-                            selected={l.code === targetLanguage}
-                            onSelect={() => selectLanguage(l.code)}
-                          />
-                        ))}
-                  {filteredLanguages.length === 0 && (
-                    <p className="px-4 py-6 text-center text-sm text-white/35">No languages found.</p>
-                  )}
-                </div>
-              </div>
-            )}
+          <div className="flex items-center gap-2 rounded-xl border border-white/15 p-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                const next: 'zomi' | 'english' = sourceLanguage === 'zomi' ? 'english' : 'zomi';
+                setSourceLanguage(next);
+                setTargetLanguage(next === 'zomi' ? 'english' : 'zomi');
+                setOutput('');
+                setConfidence(0);
+                setAlternatives([]);
+              }}
+              className="rounded-lg px-3.5 py-2 text-sm font-semibold text-white/80 transition-colors hover:bg-white/5 hover:text-[#00f0ff]"
+            >
+              {sourceLabel}
+            </button>
+            <button
+              type="button"
+              onClick={swap}
+              aria-label="Swap languages"
+              className="rounded-lg p-2 text-white/50 transition-colors hover:bg-white/5 hover:text-[#00f0ff]"
+            >
+              <ArrowLeftRight className="h-4 w-4" />
+            </button>
+            <span className="inline-flex items-center rounded-lg px-3.5 py-2 text-sm font-semibold text-[#00f0ff]">
+              {targetLabel}
+            </span>
           </div>
         </div>
 
@@ -517,35 +395,5 @@ const Translate = () => {
     </SiteLayout>
   );
 };
-
-const LanguageRow = ({
-  language,
-  selected,
-  onSelect,
-}: {
-  language: LanguageOption;
-  selected: boolean;
-  onSelect: () => void;
-}) => (
-  <button
-    type="button"
-    role="option"
-    aria-selected={selected}
-    onClick={onSelect}
-    className={`flex w-full items-center justify-between px-4 py-2.5 text-left transition-colors hover:bg-white/5 ${
-      selected ? 'bg-[#00f0ff]/10' : ''
-    }`}
-  >
-    <span>
-      <span
-        className={`block text-sm font-semibold ${selected ? 'text-[#00f0ff]' : 'text-white/85'}`}
-      >
-        {language.label}
-      </span>
-      <span className="block text-xs text-white/35">{language.native}</span>
-    </span>
-    {selected && <Check className="h-4 w-4 shrink-0 text-[#00f0ff]" />}
-  </button>
-);
 
 export default Translate;

@@ -12,13 +12,8 @@ final class TranslatorViewModel {
     var isZomiToEnglish = true {
         didSet { scheduleTranslation() }
     }
-    /// Catalog code of the selected target language ("english", "zomi", "burmese", …).
-    var targetLanguageCode = "english" {
-        didSet {
-            guard oldValue != targetLanguageCode else { return }
-            scheduleTranslation()
-        }
-    }
+    // Translation is offered in two directions only — Zomi ⇄ English — so the
+    // direction fully determines both languages (no target-language picker).
 
     private(set) var outputText = ""
     private(set) var isTranslating = false
@@ -62,68 +57,47 @@ final class TranslatorViewModel {
     private var lastDirection = "zomi→english"
 
     /// Catalog codes for the current translation direction.
-    var targetLanguage: String { targetLanguageCode }
+    var targetLanguage: String { isZomiToEnglish ? "english" : "zomi" }
     var sourceLanguage: String { isZomiToEnglish ? "zomi" : "english" }
 
     /// Display names for the current direction.
     var sourceLabel: String { isZomiToEnglish ? "Zomi" : "English" }
-    var targetLabel: String { LanguageCatalog.label(targetLanguageCode) }
+    var targetLabel: String { isZomiToEnglish ? "English" : "Zomi" }
 
     var wordCount: Int {
         let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? 0 : trimmed.split(whereSeparator: { $0.isWhitespace }).count
     }
 
+    /// Swap button: flips the direction; with output present, the previous
+    /// translation becomes the new input (full reversal).
     func swapLanguages() {
-        let previousOutput = outputText
         let previousInput = inputText
-        let previousTarget = targetLanguageCode
-        let previousSource = sourceLanguage
+        let previousOutput = outputText
 
-        if LanguageCatalog.isPrimary(previousTarget) {
-            // Full reversal: source and target trade places.
-            isZomiToEnglish = (previousTarget == "zomi")
-            targetLanguageCode = previousSource
+        isZomiToEnglish.toggle()
 
-            if !previousOutput.isEmpty, errorText == nil {
-                lastTranslatedText = previousOutput.trimmingCharacters(in: .whitespacesAndNewlines)
-                lastDirection = "\(sourceLanguage)→\(targetLanguageCode)"
-                inputText = previousOutput
-                outputText = previousInput
-            } else {
-                lastTranslatedText = ""
-                outputText = ""
-            }
+        if !previousOutput.isEmpty, errorText == nil {
+            lastTranslatedText = previousOutput.trimmingCharacters(in: .whitespacesAndNewlines)
+            lastDirection = "\(sourceLanguage)→\(targetLanguage)"
+            inputText = previousOutput
+            outputText = previousInput
         } else {
-            // Custom target: only the source alternates — the previous output
-            // was in the target language, so it cannot become the new input.
-            isZomiToEnglish.toggle()
             lastTranslatedText = ""
             outputText = ""
-            quality = 0
-            alternatives = []
         }
+        quality = 0
+        alternatives = []
     }
 
-    /// Taps the source chip: flips Zomi ⇄ English, keeping source and target distinct.
+    /// Taps the source chip: flips Zomi ⇄ English without exchanging text.
     func toggleSource() {
-        let newSource = sourceLanguage == "zomi" ? "english" : "zomi"
         isZomiToEnglish.toggle()
-        if targetLanguageCode == newSource {
-            targetLanguageCode = newSource == "zomi" ? "english" : "zomi"
-        }
-    }
-
-    /// Picks a new target language from the picker sheet.
-    func selectTargetLanguage(_ code: String) {
-        if code == sourceLanguage {
-            // Keep source and target distinct — flip the source.
-            isZomiToEnglish.toggle()
-        }
-        targetLanguageCode = code
+        lastTranslatedText = ""
         outputText = ""
         quality = 0
         alternatives = []
+        errorText = nil
     }
 
     func clear() {
@@ -207,7 +181,7 @@ final class TranslatorViewModel {
         }
 
         // Skip identical re-translations (prevents flicker on refocus).
-        let directionKey = "\(sourceLanguage)→\(targetLanguageCode)"
+        let directionKey = "\(sourceLanguage)→\(targetLanguage)"
         if trimmed == lastTranslatedText && directionKey == lastDirection { return }
 
         requestId += 1
@@ -219,7 +193,7 @@ final class TranslatorViewModel {
         isConnecting = false
         alternatives = []
 
-        let target = targetLanguageCode
+        let target = targetLanguage
         let source = sourceLanguage
 
         // Offline / instant cache hit.
