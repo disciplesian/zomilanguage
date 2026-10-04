@@ -10,7 +10,8 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
 
-/** One row of the bundled English → Zomi dictionary (10,620 human-verified entries). */
+/** One row of the bundled English → Zomi dictionary (33,444 entries; the original
+ *  10,620 are human-verified, expanded from the community dictionary archive). */
 data class DictionaryEntry(
     val english: String,
     /** Raw part of speech exactly as recorded in the dataset (e.g. "pas. part."). */
@@ -65,9 +66,9 @@ object DictionaryRepository {
     @Volatile
     private var browseSections: List<BrowseSection>? = null
 
-    /** Version of the dataset in use (the bundled asset is version 1). */
+    /** Version of the dataset in use (the bundled asset is version 2). */
     @Volatile
-    private var activeVersion: Int = 1
+    private var activeVersion: Int = 2
 
     private val json = Json { ignoreUnknownKeys = true }
 

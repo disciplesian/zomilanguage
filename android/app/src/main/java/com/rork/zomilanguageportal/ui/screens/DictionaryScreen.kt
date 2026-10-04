@@ -100,7 +100,7 @@ private fun categoryColor(category: String): Color = when (category) {
     else -> Color(0xFF9BA3AF)
 }
 
-/** Dictionary tab — instant search over the 10,620 verified English ⇄ Zomi
+/** Dictionary tab — instant search over the 33,444 English ⇄ Zomi
  *  entries bundled with the app, with a Zomi AI fallback for words that are
  *  not in the verified dataset. */
 @Composable

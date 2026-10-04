@@ -1,8 +1,9 @@
 import raw from './dictionary.json';
 
 /**
- * The bundled English → Zomi dictionary (10,620 verified entries).
- * Source dataset: English, Part of Speech, Zomi — all entries human-verified.
+ * The bundled English → Zomi dictionary (33,444 entries; the original 10,620 are
+ * human-verified, expanded from the community dictionary archive).
+ * Source dataset: English, Part of Speech, Zomi, Category.
  */
 
 export type DictionaryCategory =

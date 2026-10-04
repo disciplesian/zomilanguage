@@ -1,6 +1,7 @@
 import Foundation
 
-/// One row of the bundled English → Zomi dictionary (10,620 human-verified entries).
+/// One row of the bundled English → Zomi dictionary (33,444 entries; the original
+/// 10,620 are human-verified, expanded from the community dictionary archive).
 nonisolated struct DictionaryEntry: Identifiable, Hashable {
     let english: String
     /// Raw part of speech exactly as recorded in the dataset (e.g. "pas. part.").
@@ -25,8 +26,8 @@ nonisolated enum DictionaryData {
     /// which locks again — a plain NSLock would deadlock the main thread there.
     private static let lock = NSRecursiveLock()
 
-    /// Version of the dataset currently in use (the bundled asset is version 1).
-    nonisolated(unsafe) private static var activeVersionValue: Int = 1
+    /// Version of the dataset currently in use (the bundled asset is version 2).
+    nonisolated(unsafe) private static var activeVersionValue: Int = 2
 
     static func activeVersion() -> Int {
         lock.lock()

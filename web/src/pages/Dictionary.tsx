@@ -69,7 +69,7 @@ function highlightParts(text: string, query: string): { text: string; match: boo
 const OFFLINE_MESSAGE =
   'You appear to be offline. The verified dictionary still works — reconnect for AI answers.';
 
-/** Dictionary — instant search over the 10,620 verified English ⇄ Zomi entries,
+/** Dictionary — instant search over the 33,444 English ⇄ Zomi entries,
  *  with a Zomi AI fallback for words that are not in the verified dataset. */
 export default function Dictionary() {
   const [query, setQuery] = useState<string>('');
