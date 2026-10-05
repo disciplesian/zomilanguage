@@ -94,7 +94,7 @@ struct AboutView: View {
                 title: "AI-Powered Translation",
                 systemImage: "sparkles",
                 variant: .green,
-                body_: "Translations are powered by Google Gemini AI. When you tap Translate, your text and any glossary terms are sent securely to Google for processing. By using translation, you consent to this processing."
+                body_: "Translations are powered by AI. When you tap Translate, your text and any glossary terms are sent securely to the Zomi AI translation service, which uses Google Gemini and may use a backup AI provider for processing. By using translation, you consent to this processing."
             )
 
             InfoSection(
@@ -127,7 +127,7 @@ struct PrivacyView: View {
                 title: "Translation Processing",
                 systemImage: "arrow.up.arrow.down.circle",
                 variant: .purple,
-                body_: "Text you translate is sent securely to Google Gemini AI to generate results. We do not store your translations on our servers, and they are not used to build a profile about you. You may use the app without an account; translations are stored only on your device."
+                body_: "Text you translate is sent securely to the Zomi AI translation service — powered by Google Gemini, with a backup AI provider — to generate results. Guest translations are stored only on your device. If you sign in, your saved history and glossary sync to your account so they are available on all your devices, and you can delete them at any time from Settings → Account → Delete Account. Translations are never used to build a profile about you."
             )
 
             InfoSection(

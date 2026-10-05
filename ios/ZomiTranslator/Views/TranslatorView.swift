@@ -97,7 +97,7 @@ struct TranslatorView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Translations are powered by Google Gemini AI. When you translate, your text and any glossary terms are sent securely to Google for processing. By continuing, you consent to this processing.")
+            Text("Translations are powered by AI. When you translate, your text and any glossary terms are sent securely to the Zomi AI translation service, which uses Google Gemini and may use a backup AI provider for processing. By continuing, you consent to this processing.")
         }
         .alert("Voice Transcription Consent", isPresented: $showAudioConsent) {
             Button("Agree & Continue") {

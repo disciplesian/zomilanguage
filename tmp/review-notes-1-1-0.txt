@@ -1,0 +1,21 @@
+Zomi Language Portal is an AI-powered English ↔ Zomi translator and language-learning app.
+
+CORE FEATURE: Open the app and tap the Translate tab. Type or paste English or Zomi text and tap Translate. Results stream from the app's AI translation service, which uses Google Gemini (with a backup AI provider as fallback), with a confidence bar and the option to save favorites. On first translation, the app shows a consent dialog explaining that text is sent to the Zomi AI translation service — powered by Google Gemini, with a backup AI provider — for processing.
+
+VOICE INPUT: Tap the microphone in the Translate tab to record speech. The audio is sent to the Rork AI toolkit for transcription. The first time the microphone is used, a consent dialog explains this and asks for permission.
+
+AI TOOLS: The Tools tab offers Document Translation, Translation Comparison, and Flashcard Generator. These tools send text to the Rork AI toolkit; the first use of any of these tools shows a consent dialog.
+
+DICTIONARY: The Dictionary tab surfaces 4 random word sets from a verified 33,000+-entry English–Zomi dictionary to encourage discovery — pull to refresh for new ones. The search field searches the full dictionary offline. Dictionary datasets are delivered over the air at app launch, no app update needed.
+
+DAILY SCRIPTURE: A new scripture verse appears each day on the Home tab, with read-aloud.
+
+SIGN-IN: Translation and account sync require signing in with Apple or Google. No separate demo account is needed — reviewers can sign in with their own Apple ID via the Sign in with Apple button in Settings → Account.
+
+ACCOUNT DELETION: Signed-in users can delete their account from Settings → Account → Delete Account. After an in-app confirmation dialog, this permanently deletes the account record and all associated server-side data (saved translations, glossary, history, and verification status) from Zomi's servers. The Google or Apple OAuth login itself is an external credential managed by Google and Apple; after deletion, no app data remains, and signing in again starts a fresh account.
+
+LEGAL: Privacy Policy: https://zomi.me/privacy | Terms of Service: https://zomi.me/terms
+
+SUPPORT CONTACT: support@zomitranslator.com (also the App Review contact email for this submission). In-app: Settings → Support & Feedback opens a pre-filled email to this address.
+
+NO IN-APP PURCHASES OR SUBSCRIPTIONS: This version does not offer any purchases, subscriptions, or paywalls.

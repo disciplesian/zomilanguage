@@ -52,7 +52,7 @@ struct AccountCard: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This permanently deletes your account, saved translations, glossary, and verification status. This cannot be undone.")
+            Text("This permanently deletes your account and all associated data from Zomi's servers — saved translations, glossary, history, and verification status. This cannot be undone.")
         }
     }
 
