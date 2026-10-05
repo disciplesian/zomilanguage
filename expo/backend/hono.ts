@@ -19,6 +19,7 @@ import {
   translationModelChain,
 } from "./geminiDirect";
 import { lookupVerified } from "./verifiedDictionary";
+import { usageSnapshot } from "./usage";
 import {
   FREE_WORD_LIMIT,
   anonymousWordsUsed,
@@ -744,6 +745,32 @@ app.get("/admin/overview", async (c) => {
     console.error("[admin] overview failed", err);
     return c.json({ error: "overview_failed" }, 500);
   }
+});
+
+/** Admin: aggregate AI usage, spend estimate and rate-limit alerts. */
+app.get("/admin/usage", async (c) => {
+  const guard = await requireAdmin(c);
+  if (!guard.ok) return guard.response;
+  const snapshot = usageSnapshot();
+  let history: unknown[] = [];
+  let persistAvailable = false;
+  try {
+    const res = await guard.db.rpc<{ days: unknown[] }>("admin_gemini_usage", {
+      p_admin_user_id: guard.auth.userId,
+      p_days: 30,
+    });
+    if (Array.isArray(res?.days)) {
+      history = res.days;
+      persistAvailable = true;
+    }
+  } catch (err) {
+    // Expected until backend/sql/gemini-usage.sql is applied in Supabase.
+    console.warn(
+      "[admin] gemini usage history unavailable:",
+      err instanceof Error ? err.message : err
+    );
+  }
+  return c.json({ ...snapshot, history, persistAvailable });
 });
 
 /** Admin: list every portal user with roles, verification state, usage. */

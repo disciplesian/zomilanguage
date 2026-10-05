@@ -149,6 +149,101 @@ export async function fetchAdminUsers(token: string): Promise<PortalUserRecord[]
   return Array.isArray(body.users) ? (body.users as PortalUserRecord[]) : [];
 }
 
+export interface AdminUsageModelRow {
+  model: string;
+  requests: number;
+  errors: number;
+  promptTokens: number;
+  outputTokens: number;
+  estimatedCostUsd: number;
+}
+
+export interface AdminUsageDayRow {
+  day: string;
+  requests: number;
+  errors: number;
+  promptTokens: number;
+  outputTokens: number;
+}
+
+export type UsageAlertLevel = 'ok' | 'warning' | 'critical';
+
+export interface AdminUsage {
+  today: {
+    date: string;
+    requests: number;
+    errors: number;
+    promptTokens: number;
+    outputTokens: number;
+    estimatedCostUsd: number;
+  };
+  byModel: AdminUsageModelRow[];
+  rate: {
+    requestsPerMinute: number;
+    errorsPerMinute: number;
+    tokensPerMinute: number;
+    level: UsageAlertLevel;
+    reasons: string[];
+    thresholds: { rpmWarn: number; rpmCritical: number; errorsWarn: number; errorsCritical: number };
+  };
+  pricing: { inputUsdPerMillion: number; outputUsdPerMillion: number };
+  lastFlushError: string;
+  history: AdminUsageDayRow[];
+  persistAvailable: boolean;
+}
+
+export async function fetchAdminUsage(token: string): Promise<AdminUsage> {
+  const body = (await portalFetch('/api/admin/usage', token)) as {
+    today?: Partial<AdminUsage['today']>;
+    byModel?: unknown;
+    rate?: Partial<AdminUsage['rate']>;
+    pricing?: Partial<AdminUsage['pricing']>;
+    lastFlushError?: unknown;
+    history?: unknown;
+    persistAvailable?: unknown;
+  };
+  return {
+    today: {
+      date: String(body.today?.date ?? ''),
+      requests: Number(body.today?.requests ?? 0),
+      errors: Number(body.today?.errors ?? 0),
+      promptTokens: Number(body.today?.promptTokens ?? 0),
+      outputTokens: Number(body.today?.outputTokens ?? 0),
+      estimatedCostUsd: Number(body.today?.estimatedCostUsd ?? 0),
+    },
+    byModel: Array.isArray(body.byModel)
+      ? (body.byModel as AdminUsageModelRow[]).map((row) => ({
+          model: String(row.model ?? 'unknown'),
+          requests: Number(row.requests ?? 0),
+          errors: Number(row.errors ?? 0),
+          promptTokens: Number(row.promptTokens ?? 0),
+          outputTokens: Number(row.outputTokens ?? 0),
+          estimatedCostUsd: Number(row.estimatedCostUsd ?? 0),
+        }))
+      : [],
+    rate: {
+      requestsPerMinute: Number(body.rate?.requestsPerMinute ?? 0),
+      errorsPerMinute: Number(body.rate?.errorsPerMinute ?? 0),
+      tokensPerMinute: Number(body.rate?.tokensPerMinute ?? 0),
+      level: (body.rate?.level as UsageAlertLevel) ?? 'ok',
+      reasons: Array.isArray(body.rate?.reasons) ? (body.rate.reasons as string[]) : [],
+      thresholds: {
+        rpmWarn: Number(body.rate?.thresholds?.rpmWarn ?? 8),
+        rpmCritical: Number(body.rate?.thresholds?.rpmCritical ?? 12),
+        errorsWarn: Number(body.rate?.thresholds?.errorsWarn ?? 3),
+        errorsCritical: Number(body.rate?.thresholds?.errorsCritical ?? 6),
+      },
+    },
+    pricing: {
+      inputUsdPerMillion: Number(body.pricing?.inputUsdPerMillion ?? 0.3),
+      outputUsdPerMillion: Number(body.pricing?.outputUsdPerMillion ?? 2.5),
+    },
+    lastFlushError: String(body.lastFlushError ?? ''),
+    history: Array.isArray(body.history) ? (body.history as AdminUsageDayRow[]) : [],
+    persistAvailable: body.persistAvailable === true,
+  };
+}
+
 export async function setAdminUserRole(
   token: string,
   userId: string,

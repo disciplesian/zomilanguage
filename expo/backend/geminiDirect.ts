@@ -20,6 +20,38 @@ export interface ChatRequest {
 
 const API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
+/** Aggregate usage event emitted for every model call (no user data). */
+export interface GeminiUsageEvent {
+  provider: "gemini" | "proxy";
+  model: string;
+  promptTokens: number;
+  outputTokens: number;
+  ok: boolean;
+}
+
+type UsageListener = (event: GeminiUsageEvent) => void;
+let usageListener: UsageListener | null = null;
+
+/** Registers the aggregate usage sink (wired by ./usage.ts at startup). */
+export function setGeminiUsageListener(fn: UsageListener | null): void {
+  usageListener = fn;
+}
+
+/** Reports usage; monitoring must never break a live translation. */
+export function reportUsage(event: GeminiUsageEvent): void {
+  try {
+    usageListener?.(event);
+  } catch {
+    // ignore sink errors
+  }
+}
+
+interface GeminiUsageMetadata {
+  promptTokenCount?: number;
+  candidatesTokenCount?: number;
+  totalTokenCount?: number;
+}
+
 function apiKey(): string {
   return (process.env.GEMINI_API_KEY ?? "").trim();
 }
@@ -193,12 +225,29 @@ export async function chatCompletionDirect(req: ChatRequest): Promise<string> {
     body: JSON.stringify(toPayload(req)),
     signal: callSignal(req),
   });
-  if (!res.ok) throw await proxyError(res);
-  const payload = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
+  if (!res.ok) {
+    reportUsage({ provider: "gemini", model: req.model, promptTokens: 0, outputTokens: 0, ok: false });
+    throw await proxyError(res);
+  }
+  const payload = (await res.json()) as {
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
+    usageMetadata?: GeminiUsageMetadata;
+  };
   const content = (payload.candidates?.[0]?.content?.parts ?? [])
     .map((p) => p.text ?? "")
     .join("");
-  if (!content.trim()) throw new Error("Empty completion from Gemini");
+  if (!content.trim()) {
+    reportUsage({ provider: "gemini", model: req.model, promptTokens: 0, outputTokens: 0, ok: false });
+    throw new Error("Empty completion from Gemini");
+  }
+  const usage = payload.usageMetadata;
+  reportUsage({
+    provider: "gemini",
+    model: req.model,
+    promptTokens: usage?.promptTokenCount ?? 0,
+    outputTokens: usage?.candidatesTokenCount ?? 0,
+    ok: true,
+  });
   return content;
 }
 
@@ -216,12 +265,18 @@ export async function streamChatCompletionDirect(
     body: JSON.stringify(toPayload(req)),
     signal: callSignal(req),
   });
-  if (!res.ok || !res.body) throw await proxyError(res);
+  if (!res.ok || !res.body) {
+    reportUsage({ provider: "gemini", model: req.model, promptTokens: 0, outputTokens: 0, ok: false });
+    throw await proxyError(res);
+  }
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   let full = "";
+  // Holder object: the assignment happens inside a closure, which would
+  // otherwise be narrowed away by control-flow analysis at the read site.
+  const usageRef: { value: GeminiUsageMetadata | null } = { value: null };
 
   const handleLine = async (line: string): Promise<void> => {
     const trimmed = line.trim();
@@ -234,6 +289,9 @@ export async function streamChatCompletionDirect(
     } catch {
       return; // ignore malformed frames
     }
+    const frame = parsed as { usageMetadata?: GeminiUsageMetadata };
+    // Gemini reports final counts on the last frame; keep the freshest.
+    if (frame.usageMetadata) usageRef.value = frame.usageMetadata;
     const piece = frameText(parsed);
     if (piece) {
       full += piece;
@@ -254,6 +312,16 @@ export async function streamChatCompletionDirect(
   }
   if (buffer.trim()) await handleLine(buffer);
 
-  if (!full.trim()) throw new Error("Empty stream from Gemini");
+  if (!full.trim()) {
+    reportUsage({ provider: "gemini", model: req.model, promptTokens: 0, outputTokens: 0, ok: false });
+    throw new Error("Empty stream from Gemini");
+  }
+  reportUsage({
+    provider: "gemini",
+    model: req.model,
+    promptTokens: usageRef.value?.promptTokenCount ?? 0,
+    outputTokens: usageRef.value?.candidatesTokenCount ?? 0,
+    ok: true,
+  });
   return full;
 }

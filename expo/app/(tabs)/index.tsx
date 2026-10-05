@@ -13,6 +13,7 @@ import {
   ImageBackground,
   Image,
   Share,
+  Modal,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -39,7 +40,9 @@ import {
   BadgeCheck,
   Check,
   CloudOff,
+  ImagePlus,
 } from 'lucide-react-native';
+import type { Svg } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
 
@@ -68,6 +71,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { getAnonymousId } from '@/lib/anonymousId';
 import { exportTranslation, ExportFormat, TranslationData } from '@/lib/exportUtils';
 import { createShareLink } from '@/lib/share';
+import TranslationShareCard from '@/components/TranslationShareCard';
+import { shareTranslationCard } from '@/lib/shareImage';
 
 export default function TranslatorScreen() {
   const [inputText, setInputText] = useState('');
@@ -87,6 +92,9 @@ export default function TranslatorScreen() {
   const [showExportOptions, setShowExportOptions] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isCreatingShareLink, setIsCreatingShareLink] = useState(false);
+  const [shareCardVisible, setShareCardVisible] = useState(false);
+  const [isSharingCard, setIsSharingCard] = useState(false);
+  const shareCardRef = useRef<Svg | null>(null);
   
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -673,6 +681,34 @@ export default function TranslatorScreen() {
     }
   }, [inputText, outputText, sourceLanguage, targetLanguage, sourceLabel, targetLabel, translationQuality]);
 
+  const canShareCard =
+    !!outputText.trim() &&
+    !isTranslating &&
+    !stream.isStreaming &&
+    !outputText.startsWith('Error:') &&
+    !outputText.startsWith('Service') &&
+    !outputText.startsWith('Translation');
+
+  const handleShareImage = useCallback(() => {
+    if (!canShareCard) {
+      Alert.alert('Error', 'No translation available to share');
+      return;
+    }
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setShareCardVisible(true);
+  }, [canShareCard]);
+
+  const confirmShareCard = useCallback(async () => {
+    setIsSharingCard(true);
+    const result = await shareTranslationCard(shareCardRef);
+    setIsSharingCard(false);
+    if (!result.ok) {
+      Alert.alert('Share failed', result.reason ?? 'Please try again.');
+      return;
+    }
+    setShareCardVisible(false);
+  }, []);
+
   const handleExport = useCallback(async (format: ExportFormat) => {
     if (!outputText || outputText.startsWith('Translation') || outputText.startsWith('Service')) {
       Alert.alert('Error', 'No translation available to export');
@@ -1087,6 +1123,9 @@ export default function TranslatorScreen() {
                     <ShareIcon size={18} color={Colors.textSecondary} />
                   )}
                 </TouchableOpacity>
+                <TouchableOpacity onPress={handleShareImage} style={styles.actionButton}>
+                  <ImagePlus size={18} color={Colors.textSecondary} />
+                </TouchableOpacity>
                 <TouchableOpacity 
                   onPress={() => setShowExportOptions(!showExportOptions)} 
                   style={styles.actionButton}
@@ -1326,6 +1365,50 @@ export default function TranslatorScreen() {
           <Text style={styles.toastText}>Copied!</Text>
         </View>
       </Animated.View>
+
+      <Modal
+        visible={shareCardVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShareCardVisible(false)}
+      >
+        <View style={styles.shareModalBackdrop}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setShareCardVisible(false)} />
+          <View style={styles.shareSheet}>
+            <Text style={styles.shareSheetTitle}>Share this translation</Text>
+            <View style={styles.shareCardFrame}>
+              <TranslationShareCard
+                ref={shareCardRef}
+                sourceText={inputText}
+                translatedText={outputText}
+                sourceLabel={sourceLabel}
+                targetLabel={targetLabel}
+                confidence={translationQuality}
+              />
+            </View>
+            <View style={styles.shareSheetActions}>
+              <TouchableOpacity
+                style={styles.shareSheetPrimary}
+                onPress={confirmShareCard}
+                disabled={isSharingCard}
+              >
+                {isSharingCard ? (
+                  <ActivityIndicator size="small" color="#10131F" />
+                ) : (
+                  <ShareIcon size={18} color="#10131F" />
+                )}
+                <Text style={styles.shareSheetPrimaryText}>Share image</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.shareSheetCancel}
+                onPress={() => setShareCardVisible(false)}
+              >
+                <Text style={styles.shareSheetCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1963,6 +2046,67 @@ const styles = StyleSheet.create({
     fontSize: 17,
     color: Colors.accent,
     fontWeight: '700',
+  },
+  shareModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(10, 12, 22, 0.78)',
+    justifyContent: 'flex-end',
+  },
+  shareSheet: {
+    backgroundColor: Colors.backgroundSecondary,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 30,
+  },
+  shareSheetTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.text,
+    textAlign: 'center',
+    marginBottom: 14,
+  },
+  shareCardFrame: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  shareSheetActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
+  },
+  shareSheetPrimary: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: Colors.success,
+    paddingVertical: 14,
+    borderRadius: 14,
+  },
+  shareSheetPrimaryText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#10131F',
+  },
+  shareSheetCancel: {
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 22,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  shareSheetCancelText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.textMuted,
   },
 
 });

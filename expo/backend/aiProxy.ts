@@ -12,6 +12,8 @@ export interface ChatMessage {
   content: string;
 }
 
+import { reportUsage } from "./geminiDirect";
+
 export interface ChatRequest {
   model: string;
   messages: ChatMessage[];
@@ -77,10 +79,18 @@ export async function chatCompletion(req: ChatRequest): Promise<string> {
     }),
     signal: callSignal(req),
   });
-  if (!res.ok) throw await proxyError(res);
+  if (!res.ok) {
+    reportUsage({ provider: "proxy", model: req.model, promptTokens: 0, outputTokens: 0, ok: false });
+    throw await proxyError(res);
+  }
   const payload = (await res.json()) as { choices?: { message?: { content?: string } }[] };
   const content = extractContent(payload);
-  if (!content.trim()) throw new Error("Empty completion from model");
+  if (!content.trim()) {
+    reportUsage({ provider: "proxy", model: req.model, promptTokens: 0, outputTokens: 0, ok: false });
+    throw new Error("Empty completion from model");
+  }
+  // The gateway does not expose token counts on this shape; count the request only.
+  reportUsage({ provider: "proxy", model: req.model, promptTokens: 0, outputTokens: 0, ok: true });
   return content;
 }
 
@@ -109,7 +119,10 @@ export async function streamChatCompletion(
     }),
     signal: callSignal(req),
   });
-  if (!res.ok || !res.body) throw await proxyError(res);
+  if (!res.ok || !res.body) {
+    reportUsage({ provider: "proxy", model: req.model, promptTokens: 0, outputTokens: 0, ok: false });
+    throw await proxyError(res);
+  }
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -147,6 +160,11 @@ export async function streamChatCompletion(
   }
   if (buffer.trim()) await handleLine(buffer);
 
-  if (!full.trim()) throw new Error("Empty stream from model");
+  if (!full.trim()) {
+    reportUsage({ provider: "proxy", model: req.model, promptTokens: 0, outputTokens: 0, ok: false });
+    throw new Error("Empty stream from model");
+  }
+  // The gateway does not expose token counts on this shape; count the request only.
+  reportUsage({ provider: "proxy", model: req.model, promptTokens: 0, outputTokens: 0, ok: true });
   return full;
 }

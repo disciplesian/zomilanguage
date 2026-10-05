@@ -19,6 +19,7 @@ import {
 import { SiteLayout, GlassCard, RoleBadge } from '@/components/SiteLayout';
 import { SignInPanel } from '@/components/SignInPanel';
 import DictionaryManager from '@/components/admin/DictionaryManager';
+import UsageDashboard from '@/components/admin/UsageDashboard';
 import { useAuth } from '@/lib/auth';
 import {
   fetchAdminOverview,
@@ -339,6 +340,9 @@ const Admin = () => {
 
         {/* Dictionary dataset manager */}
         <DictionaryManager token={token} />
+
+        {/* AI usage, spend estimate & rate-limit alerts */}
+        <UsageDashboard token={token} />
 
         {/* Top translators */}
         {overview && overview.topUsers.length > 0 && (
