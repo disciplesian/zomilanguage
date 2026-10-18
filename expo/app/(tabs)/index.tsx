@@ -529,7 +529,7 @@ export default function TranslatorScreen() {
       return;
     }
 
-    // Generate a unique public link for this translation (zomilanguage.rork.app/t/<id>);
+    // Generate a unique public link for this translation (zomi.me/t/<id>);
     // fall back to sharing plain text if the backend is unreachable.
     setIsCreatingShareLink(true);
     let shareUrl: string | null = null;

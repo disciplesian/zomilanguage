@@ -1,7 +1,7 @@
 /**
  * Public share links for completed translations.
  * POSTs the translation to the backend, which stores it and returns a
- * unique id; anyone can then view it at https://zomilanguage.rork.app/t/<shareId>.
+ * unique id; anyone can then view it at https://zomi.me/t/<shareId>.
  */
 
 const API_BASE = (() => {
@@ -9,7 +9,8 @@ const API_BASE = (() => {
   return url.endsWith('/') ? url.slice(0, -1) : url;
 })();
 
-const SHARE_WEB_BASE = 'https://zomilanguage.rork.app';
+/** The public website that shows shared translations (matches the /t/ route). */
+const SHARE_WEB_BASE = 'https://zomi.me';
 
 /** Language code — 'zomi', 'english' or any catalog language. */
 export type ShareLanguage = string;
@@ -23,9 +24,21 @@ export interface CreateShareLinkInput {
   model?: string | null;
 }
 
+/** A shared translation as returned by the public read endpoint. */
+export interface SharedTranslation {
+  shareId: string;
+  sourceText: string;
+  translatedText: string;
+  sourceLanguage: string;
+  targetLanguage: string;
+  confidence: number;
+  model: string | null;
+  createdAt: string;
+}
+
 /**
  * Creates a public share link for a completed translation.
- * Returns the full URL (e.g. https://zomilanguage.rork.app/t/ab3k9xz2q1), or null when the
+ * Returns the full URL (e.g. https://zomi.me/t/ab3k9xz2q1), or null when the
  * backend is unreachable so callers can fall back to sharing plain text.
  */
 export async function createShareLink(input: CreateShareLinkInput): Promise<string | null> {
@@ -55,6 +68,31 @@ export async function createShareLink(input: CreateShareLinkInput): Promise<stri
     }
   } catch (error) {
     console.log('[share] link creation failed:', error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
+/**
+ * Reads a shared translation by its public id (the /t/<id> viewer).
+ * Returns null when it does not exist or the backend is unreachable.
+ */
+export async function fetchSharedTranslation(shareId: string): Promise<SharedTranslation | null> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    try {
+      const res = await fetch(`${API_BASE}/api/share/${encodeURIComponent(shareId)}`, {
+        signal: controller.signal,
+      });
+      if (!res.ok) return null;
+      const data = (await res.json()) as SharedTranslation;
+      if (!data || typeof data.translatedText !== 'string') return null;
+      return data;
+    } finally {
+      clearTimeout(timeout);
+    }
+  } catch (error) {
+    console.log('[share] read failed:', error instanceof Error ? error.message : error);
     return null;
   }
 }
