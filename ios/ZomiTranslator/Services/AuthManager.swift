@@ -195,8 +195,8 @@ final class AuthManager {
     /// and clears all local credentials. Required for App Store guideline 5.1.1(v).
     func deleteAccount() async -> Bool {
         guard let token = await getAccessToken() else { return false }
-        let base = Config.EXPO_PUBLIC_RORK_API_BASE_URL
-        let baseURL = !base.isEmpty ? (base.hasSuffix("/") ? String(base.dropLast()) : base) : "https://api.rork.app"
+        let base = (Config.EXPO_PUBLIC_RORK_FUNCTIONS_URL.isEmpty ? Config.EXPO_PUBLIC_RORK_API_BASE_URL : Config.EXPO_PUBLIC_RORK_FUNCTIONS_URL)
+        let baseURL = !base.isEmpty ? (base.hasSuffix("/") ? String(base.dropLast()) : base) : "https://zomilanguage-backend.rork.app"
         guard let url = URL(string: "\(baseURL)/api/portal/me") else { return false }
 
         var request = URLRequest(url: url)

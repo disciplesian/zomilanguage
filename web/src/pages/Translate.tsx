@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   ArrowLeftRight,
   BadgeCheck,
+  Check,
   ClipboardPaste,
   Copy,
   Image as ImageIcon,
@@ -27,6 +28,24 @@ import { shareTranslationImage } from '@/lib/shareImage';
 const GUEST_MAX_CHARS = 500;
 const MEMBER_MAX_CHARS = 5000;
 const CONSENT_KEY = 'zomi_ai_consent_v1';
+
+/** Copies text with a temporary textarea; works where the async Clipboard API is blocked. */
+function legacyCopy(text: string): boolean {
+  try {
+    const el = document.createElement('textarea');
+    el.value = text;
+    el.setAttribute('readonly', '');
+    el.style.position = 'fixed';
+    el.style.opacity = '0';
+    document.body.appendChild(el);
+    el.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(el);
+    return ok;
+  } catch {
+    return false;
+  }
+}
 const BANNER_KEY = 'zomi_get_app_dismissed';
 
 type Lang = 'zomi' | 'english';
@@ -35,6 +54,7 @@ const Translate = () => {
   const { user, getAccessToken } = useAuth();
   const online = useOnline();
   const [source, setSource] = useState<Lang>('zomi');
+  const [copied, setCopied] = useState<boolean>(false);
   const target: Lang = source === 'zomi' ? 'english' : 'zomi';
   const [input, setInput] = useState<string>('');
   const [output, setOutput] = useState<string>('');
@@ -191,6 +211,11 @@ const Translate = () => {
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
+  // The copied check stays until the user edits the text.
+  useEffect(() => {
+    setCopied(false);
+  }, [input]);
+
   const swap = (): void => {
     const canReverse = output && !error;
     setTurns((t) => t + 180);
@@ -203,11 +228,18 @@ const Translate = () => {
   };
 
   const copy = async (): Promise<void> => {
+    let ok = false;
     try {
       await navigator.clipboard.writeText(output);
-      navigator.vibrate?.(10);
-      toast.success('Copied');
+      ok = true;
     } catch {
+      // Clipboard API blocked (older browsers, iframes, strict permissions): use the legacy path.
+      ok = legacyCopy(output);
+    }
+    if (ok) {
+      navigator.vibrate?.(10);
+      setCopied(true);
+    } else {
       toast.error("Couldn't copy. Select the text and copy it instead.");
     }
   };
@@ -381,8 +413,11 @@ const Translate = () => {
                   <button type="button" onClick={() => void shareText()} aria-label="Share as text" className="flex h-11 w-11 items-center justify-center rounded-full text-white/80 hover:bg-white/10">
                     <Share2 className="h-5 w-5" />
                   </button>
-                  <button type="button" onClick={() => void copy()} aria-label="Copy translation" className="flex h-11 w-11 items-center justify-center rounded-full text-white/80 hover:bg-white/10">
-                    <Copy className="h-5 w-5" />
+                  <span aria-live="polite" className="min-w-[3.5rem] text-right text-xs font-semibold text-[#5dffb0]">
+                    {copied ? 'Copied' : ''}
+                  </span>
+                  <button type="button" onClick={() => void copy()} aria-label="Copy translation" className="flex h-11 w-11 items-center justify-center rounded-full text-white/80 transition-transform hover:bg-white/10 active:scale-90">
+                    {copied ? <Check className="h-5 w-5 text-[#5dffb0]" /> : <Copy className="h-5 w-5" />}
                   </button>
                 </>
               )}

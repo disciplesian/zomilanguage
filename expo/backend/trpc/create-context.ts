@@ -1,7 +1,7 @@
 import { initTRPC, TRPCError } from "@trpc/server";
 import { FetchCreateContextFnOptions } from "@trpc/server/adapters/fetch";
 import superjson from "superjson";
-import { getDB, type ZomiDB } from "@/backend/db/client";
+import { getDB, type ZomiDB } from "../db/client";
 
 export const createContext = async (opts: FetchCreateContextFnOptions) => {
   let db: ZomiDB | null = null;

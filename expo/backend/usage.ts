@@ -280,5 +280,10 @@ export function usageSnapshot(): UsageSnapshot {
 }
 
 /** Long-lived safety net: flush aggregates even when traffic pauses. */
-setInterval(() => void flushDaily(), 60_000);
+if (!("WebSocketPair" in globalThis)) setInterval(() => void flushDaily(), 60_000);
+
+/** Flushes pending usage aggregates now (used by serverless runtimes). */
+export function flushUsageNow(): Promise<void> {
+  return flushDaily();
+}
 export const _dayMs = DAY_MS; // retained for tests

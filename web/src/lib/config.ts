@@ -6,25 +6,22 @@
  * can override them without a code change.
  */
 
-const env = import.meta.env as Record<string, string | undefined>;
-
-function pick(name: string, fallback: string): string {
-  const value = env[name];
+function pick(value: string | undefined, fallback: string): string {
   return value && value.length > 0 ? value.replace(/\/$/, '') : fallback;
 }
 
-export const AUTH_URL: string = pick('VITE_RORK_AUTH_URL', 'https://api.rork.com');
+export const AUTH_URL: string = pick(import.meta.env.VITE_RORK_AUTH_URL as string | undefined, 'https://api.rork.com');
 
 export const APP_KEY: string = pick(
-  'VITE_RORK_APP_KEY',
+  import.meta.env.VITE_RORK_APP_KEY as string | undefined,
   'rpk_sh3poliek53gzkv6oqmgz29xoc77qpbi'
 );
 
-export const PROJECT_ID: string = pick('VITE_PROJECT_ID', 'c71czcicbp014dj0l1fu3');
+export const PROJECT_ID: string = pick(import.meta.env.VITE_PROJECT_ID as string | undefined, 'c71czcicbp014dj0l1fu3');
 
 export const API_BASE_URL: string = pick(
-  'VITE_RORK_API_BASE_URL',
-  'https://dev-c71czcicbp014dj0l1fu3.rorktest.dev'
+  import.meta.env.VITE_RORK_API_BASE_URL as string | undefined,
+  '/~api'
 );
 
 export const SUPPORT_EMAIL = 'support@zomitranslator.com';

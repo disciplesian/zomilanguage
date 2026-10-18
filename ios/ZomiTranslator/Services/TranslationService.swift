@@ -33,11 +33,11 @@ nonisolated final class TranslationService: Sendable {
     static let shared = TranslationService()
 
     private var baseURL: String {
-        let url = Config.EXPO_PUBLIC_RORK_API_BASE_URL
+        let url = (Config.EXPO_PUBLIC_RORK_FUNCTIONS_URL.isEmpty ? Config.EXPO_PUBLIC_RORK_API_BASE_URL : Config.EXPO_PUBLIC_RORK_FUNCTIONS_URL)
         if !url.isEmpty {
             return url.hasSuffix("/") ? String(url.dropLast()) : url
         }
-        return "https://api.rork.app"
+        return "https://zomilanguage-backend.rork.app"
     }
 
     /// Stable per-device identifier for the free tier: guests get a daily

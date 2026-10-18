@@ -47,7 +47,10 @@ export function isRateLimited(keys: string[], limit = RATE_LIMIT_PER_MINUTE): bo
   return limited;
 }
 
-setInterval(() => {
+/** Workers forbid timers at global scope; isolates are short-lived there anyway. */
+const isWorkerRuntime = "WebSocketPair" in globalThis;
+
+if (!isWorkerRuntime) setInterval(() => {
   const cutoff = Date.now() - MINUTE_MS;
   for (const [key, list] of hits) {
     const fresh = list.filter((t) => t > cutoff);

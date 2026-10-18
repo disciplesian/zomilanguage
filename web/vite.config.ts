@@ -20,5 +20,5 @@ export default defineConfig(({ mode }) => ({
   },
   // Expose both VITE_* (Vite default) and EXPO_PUBLIC_* (Rork's cross-platform
   // public-env convention, written by tools like getOrCreateAuthConfig).
-  envPrefix: ["VITE_", "EXPO_PUBLIC_"],
+  envPrefix: ["VITE_"],
 }));

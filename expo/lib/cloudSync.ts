@@ -3,7 +3,7 @@ import type { GlossaryTerm } from '@/contexts/GlossaryContext';
 import type { CachedTranslation } from '@/contexts/TranslationCacheContext';
 
 const API_BASE = (() => {
-  const url = process.env.EXPO_PUBLIC_RORK_API_BASE_URL ?? '';
+  const url = process.env.EXPO_PUBLIC_RORK_FUNCTIONS_URL || process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://zomilanguage-backend.rork.app';
   return url.endsWith('/') ? url.slice(0, -1) : url;
 })();
 

@@ -1,0 +1,14 @@
+{
+  "name": "rork-functions",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@hono/trpc-server": "^0.4.0",
+    "@supabase/supabase-js": "^2.112.4",
+    "@trpc/server": "^11.7.2",
+    "hono": "^4.10.7",
+    "superjson": "^2.2.6",
+    "zod": "^4.1.13"
+  }
+}

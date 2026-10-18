@@ -1,15 +1,15 @@
 /**
  * Public share links for completed translations.
  * POSTs the translation to the backend, which stores it and returns a
- * unique id; anyone can then view it at https://zomi.me/t/<shareId>.
+ * unique id; anyone can then view it at https://zomilanguage.rork.app/t/<shareId>.
  */
 
 const API_BASE = (() => {
-  const url = process.env.EXPO_PUBLIC_RORK_API_BASE_URL ?? '';
+  const url = process.env.EXPO_PUBLIC_RORK_FUNCTIONS_URL || process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://zomilanguage-backend.rork.app';
   return url.endsWith('/') ? url.slice(0, -1) : url;
 })();
 
-const SHARE_WEB_BASE = 'https://zomi.me';
+const SHARE_WEB_BASE = 'https://zomilanguage.rork.app';
 
 /** Language code — 'zomi', 'english' or any catalog language. */
 export type ShareLanguage = string;
@@ -25,7 +25,7 @@ export interface CreateShareLinkInput {
 
 /**
  * Creates a public share link for a completed translation.
- * Returns the full URL (e.g. https://zomi.me/t/ab3k9xz2q1), or null when the
+ * Returns the full URL (e.g. https://zomilanguage.rork.app/t/ab3k9xz2q1), or null when the
  * backend is unreachable so callers can fall back to sharing plain text.
  */
 export async function createShareLink(input: CreateShareLinkInput): Promise<string | null> {

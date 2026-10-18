@@ -24,8 +24,8 @@ nonisolated final class DictionaryUpdateService {
     static let shared = DictionaryUpdateService()
 
     private var baseURL: String {
-        let base = Config.EXPO_PUBLIC_RORK_API_BASE_URL
-        if base.isEmpty { return "https://api.rork.app" }
+        let base = (Config.EXPO_PUBLIC_RORK_FUNCTIONS_URL.isEmpty ? Config.EXPO_PUBLIC_RORK_API_BASE_URL : Config.EXPO_PUBLIC_RORK_FUNCTIONS_URL)
+        if base.isEmpty { return "https://zomilanguage-backend.rork.app" }
         return base.hasSuffix("/") ? String(base.dropLast()) : base
     }
 

@@ -42,12 +42,12 @@ const MAX_RETRIES = 2;
 const NON_RETRYABLE = /cancelled|word.?limit|401|unauthorized|sign.?in|forbidden|400|429|quota|rate.?limit/i;
 
 const getBaseUrl = (): string => {
-  const url = process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
+  const url = process.env.EXPO_PUBLIC_RORK_FUNCTIONS_URL || process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
   if (url && url.length > 0) return url.replace(/\/$/, '');
   if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location) {
     return window.location.origin;
   }
-  return 'https://api.rork.app';
+  return 'https://zomilanguage-backend.rork.app';
 };
 
 /** Normalizes an "alternatives" payload from the done event. */

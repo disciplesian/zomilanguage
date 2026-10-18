@@ -17,7 +17,7 @@ export const trpc = createTRPCReact<AppRouter>();
 
 const getBaseUrl = (): string => {
   try {
-    const url = process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
+    const url = process.env.EXPO_PUBLIC_RORK_FUNCTIONS_URL || process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
     if (url && typeof url === 'string' && url.length > 0) {
       return url.replace(/\/$/, '');
     }
@@ -27,9 +27,9 @@ const getBaseUrl = (): string => {
       return window.location.origin;
     }
     
-    return 'https://api.rork.app';
+    return 'https://zomilanguage-backend.rork.app';
   } catch {
-    return 'https://api.rork.app';
+    return 'https://zomilanguage-backend.rork.app';
   }
 };
 
