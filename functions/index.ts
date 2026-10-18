@@ -7,6 +7,8 @@ import { flushUsageNow } from "../expo/backend/usage";
  * Production host for the Zomi Translator API.
  * The same Hono app that runs in development is mounted under /api, so every
  * client (iOS, Android, web, Expo) uses identical paths.
+ * Persistence (usage history, block list) goes through secret-gated Supabase
+ * RPCs defined in backend/sql/ (gemini-usage.sql, abuse-protection.sql).
  */
 const root = new Hono();
 root.get("/", (c) => c.json({ ok: true, service: "zomi-translator" }));

@@ -78,6 +78,27 @@ export type Database = {
         }
         Relationships: []
       }
+      blocked_clients: {
+        Row: {
+          created_at: string
+          kind: string
+          note: string
+          value: string
+        }
+        Insert: {
+          created_at?: string
+          kind?: string
+          note?: string
+          value: string
+        }
+        Update: {
+          created_at?: string
+          kind?: string
+          note?: string
+          value?: string
+        }
+        Relationships: []
+      }
       dictionary_dataset: {
         Row: {
           count: number
@@ -183,6 +204,36 @@ export type Database = {
           type?: string
           updated_at?: string
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      gemini_usage_daily: {
+        Row: {
+          by_model: Json
+          day: string
+          errors: number
+          output_tokens: number
+          prompt_tokens: number
+          requests: number
+          updated_at: string
+        }
+        Insert: {
+          by_model?: Json
+          day: string
+          errors?: number
+          output_tokens?: number
+          prompt_tokens?: number
+          requests?: number
+          updated_at?: string
+        }
+        Update: {
+          by_model?: Json
+          day?: string
+          errors?: number
+          output_tokens?: number
+          prompt_tokens?: number
+          requests?: number
+          updated_at?: string
         }
         Relationships: []
       }
@@ -480,8 +531,22 @@ export type Database = {
         Args: { p_admin_user_id: string; p_secret: string }
         Returns: Json
       }
+      admin_block_client: {
+        Args: {
+          p_admin_user_id: string
+          p_kind: string
+          p_note: string
+          p_secret: string
+          p_value: string
+        }
+        Returns: undefined
+      }
       admin_dictionary_history: {
         Args: { p_admin_user_id: string; p_secret: string }
+        Returns: Json
+      }
+      admin_gemini_usage: {
+        Args: { p_admin_user_id: string; p_days?: number; p_secret: string }
         Returns: Json
       }
       admin_log_dictionary_export: {
@@ -526,6 +591,10 @@ export type Database = {
           p_secret: string
           p_target_user_id: string
         }
+        Returns: undefined
+      }
+      admin_unblock_client: {
+        Args: { p_admin_user_id: string; p_secret: string; p_value: string }
         Returns: undefined
       }
       admin_users: {
@@ -583,6 +652,7 @@ export type Database = {
         Args: { p_anonymous_id: string; p_secret: string; p_words: number }
         Returns: number
       }
+      list_blocked_clients: { Args: { p_secret: string }; Returns: Json }
       log_translation: {
         Args: {
           p_confidence: number
@@ -595,6 +665,18 @@ export type Database = {
           p_translated_text: string
           p_user_id: string
           p_word_count: number
+        }
+        Returns: undefined
+      }
+      record_gemini_usage: {
+        Args: {
+          p_by_model: Json
+          p_day: string
+          p_errors: number
+          p_output_tokens: number
+          p_prompt_tokens: number
+          p_requests: number
+          p_secret: string
         }
         Returns: undefined
       }
@@ -632,12 +714,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -661,11 +743,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -686,11 +768,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -711,11 +793,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -728,11 +810,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

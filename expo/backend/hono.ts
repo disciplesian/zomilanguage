@@ -595,8 +595,8 @@ app.post("/translate/stream", async (c) => {
 async function ensureBlockListLoaded(): Promise<void> {
   await loadBlockList(async () => {
     const db = await getDB();
-    const { data } = await db.client.from("blocked_clients").select("value, kind, note, created_at");
-    const rows = (data ?? []) as { value: string; kind: string; note: string | null; created_at: string }[];
+    const data = await db.rpc<unknown>("list_blocked_clients");
+    const rows = (Array.isArray(data) ? data : []) as { value: string; kind: string; note: string | null; created_at: string }[];
     return rows.map((r) => ({
       value: String(r.value),
       kind: r.kind === "network" ? "network" : "device",
@@ -938,14 +938,14 @@ app.post("/admin/block", async (c) => {
   };
   addBlock(entry);
   try {
-    await guard.db.client.from("blocked_clients").upsert({
-      value: entry.value,
-      kind: entry.kind,
-      note: entry.note,
-      created_at: entry.createdAt,
+    await guard.db.rpc("admin_block_client", {
+      p_admin_user_id: guard.auth.userId,
+      p_value: entry.value,
+      p_kind: entry.kind,
+      p_note: entry.note,
     });
-  } catch {
-    // persistence optional (backend/sql/abuse-protection.sql)
+  } catch (err) {
+    console.warn("[admin] block persist failed:", err instanceof Error ? err.message : err);
   }
   return c.json({ success: true });
 });
@@ -964,9 +964,12 @@ app.delete("/admin/block", async (c) => {
   if (!value) return c.json({ error: "missing_value" }, 400);
   removeBlock(value);
   try {
-    await guard.db.client.from("blocked_clients").delete().eq("value", value);
-  } catch {
-    // persistence optional
+    await guard.db.rpc("admin_unblock_client", {
+      p_admin_user_id: guard.auth.userId,
+      p_value: value,
+    });
+  } catch (err) {
+    console.warn("[admin] unblock persist failed:", err instanceof Error ? err.message : err);
   }
   return c.json({ success: true });
 });
