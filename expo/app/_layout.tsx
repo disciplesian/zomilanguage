@@ -11,6 +11,7 @@ import { TranslationCacheProvider } from "@/contexts/TranslationCacheContext";
 import { GlossaryProvider } from "@/contexts/GlossaryContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { SyncProvider } from "@/contexts/SyncContext";
+import { StoreCaptionsProvider } from "@/contexts/StoreCaptionsContext";
 import { trpc, getTrpcClient } from "@/lib/trpc";
 import { setupGlobalErrorHandlers } from "@/lib/errorHandler";
 
@@ -221,7 +222,9 @@ export default function RootLayout() {
                   <GlossaryProvider>
                     <AuthProvider>
                       <SyncProvider>
-                        <RootLayoutNav />
+                        <StoreCaptionsProvider>
+                          <RootLayoutNav />
+                        </StoreCaptionsProvider>
                       </SyncProvider>
                     </AuthProvider>
                   </GlossaryProvider>

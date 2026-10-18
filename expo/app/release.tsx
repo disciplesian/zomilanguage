@@ -23,12 +23,18 @@ import {
   ChevronUp,
   Type,
   Image as ImageIcon,
+  Globe,
 } from 'lucide-react-native';
 import GlassCard from '@/components/GlassCard';
 import PageBottomNav, { PAGE_BOTTOM_NAV_SPACING } from '@/components/PageBottomNav';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { fetchPortalProfile } from '@/lib/portal';
+import {
+  useStoreCaptions,
+  STORE_LOCALES,
+  DEFAULT_STORE_LOCALE,
+} from '@/contexts/StoreCaptionsContext';
 
 /** The listing strings the Play listing was published with (play-store/listing/en-US.json). */
 const LISTING = {
@@ -55,12 +61,13 @@ const RELEASE = {
   listingStatus: 'Text updated for current features',
 };
 
-const SCREENSHOTS: { key: string; source: number; defaultCaption: string }[] = [
-  { key: '01-translator', source: require('../assets/store/01-translator.png'), defaultCaption: 'Instant Zomi translation' },
-  { key: '02-glossary', source: require('../assets/store/02-glossary.png'), defaultCaption: 'Offline Zomi dictionary' },
-  { key: '03-pronunciation', source: require('../assets/store/03-pronunciation.png'), defaultCaption: 'Say it right' },
-  { key: '04-settings', source: require('../assets/store/04-settings.png'), defaultCaption: 'Made your own' },
+const SCREENSHOTS: { key: string; source: number }[] = [
+  { key: '01-translator', source: require('../assets/store/01-translator.png') },
+  { key: '02-glossary', source: require('../assets/store/02-glossary.png') },
+  { key: '03-pronunciation', source: require('../assets/store/03-pronunciation.png') },
+  { key: '04-settings', source: require('../assets/store/04-settings.png') },
 ];
+const SCREENSHOT_KEYS: string[] = SCREENSHOTS.map((s) => s.key);
 
 const FEATURE_GRAPHIC = require('../assets/store/feature-graphic.png');
 const APP_ICON = require('../assets/images/icon.png');
@@ -82,9 +89,8 @@ export default function StoreReleaseScreen() {
   const { user, getAccessToken } = useAuth();
   const router = useRouter();
   const [expanded, setExpanded] = useState<'about' | 'notes' | null>(null);
-  const [captions, setCaptions] = useState<Record<string, string>>(() =>
-    Object.fromEntries(SCREENSHOTS.map((s) => [s.key, s.defaultCaption])),
-  );
+  const [locale, setLocale] = useState<string>(DEFAULT_STORE_LOCALE);
+  const { getCaption, setCaption, countFilled } = useStoreCaptions();
 
   const profileQuery = useQuery({
     queryKey: ['portal-profile', user?.id],
@@ -225,10 +231,54 @@ export default function StoreReleaseScreen() {
             <Text style={styles.playMuted}>Free · No sign-in needed</Text>
           </View>
           <Text style={styles.playShortDescription}>{LISTING.shortDescription}</Text>
+          <View style={styles.localeHeader}>
+            <Globe size={13} color={PLAY.textMuted} />
+            <Text style={styles.localeHeaderText}>Screenshot captions</Text>
+            <Text style={styles.localeCount}>
+              {countFilled(locale, SCREENSHOT_KEYS)}/{SCREENSHOTS.length} filled
+            </Text>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.localeRow}
+            keyboardShouldPersistTaps="handled"
+          >
+            {STORE_LOCALES.map((l) => {
+              const isActive = l.code === locale;
+              const filled = countFilled(l.code, SCREENSHOT_KEYS);
+              return (
+                <TouchableOpacity
+                  key={l.code}
+                  style={[styles.localeChip, isActive && styles.localeChipActive]}
+                  onPress={() => setLocale(l.code)}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isActive }}
+                  accessibilityLabel={`${l.label}, ${filled} of ${SCREENSHOTS.length} captions`}
+                >
+                  <Text style={[styles.localeChipCode, isActive && styles.localeChipCodeActive]}>
+                    {l.code}
+                  </Text>
+                  <View
+                    style={[
+                      styles.localeDot,
+                      filled === SCREENSHOTS.length
+                        ? styles.localeDotFull
+                        : filled > 0
+                          ? styles.localeDotPartial
+                          : null,
+                    ]}
+                  />
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.playScreenshotRow}
+            keyboardShouldPersistTaps="handled"
           >
             {SCREENSHOTS.map((shot) => (
               <View key={shot.key} style={styles.playScreenshotWrap}>
@@ -240,15 +290,18 @@ export default function StoreReleaseScreen() {
                 />
                 <TextInput
                   style={styles.playCaptionInput}
-                  value={captions[shot.key] ?? ''}
-                  onChangeText={(text) =>
-                    setCaptions((prev) => ({ ...prev, [shot.key]: text }))
+                  value={getCaption(locale, shot.key)}
+                  onChangeText={(text) => setCaption(locale, shot.key, text)}
+                  placeholder={
+                    locale === DEFAULT_STORE_LOCALE
+                      ? 'Caption…'
+                      : getCaption(DEFAULT_STORE_LOCALE, shot.key) || 'Caption…'
                   }
-                  placeholder="Caption…"
+                  autoCorrect={false}
                   placeholderTextColor={PLAY.textMuted}
                   maxLength={40}
                   returnKeyType="done"
-                  accessibilityLabel={`Caption for screenshot ${shot.key}`}
+                  accessibilityLabel={`${locale} caption for screenshot ${shot.key}`}
                 />
               </View>
             ))}
@@ -496,6 +549,62 @@ const styles = StyleSheet.create({
   playScreenshot: {
     width: 130,
     height: 282,
+  },
+  localeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  localeHeaderText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: PLAY.textMuted,
+  },
+  localeCount: {
+    fontSize: 11,
+    color: PLAY.textMuted,
+  },
+  localeRow: {
+    paddingHorizontal: 16,
+    gap: 8,
+    paddingBottom: 12,
+  },
+  localeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minHeight: 34,
+    paddingHorizontal: 12,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: 'rgba(232, 234, 237, 0.2)',
+  },
+  localeChipActive: {
+    backgroundColor: 'rgba(1, 135, 95, 0.25)',
+    borderColor: PLAY.green,
+  },
+  localeChipCode: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: PLAY.textMuted,
+  },
+  localeChipCodeActive: {
+    color: PLAY.text,
+  },
+  localeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(232, 234, 237, 0.2)',
+  },
+  localeDotPartial: {
+    backgroundColor: '#FBBC04',
+  },
+  localeDotFull: {
+    backgroundColor: '#34A853',
   },
   playCaptionInput: {
     width: 130,
