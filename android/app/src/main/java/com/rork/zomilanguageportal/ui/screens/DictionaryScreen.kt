@@ -56,6 +56,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import com.rork.zomilanguageportal.data.tr
 import com.rork.zomilanguageportal.data.DictionaryEntry
 import com.rork.zomilanguageportal.data.DictionaryRepository
 import com.rork.zomilanguageportal.data.Suggestion
@@ -138,7 +139,7 @@ fun DictionaryScreen(viewModel: DictionaryViewModel = viewModel()) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Icon(Icons.Filled.MenuBook, contentDescription = null, tint = PortalColors.Cyan)
                     Text(
-                        "Zomi Dictionary",
+                        tr("Zomi Dictionary"),
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Bold,
                         color = PortalColors.TextPrimary,
@@ -158,7 +159,7 @@ fun DictionaryScreen(viewModel: DictionaryViewModel = viewModel()) {
                 // Badge sits beside the count so the title never truncates on 360dp phones.
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
                     Text(
-                        "Offline ready",
+                        tr("Offline ready"),
                         fontSize = 10.sp,
                         maxLines = 1,
                         softWrap = false,
@@ -208,7 +209,7 @@ fun DictionaryScreen(viewModel: DictionaryViewModel = viewModel()) {
                         Box(Modifier.fillMaxWidth()) {
                             if (state.query.isEmpty()) {
                                 Text(
-                                    "Search English or Zomi…",
+                                    tr("Search English or Zomi…"),
                                     fontSize = 16.sp,
                                     color = PortalColors.TextFaint,
                                 )

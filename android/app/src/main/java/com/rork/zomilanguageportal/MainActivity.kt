@@ -11,6 +11,7 @@ import com.rork.zomilanguageportal.data.AuthManager
 import com.rork.zomilanguageportal.data.DictionaryRepository
 import com.rork.zomilanguageportal.data.HistoryRepository
 import com.rork.zomilanguageportal.data.ProblemReporter
+import com.rork.zomilanguageportal.data.UiStrings
 import com.rork.zomilanguageportal.ui.navigation.AppNavigation
 import com.rork.zomilanguageportal.ui.theme.AppTheme
 import kotlinx.coroutines.Dispatchers
@@ -27,6 +28,7 @@ class MainActivity : ComponentActivity() {
 
         ProblemReporter.install(applicationContext)
         lifecycleScope.launch(Dispatchers.IO) { ProblemReporter.sendPending(applicationContext) }
+        UiStrings.initialize(applicationContext)
         AuthManager.initialize(applicationContext)
         HistoryRepository.initialize(applicationContext)
         lifecycleScope.launch { AuthManager.restoreSession() }

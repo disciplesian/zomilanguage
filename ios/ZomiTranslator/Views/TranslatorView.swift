@@ -73,7 +73,7 @@ struct TranslatorView: View {
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
-                Button("Done") {
+                Button(L("Done")) {
                     inputFocused = false
                     viewModel.translateNow()
                 }
@@ -132,7 +132,7 @@ struct TranslatorView: View {
         HStack(spacing: 10) {
             Image(systemName: "wifi.slash")
                 .accessibilityHidden(true)
-            Text("Offline: dictionary words still work.")
+            Text(L("Offline: dictionary words still work."))
                 .font(.subheadline.weight(.medium))
             Spacer(minLength: 0)
         }
@@ -179,7 +179,7 @@ struct TranslatorView: View {
                         )
                 }
                 .buttonStyle(PressableButtonStyle())
-                .accessibilityLabel("Swap languages")
+                .accessibilityLabel(L("Swap languages"))
                 .accessibilityHint("Now translating \(viewModel.sourceLabel) to \(viewModel.targetLabel)")
 
                 languagePill(viewModel.targetLabel, highlighted: true)
@@ -219,7 +219,7 @@ struct TranslatorView: View {
                 }
 
                 TextField(
-                    "Type \(viewModel.sourceLabel) text\u{2026}",
+                    L("Type or paste text"),
                     text: Binding(
                         get: { viewModel.inputText },
                         set: { newValue in
@@ -282,8 +282,8 @@ struct TranslatorView: View {
                                 .foregroundStyle(colors.textSecondary)
                                 .frame(width: 44, height: 44)
                         }
-                        .accessibilityLabel("Share translation")
-                        iconButton("doc.on.doc", label: "Copy translation") { copyOutput() }
+                        .accessibilityLabel(L("Share"))
+                        iconButton("doc.on.doc", label: "Copy") { copyOutput() }
                     }
                 }
 
@@ -335,7 +335,7 @@ struct TranslatorView: View {
         } else {
             Group {
                 if viewModel.outputText.isEmpty {
-                    Text("Translation appears here")
+                    Text(L("Translation appears here"))
                         .foregroundStyle(colors.textMuted)
                 } else {
                     Text(viewModel.outputText)
@@ -398,12 +398,12 @@ struct TranslatorView: View {
                 .frame(width: 44, height: 44)
         }
         .buttonStyle(PressableButtonStyle())
-        .accessibilityLabel(label)
+        .accessibilityLabel(L(label))
     }
 
     private func pillButton(_ title: String, filled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(title)
+            Text(L(title))
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(filled ? Color(hex: 0x0B1020) : colors.text)
                 .padding(.horizontal, 20)
@@ -416,7 +416,7 @@ struct TranslatorView: View {
     // MARK: - Actions
 
     private func showToast(_ message: String) {
-        withAnimation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.8)) { toast = message }
+        withAnimation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.8)) { toast = L(message) }
         Task {
             try? await Task.sleep(for: .seconds(1.6))
             withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) { toast = nil }

@@ -10,6 +10,8 @@ import { flushProblemsNow } from "../expo/backend/problems";
  * client (iOS, Android, web, Expo) uses identical paths.
  * Persistence (usage history, block list) goes through secret-gated Supabase
  * RPCs defined in backend/sql/ (gemini-usage.sql, abuse-protection.sql).
+ * Note: the verified dictionary is bundled from expo/constants/dictionary.json;
+ * edit this file (or any under functions/) to redeploy after data changes.
  * Each instance re-reads the block list every 30s so admin blocks reach all
  * instances within ~30s. Problem reports (expo/backend/problems.ts) are
  * written during the request and also flushed here as a backstop.

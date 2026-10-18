@@ -12,6 +12,7 @@ import { GlossaryProvider } from "@/contexts/GlossaryContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { SyncProvider } from "@/contexts/SyncContext";
 import { StoreCaptionsProvider } from "@/contexts/StoreCaptionsContext";
+import { UiLanguageProvider } from "@/contexts/UiLanguageContext";
 import { trpc, getTrpcClient } from "@/lib/trpc";
 import { setupGlobalErrorHandlers } from "@/lib/errorHandler";
 import { installProblemReporting, reportProblem } from "@/lib/problems";
@@ -220,6 +221,7 @@ export default function RootLayout() {
         <trpc.Provider client={trpcClient} queryClient={queryClient}>
           <QueryClientProvider client={queryClient}>
             <ThemeProvider>
+            <UiLanguageProvider>
               <UserProfileProvider>
                 <TranslationCacheProvider>
                   <GlossaryProvider>
@@ -233,6 +235,7 @@ export default function RootLayout() {
                   </GlossaryProvider>
                 </TranslationCacheProvider>
               </UserProfileProvider>
+            </UiLanguageProvider>
             </ThemeProvider>
           </QueryClientProvider>
         </trpc.Provider>

@@ -3,6 +3,7 @@ import { Link, NavLink, useLocation } from 'react-router-dom';
 import { Languages, BookOpen, History, Settings, BadgeCheck, UserRound } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { useUiLanguage } from '@/lib/i18n';
 
 interface NavItem {
   to: string;
@@ -32,6 +33,7 @@ const NAV_ITEMS: NavItem[] = [
  */
 export function SiteLayout({ children }: { children: ReactNode }) {
   const location = useLocation();
+  const { t } = useUiLanguage();
 
   return (
     <div className="relative min-h-[100dvh] overflow-x-hidden bg-[#2a2f45] text-white">
@@ -64,15 +66,15 @@ export function SiteLayout({ children }: { children: ReactNode }) {
                   )}
                 >
                   <Icon className="h-5 w-5" aria-hidden="true" />
-                  {item.label}
+                  {t(item.label)}
                 </NavLink>
               );
             })}
           </nav>
           <div className="mt-auto space-y-1 px-2 text-xs text-white/60">
-            <Link to="/support" className="block py-1 hover:text-white">Help &amp; Support</Link>
-            <Link to="/privacy" className="block py-1 hover:text-white">Privacy Policy</Link>
-            <Link to="/terms" className="block py-1 hover:text-white">Terms of Service</Link>
+            <Link to="/support" className="block py-1 hover:text-white">{t('Help & Support')}</Link>
+            <Link to="/privacy" className="block py-1 hover:text-white">{t('Privacy Policy')}</Link>
+            <Link to="/terms" className="block py-1 hover:text-white">{t('Terms of Service')}</Link>
             <p className="pt-2 text-white/45">© {new Date().getFullYear()} Zomi Translator</p>
           </div>
         </aside>
@@ -116,7 +118,7 @@ export function SiteLayout({ children }: { children: ReactNode }) {
                 )}
               >
                 <Icon className="h-[22px] w-[22px]" aria-hidden="true" />
-                {item.label}
+                {t(item.label)}
               </NavLink>
             );
           })}

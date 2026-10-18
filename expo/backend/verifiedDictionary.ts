@@ -200,6 +200,7 @@ const STOPWORDS = new Set([
 export function groundingFor(text: string, source: string, limit = 14): VerifiedMatch[] {
   const words = text
     .toLowerCase()
+    .replace(/[\u2018\u2019]/g, "'")
     .replace(/[^\p{L}\p{M}'\s-]/gu, " ")
     .split(/\s+/)
     .filter(Boolean);

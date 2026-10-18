@@ -80,25 +80,25 @@ struct HistoryView: View {
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .scrollDismissesKeyboard(.immediately)
-            .searchable(text: $searchQuery, prompt: "Search history")
+            .searchable(text: $searchQuery, prompt: Text(L("Search history")))
             .autocorrectionDisabled()
             .textInputAutocapitalization(.never)
         }
-        .navigationTitle("History")
+        .navigationTitle(L("History"))
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             if !store.entries.isEmpty {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Clear all", role: .destructive) { showClearAll = true }
+                    Button(L("Clear all"), role: .destructive) { showClearAll = true }
                 }
             }
         }
-        .confirmationDialog("Clear all history?", isPresented: $showClearAll, titleVisibility: .visible) {
-            Button("Clear all", role: .destructive) {
+        .confirmationDialog(L("Clear all history?"), isPresented: $showClearAll, titleVisibility: .visible) {
+            Button(L("Clear all"), role: .destructive) {
                 Haptics.warning()
                 withAnimation { store.clear() }
             }
-            Button("Cancel", role: .cancel) {}
+            Button(L("Cancel"), role: .cancel) {}
         } message: {
             Text("This removes every saved translation on this device. It can't be undone.")
         }
@@ -113,7 +113,7 @@ struct HistoryView: View {
                         Haptics.selection()
                         filter = option
                     } label: {
-                        Text(option.rawValue)
+                        Text(L(option.rawValue))
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(active ? colors.primary : colors.textSecondary)
                             .padding(.horizontal, 14)
@@ -134,12 +134,12 @@ struct HistoryView: View {
                 .scaledFont(size: 48)
                 .foregroundStyle(colors.textMuted)
                 .accessibilityHidden(true)
-            Text(store.entries.isEmpty ? "No translations yet" : "Nothing found")
+            Text(store.entries.isEmpty ? L("No history yet") : L("No matches"))
                 .font(.title3.bold())
                 .foregroundStyle(colors.text)
             Text(store.entries.isEmpty
-                 ? "Your translations are saved here automatically."
-                 : "Try a different word or filter.")
+                 ? L("Your translations will appear here.")
+                 : L("Try a different word or filter."))
                 .font(.body)
                 .foregroundStyle(colors.textSecondary)
                 .multilineTextAlignment(.center)
@@ -147,7 +147,7 @@ struct HistoryView: View {
                 Button {
                     router.open(.translate, focus: true)
                 } label: {
-                    Text("Start translating")
+                    Text(L("Start translating"))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Color(hex: 0x0B1020))
                         .padding(.horizontal, 20)
@@ -200,7 +200,7 @@ struct HistoryView: View {
                             if copiedId == item.id { copiedId = nil }
                         }
                     } label: {
-                        Label(copiedId == item.id ? "Copied" : "Copy", systemImage: copiedId == item.id ? "checkmark" : "doc.on.doc")
+                        Label(copiedId == item.id ? L("Copied") : L("Copy"), systemImage: copiedId == item.id ? "checkmark" : "doc.on.doc")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(copiedId == item.id ? colors.success : colors.primary)
                             .frame(minHeight: 36)

@@ -72,7 +72,7 @@ struct DictionaryView: View {
                 await model.refreshDictionary()
             }
         }
-        .navigationTitle("Dictionary")
+        .navigationTitle(L("Dictionary"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
@@ -109,7 +109,7 @@ struct DictionaryView: View {
                 .scaledFont(size: 26)
                 .foregroundStyle(colors.primary)
             VStack(alignment: .leading, spacing: 4) {
-                Text("Zomi Dictionary")
+                Text(L("Zomi Dictionary"))
                     .scaledFont(size: 22, weight: .bold)
                     .foregroundStyle(colors.text)
                 Text("\(model.totalCount.formatted()) verified entries · English ⇄ Zomi")
@@ -120,7 +120,7 @@ struct DictionaryView: View {
             HStack(spacing: 4) {
                 Image(systemName: "wifi.slash")
                     .scaledFont(size: 10)
-                Text("Offline ready")
+                Text(L("Offline ready"))
                     .scaledFont(size: 10, weight: .bold)
                     .textCase(.uppercase)
             }
@@ -142,7 +142,7 @@ struct DictionaryView: View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(colors.textMuted)
-            TextField("Search English or Zomi…", text: $model.query)
+            TextField(L("Search English or Zomi…"), text: $model.query)
                 .font(.body)
                 .foregroundStyle(colors.text)
                 .focused($searchFocused)

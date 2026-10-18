@@ -24,6 +24,7 @@ import { history } from '@/lib/history';
 import { streamTranslation, WORD_LIMIT_ERROR } from '@/lib/portalApi';
 import { useOnline } from '@/hooks/use-online';
 import { shareTranslationImage } from '@/lib/shareImage';
+import { useUiLanguage } from '@/lib/i18n';
 
 const GUEST_MAX_CHARS = 500;
 const MEMBER_MAX_CHARS = 5000;
@@ -56,6 +57,7 @@ const Translate = () => {
   const [source, setSource] = useState<Lang>('zomi');
   const [copied, setCopied] = useState<boolean>(false);
   const target: Lang = source === 'zomi' ? 'english' : 'zomi';
+  const { t } = useUiLanguage();
   const [input, setInput] = useState<string>('');
   const [output, setOutput] = useState<string>('');
   const [alternatives, setAlternatives] = useState<string[]>([]);
@@ -73,8 +75,8 @@ const Translate = () => {
   const historyRef = useRef<number | null>(null);
   const lastKeyRef = useRef<string>('');
 
-  const sourceLabel = source === 'zomi' ? 'Zomi' : 'English';
-  const targetLabel = target === 'zomi' ? 'Zomi' : 'English';
+  const sourceLabel = source === 'zomi' ? 'Zomi' : t('English');
+  const targetLabel = target === 'zomi' ? 'Zomi' : t('English');
   const maxChars = user ? MEMBER_MAX_CHARS : GUEST_MAX_CHARS;
 
   const resetOutput = useCallback((): void => {
@@ -270,8 +272,8 @@ const Translate = () => {
     <SiteLayout>
       <div className="mx-auto w-full max-w-6xl px-4 pt-5 sm:px-6 md:pt-10">
         <div className="mb-5 hidden md:block">
-          <h1 className="text-3xl font-bold tracking-tight">Translate</h1>
-          <p className="mt-1 text-sm text-white/70">Free, instant Zomi ⇄ English. No sign-in needed.</p>
+          <h1 className="text-3xl font-bold tracking-tight">{t('Translate')}</h1>
+          <p className="mt-1 text-sm text-white/70">{t('Free, instant Zomi ⇄ English. No sign-in needed.')}</p>
         </div>
 
         {showBanner && (
@@ -296,7 +298,7 @@ const Translate = () => {
         {!online && (
           <div className="mb-4 flex items-center gap-2.5 rounded-xl border border-[#ffd000]/35 bg-[#ffd000]/10 px-4 py-3 text-sm font-medium text-[#ffd000]">
             <WifiOff className="h-4 w-4" aria-hidden="true" />
-            Offline: dictionary words still work.
+            {t('Offline: dictionary words still work.')}
           </div>
         )}
 
@@ -366,7 +368,7 @@ const Translate = () => {
                   void runTranslation(input.trim(), source, true);
                 }
               }}
-              placeholder={`Type ${sourceLabel} text…`}
+              placeholder={t('Type or paste text')}
               aria-label={`Text to translate from ${sourceLabel}`}
               rows={5}
               autoCapitalize="off"
@@ -392,7 +394,7 @@ const Translate = () => {
               {isVerified && output && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-[#1d9bf0]/20 px-2 py-0.5 text-[11px] font-bold text-[#7cc8ff]">
                   <BadgeCheck className="h-3 w-3" aria-hidden="true" />
-                  Dictionary
+                  {t('Verified')}
                 </span>
               )}
               <span className="flex-1" />
@@ -405,18 +407,18 @@ const Translate = () => {
                         toast.error("Couldn't create the image.")
                       )
                     }
-                    aria-label="Share as image"
+                    aria-label={t('Share as image')}
                     className="flex h-11 w-11 items-center justify-center rounded-full text-white/80 hover:bg-white/10"
                   >
                     <ImageIcon className="h-5 w-5" />
                   </button>
-                  <button type="button" onClick={() => void shareText()} aria-label="Share as text" className="flex h-11 w-11 items-center justify-center rounded-full text-white/80 hover:bg-white/10">
+                  <button type="button" onClick={() => void shareText()} aria-label={t('Share as text')} className="flex h-11 w-11 items-center justify-center rounded-full text-white/80 hover:bg-white/10">
                     <Share2 className="h-5 w-5" />
                   </button>
                   <span aria-live="polite" className="min-w-[3.5rem] text-right text-xs font-semibold text-[#5dffb0]">
-                    {copied ? 'Copied' : ''}
+                    {copied ? t('Copied') : ''}
                   </span>
-                  <button type="button" onClick={() => void copy()} aria-label="Copy translation" className="flex h-11 w-11 items-center justify-center rounded-full text-white/80 transition-transform hover:bg-white/10 active:scale-90">
+                  <button type="button" onClick={() => void copy()} aria-label={t('Copy')} className="flex h-11 w-11 items-center justify-center rounded-full text-white/80 transition-transform hover:bg-white/10 active:scale-90">
                     {copied ? <Check className="h-5 w-5 text-[#5dffb0]" /> : <Copy className="h-5 w-5" />}
                   </button>
                 </>
@@ -429,7 +431,7 @@ const Translate = () => {
                   <p className="text-[15px] leading-relaxed text-white/85">{error}</p>
                   {isLimit ? (
                     <Link to="/settings" className="inline-flex min-h-11 items-center rounded-full bg-[#00f0ff] px-5 text-sm font-semibold text-[#0b1020]">
-                      Sign in
+                      {t('Sign in')}
                     </Link>
                   ) : (
                     <button
@@ -437,7 +439,7 @@ const Translate = () => {
                       onClick={() => void runTranslation(input.trim(), source, true)}
                       className="inline-flex min-h-11 items-center rounded-full bg-white/10 px-5 text-sm font-semibold"
                     >
-                      Try again
+                      {t('Try again')}
                     </button>
                   )}
                 </div>
@@ -449,7 +451,7 @@ const Translate = () => {
                   {isConnecting ? 'Connecting…' : 'Translating…'}
                 </div>
               ) : (
-                <p className="text-[20px] text-white/50">Translation appears here</p>
+                <p className="text-[20px] text-white/50">{t('Translation appears here')}</p>
               )}
             </div>
             {alternatives.length > 0 && hasResult && (
@@ -477,7 +479,7 @@ const Translate = () => {
         </div>
 
         {freeLeft !== null && freeLeft > 0 && !user && (
-          <p className="mt-3 text-center text-sm text-white/65">Free today: {freeLeft.toLocaleString()} words left</p>
+          <p className="mt-3 text-center text-sm text-white/65">{t('Free today')}: {freeLeft.toLocaleString()} {t('words left')}</p>
         )}
       </div>
     </SiteLayout>

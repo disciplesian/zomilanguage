@@ -7,40 +7,43 @@ struct ContentView: View {
     @Environment(AppRouter.self) private var router
     @AppStorage("whats_new_seen_v12") private var whatsNewSeen = false
     @State private var showWhatsNew = false
+    @AppStorage(UiLanguage.storageKey) private var uiLanguage: String = UiLanguage.english.rawValue
 
     var body: some View {
         @Bindable var router = router
         TabView(selection: $router.selectedTab) {
-            Tab("Translate", systemImage: "character.bubble", value: AppTab.translate) {
+            Tab(L("Translate"), systemImage: "character.bubble", value: AppTab.translate) {
                 NavigationStack {
                     TranslatorView()
                         .toolbar(.hidden, for: .navigationBar)
                 }
             }
 
-            Tab("Dictionary", systemImage: "book.fill", value: AppTab.dictionary) {
+            Tab(L("Dictionary"), systemImage: "book.fill", value: AppTab.dictionary) {
                 NavigationStack {
                     DictionaryView()
-                        .navigationTitle("Dictionary")
+                        .navigationTitle(L("Dictionary"))
                         .navigationBarTitleDisplayMode(.inline)
                 }
             }
 
-            Tab("History", systemImage: "clock.arrow.circlepath", value: AppTab.history) {
+            Tab(L("History"), systemImage: "clock.arrow.circlepath", value: AppTab.history) {
                 NavigationStack {
                     HistoryView()
                 }
             }
 
-            Tab("Settings", systemImage: "gearshape", value: AppTab.settings) {
+            Tab(L("Settings"), systemImage: "gearshape", value: AppTab.settings) {
                 NavigationStack {
                     SettingsView()
-                        .navigationTitle("Settings")
+                        .navigationTitle(L("Settings"))
                         .navigationBarTitleDisplayMode(.inline)
                 }
             }
         }
         .tabViewStyle(.sidebarAdaptable)
+        // Rebuilds every screen when the interface language changes.
+        .id(uiLanguage)
         .tint(theme.colors.primary)
         .preferredColorScheme(.dark)
         .onChange(of: router.selectedTab) { _, _ in

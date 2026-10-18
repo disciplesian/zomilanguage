@@ -5,6 +5,7 @@ import { Platform, Dimensions } from "react-native";
 
 import Colors from "@/constants/colors";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useUiLanguage } from "@/contexts/UiLanguageContext";
 
 const getTabBarHeight = (): number => {
   try {
@@ -32,6 +33,7 @@ const getTabBarPaddingBottom = (): number => {
 
 export default function TabLayout() {
   const theme = useTheme();
+  const { t } = useUiLanguage();
   const colors = useMemo(() => theme?.colors ? { ...Colors, ...theme.colors } : Colors, [theme?.colors]);
 
   const tabBarStyle = useMemo(() => ({
@@ -68,7 +70,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Translate",
+          title: t("Translate"),
           tabBarIcon: ({ color, size }) => <Languages color={color} size={size} />,
         }}
       />
@@ -76,7 +78,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="dictionary"
         options={{
-          title: "Dictionary",
+          title: t("Dictionary"),
           tabBarIcon: ({ color, size }) => <BookOpen color={color} size={size} />,
         }}
       />
@@ -84,14 +86,14 @@ export default function TabLayout() {
       <Tabs.Screen
         name="history"
         options={{
-          title: "History",
+          title: t("History"),
           tabBarIcon: ({ color, size }) => <History color={color} size={size} />,
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
-          title: "Settings",
+          title: t("Settings"),
           tabBarIcon: ({ color, size }) => <Settings color={color} size={size} />,
         }}
       />

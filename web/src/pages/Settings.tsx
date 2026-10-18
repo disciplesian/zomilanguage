@@ -7,6 +7,7 @@ import {
   HelpCircle,
   Info,
   LogOut,
+  Languages,
   ShieldCheck,
   ShieldHalf,
   Trash2,
@@ -18,6 +19,7 @@ import { toast } from 'sonner';
 import { SiteLayout, GlassCard } from '@/components/SiteLayout';
 import { SignInPanel } from '@/components/SignInPanel';
 import { useAuth } from '@/lib/auth';
+import { useUiLanguage, setUiLanguage, type UiLanguage } from '@/lib/i18n';
 import { history } from '@/lib/history';
 import { deleteAccount, fetchPortalProfile } from '@/lib/portalApi';
 import {
@@ -47,6 +49,7 @@ const Settings = () => {
   const { user, getAccessToken, signOut } = useAuth();
   const [confirmDelete, setConfirmDelete] = useState<boolean>(false);
   const [confirmClear, setConfirmClear] = useState<boolean>(false);
+  const { language, t } = useUiLanguage();
 
   const profileQuery = useQuery({
     queryKey: ['portal-profile', user?.id],
@@ -74,12 +77,40 @@ const Settings = () => {
     <SiteLayout>
       <div className="mx-auto w-full max-w-2xl space-y-6 px-4 pt-5 sm:px-6 md:pt-10">
         <div>
-          <h1 className="text-[28px] font-bold tracking-tight sm:text-3xl">Settings</h1>
-          <p className="mt-1 text-white/75">Account, help, and privacy</p>
+          <h1 className="text-[28px] font-bold tracking-tight sm:text-3xl">{t('Settings')}</h1>
+          <p className="mt-1 text-white/75">{t('Account, help, and privacy')}</p>
         </div>
 
+        <section aria-labelledby="language-heading" className="space-y-3">
+          <h2 id="language-heading" className="text-lg font-bold">{t('Interface language')}</h2>
+          <GlassCard className="p-2">
+            <div role="radiogroup" aria-labelledby="language-heading" className="grid grid-cols-2 gap-2">
+              {(['en', 'zo'] as UiLanguage[]).map((code) => {
+                const active = language === code;
+                return (
+                  <button
+                    key={code}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => setUiLanguage(code)}
+                    className={
+                      'flex min-h-14 items-center justify-center gap-2 rounded-xl text-[15px] font-semibold transition-all active:scale-[0.97] ' +
+                      (active ? 'bg-[#00f0ff]/15 text-[#00f0ff] ring-1 ring-[#00f0ff]/40' : 'text-white/80 hover:bg-white/5')
+                    }
+                  >
+                    <Languages className="h-4 w-4" aria-hidden="true" />
+                    {code === 'en' ? 'English' : 'Zomi'}
+                  </button>
+                );
+              })}
+            </div>
+          </GlassCard>
+          <p className="px-1 text-sm text-white/65">{t('Menus and buttons only. Translation direction is unchanged.')}</p>
+        </section>
+
         <section aria-labelledby="account-heading" className="space-y-3">
-          <h2 id="account-heading" className="text-lg font-bold">Account</h2>
+          <h2 id="account-heading" className="text-lg font-bold">{t('Account')}</h2>
           {user ? (
             <GlassCard>
               <p className="text-lg font-bold">{user.name ?? 'Signed in'}</p>
@@ -89,11 +120,11 @@ const Settings = () => {
                 {profileQuery.data?.role === 'admin' && <Row to="/admin" icon={ShieldHalf} label="Admin dashboard" tint="#ff4d9e" />}
                 <button type="button" onClick={signOut} className="flex min-h-14 w-full items-center gap-3.5 rounded-xl px-3 text-left hover:bg-white/5">
                   <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10"><LogOut className="h-5 w-5" aria-hidden="true" /></span>
-                  <span className="flex-1 text-[15px] font-medium">Sign out</span>
+                  <span className="flex-1 text-[15px] font-medium">{t('Sign out')}</span>
                 </button>
                 <button type="button" onClick={() => setConfirmDelete(true)} className="flex min-h-14 w-full items-center gap-3.5 rounded-xl px-3 text-left text-[#ff8a8a] hover:bg-white/5">
                   <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#ff5e5e]/15"><UserX className="h-5 w-5" aria-hidden="true" /></span>
-                  <span className="flex-1 text-[15px] font-medium">Delete account</span>
+                  <span className="flex-1 text-[15px] font-medium">{t('Delete account')}</span>
                 </button>
               </div>
             </GlassCard>
@@ -106,21 +137,21 @@ const Settings = () => {
         </section>
 
         <section aria-labelledby="help-heading" className="space-y-3">
-          <h2 id="help-heading" className="text-lg font-bold">Help &amp; About</h2>
+          <h2 id="help-heading" className="text-lg font-bold">{t('Help & About')}</h2>
           <GlassCard className="p-2">
-            <Row to="/support" icon={HelpCircle} label="Help & Support" tint="#00ff88" />
-            <Row to="/about" icon={Info} label="About Zomi Translator" tint="#00f0ff" />
-            <Row to="/privacy" icon={ShieldCheck} label="Privacy Policy" tint="#8c5cff" />
-            <Row to="/terms" icon={FileText} label="Terms of Service" tint="#fff200" />
+            <Row to="/support" icon={HelpCircle} label={t('Help & Support')} tint="#00ff88" />
+            <Row to="/about" icon={Info} label={t('About Zomi Translator')} tint="#00f0ff" />
+            <Row to="/privacy" icon={ShieldCheck} label={t('Privacy Policy')} tint="#8c5cff" />
+            <Row to="/terms" icon={FileText} label={t('Terms of Service')} tint="#fff200" />
           </GlassCard>
         </section>
 
         <section aria-labelledby="data-heading" className="space-y-3">
-          <h2 id="data-heading" className="text-lg font-bold">Data</h2>
+          <h2 id="data-heading" className="text-lg font-bold">{t('Data')}</h2>
           <GlassCard className="p-2">
             <button type="button" onClick={() => setConfirmClear(true)} className="flex min-h-14 w-full items-center gap-3.5 rounded-xl px-3 text-left text-[#ff8a8a] hover:bg-white/5">
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#ff5e5e]/15"><Trash2 className="h-5 w-5" aria-hidden="true" /></span>
-              <span className="flex-1 text-[15px] font-medium">Clear history in this browser</span>
+              <span className="flex-1 text-[15px] font-medium">{t('Clear history')}</span>
             </button>
           </GlassCard>
           <p className="px-1 text-sm text-white/65">Your history is saved in this browser. When you're signed in, it also syncs with your account.</p>
@@ -138,8 +169,8 @@ const Settings = () => {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="border-white/20 bg-transparent text-white hover:bg-white/10">Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void onDelete()} className="bg-[#ff5e5e] text-white hover:bg-[#ff5e5e]/90">Delete account</AlertDialogAction>
+            <AlertDialogCancel className="border-white/20 bg-transparent text-white hover:bg-white/10">{t('Cancel')}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void onDelete()} className="bg-[#ff5e5e] text-white hover:bg-[#ff5e5e]/90">{t('Delete account')}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -147,12 +178,12 @@ const Settings = () => {
       <AlertDialog open={confirmClear} onOpenChange={setConfirmClear}>
         <AlertDialogContent className="border-white/15 bg-[#252a41] text-white">
           <AlertDialogHeader>
-            <AlertDialogTitle>Clear history?</AlertDialogTitle>
+            <AlertDialogTitle>{t('Clear all history?')}</AlertDialogTitle>
             <AlertDialogDescription className="text-white/75">This removes every saved translation in this browser.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="border-white/20 bg-transparent text-white hover:bg-white/10">Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => history.clear()} className="bg-[#ff5e5e] text-white hover:bg-[#ff5e5e]/90">Clear history</AlertDialogAction>
+            <AlertDialogCancel className="border-white/20 bg-transparent text-white hover:bg-white/10">{t('Cancel')}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => history.clear()} className="bg-[#ff5e5e] text-white hover:bg-[#ff5e5e]/90">{t('Clear history')}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

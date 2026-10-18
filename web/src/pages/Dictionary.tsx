@@ -39,6 +39,7 @@ import {
   suggestTerms,
   type DictionaryEntry,
 } from '@/lib/dictionary';
+import { useUiLanguage } from '@/lib/i18n';
 
 type Direction = 'en-zo' | 'zo-en';
 
@@ -72,6 +73,7 @@ const OFFLINE_MESSAGE =
 /** Dictionary — instant search over the 33,444 English ⇄ Zomi entries,
  *  with a Zomi AI fallback for words that are not in the verified dataset. */
 export default function Dictionary() {
+  const { t } = useUiLanguage();
   const [query, setQuery] = useState<string>('');
   const [direction, setDirection] = useState<Direction>('en-zo');
   const [isAskingAI, setIsAskingAI] = useState<boolean>(false);
@@ -283,13 +285,13 @@ export default function Dictionary() {
             <BookOpen className="h-5 w-5 text-[#00f0ff]" />
           </span>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-white">Zomi Dictionary</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-white">{t('Zomi Dictionary')}</h1>
             <p className="text-sm text-white/75">
               {activeDictionaryCount().toLocaleString()} verified entries · English ⇄ Zomi
             </p>
           </div>
           <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-[#ffb84d]/35 bg-[#ffb84d]/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-[#ffb84d]">
-            <WifiOff className="h-3 w-3" /> Offline ready
+            <WifiOff className="h-3 w-3" /> {t('Offline ready')}
           </span>
           <button
             type="button"
@@ -313,7 +315,7 @@ export default function Dictionary() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search English or Zomi…"
+              placeholder={t('Search English or Zomi…')}
               aria-label="Search English or Zomi"
               className="min-h-7 w-full bg-transparent text-base text-white placeholder:text-white/50 focus:outline-none"
               autoComplete="off"
@@ -328,7 +330,7 @@ export default function Dictionary() {
             {query && (
               <button
                 onClick={() => setQuery('')}
-                aria-label="Clear search"
+                aria-label={t('Clear')}
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white/60 transition hover:bg-white/10 hover:text-white/70"
               >
                 <X className="h-4 w-4" />

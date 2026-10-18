@@ -13,3 +13,11 @@ mkdir -p "$ROOT/web/src/content"
 cp "$SRC" "$ROOT/web/src/content/info-pages.json"
 cp "$SRC" "$ROOT/expo/constants/infoPages.json"
 echo "info pages synced to ios, android, web, expo"
+
+# Interface strings (English → Zomi) for the Zomi/English language switch.
+UI="$ROOT/content/ui-strings.json"
+cp "$UI" "$ROOT/ios/ZomiTranslator/ui-strings.json"
+cp "$UI" "$ROOT/android/app/src/main/assets/ui-strings.json"
+cp "$UI" "$ROOT/web/src/content/ui-strings.json"
+cp "$UI" "$ROOT/expo/constants/uiStrings.json"
+echo "ui strings synced to ios, android, web, expo"

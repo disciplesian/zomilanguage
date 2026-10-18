@@ -62,6 +62,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.rork.zomilanguageportal.data.tr
 import com.rork.zomilanguageportal.data.HistoryItem
 import com.rork.zomilanguageportal.data.HistoryRepository
 import com.rork.zomilanguageportal.ui.theme.PortalColors
@@ -104,7 +105,7 @@ fun HistoryScreen(onStartTranslating: () -> Unit, modifier: Modifier = Modifier)
             item {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 12.dp)) {
                     Text(
-                        "History",
+                        tr("History"),
                         color = PortalColors.TextPrimary,
                         fontSize = 28.sp,
                         fontWeight = FontWeight.Bold,
@@ -112,7 +113,7 @@ fun HistoryScreen(onStartTranslating: () -> Unit, modifier: Modifier = Modifier)
                     )
                     if (items.isNotEmpty()) {
                         TextButton(onClick = { confirmClear = true }) {
-                            Text("Clear all", color = Color(0xFFFF8A8A), fontWeight = FontWeight.SemiBold)
+                            Text(tr("Clear all"), color = Color(0xFFFF8A8A), fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
@@ -129,7 +130,7 @@ fun HistoryScreen(onStartTranslating: () -> Unit, modifier: Modifier = Modifier)
                     Icon(Icons.Filled.Search, contentDescription = null, tint = PortalColors.TextMuted)
                     Spacer(Modifier.size(10.dp))
                     Box(Modifier.weight(1f)) {
-                        if (query.isEmpty()) Text("Search history", color = PortalColors.TextFaint, fontSize = 16.sp)
+                        if (query.isEmpty()) Text(tr("Search history"), color = PortalColors.TextFaint, fontSize = 16.sp)
                         BasicTextField(
                             value = query,
                             onValueChange = { query = it },
@@ -157,7 +158,7 @@ fun HistoryScreen(onStartTranslating: () -> Unit, modifier: Modifier = Modifier)
                     items(HistoryFilter.entries.toList()) { option ->
                         val active = option == filter
                         Text(
-                            option.label,
+                            tr(option.label),
                             color = if (active) PortalColors.Cyan else PortalColors.TextSecondary,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -180,14 +181,14 @@ fun HistoryScreen(onStartTranslating: () -> Unit, modifier: Modifier = Modifier)
                         Icon(Icons.Filled.History, contentDescription = null, tint = PortalColors.TextFaint, modifier = Modifier.size(48.dp))
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            if (items.isEmpty()) "No translations yet" else "Nothing found",
+                            if (items.isEmpty()) tr("No history yet") else tr("No matches"),
                             color = PortalColors.TextPrimary,
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
                         )
                         Spacer(Modifier.height(6.dp))
                         Text(
-                            if (items.isEmpty()) "Your translations are saved here automatically." else "Try a different word or filter.",
+                            if (items.isEmpty()) tr("Your translations will appear here.") else tr("Try a different word or filter."),
                             color = PortalColors.TextSecondary,
                             fontSize = 15.sp,
                         )
@@ -220,7 +221,7 @@ fun HistoryScreen(onStartTranslating: () -> Unit, modifier: Modifier = Modifier)
                                     .background(PortalColors.Red.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
                                     .padding(end = 24.dp),
                             ) {
-                                Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = Color.White)
+                                Icon(Icons.Filled.Delete, contentDescription = tr("Delete"), tint = Color.White)
                             }
                         },
                     ) {
@@ -235,15 +236,15 @@ fun HistoryScreen(onStartTranslating: () -> Unit, modifier: Modifier = Modifier)
     if (confirmClear) {
         AlertDialog(
             onDismissRequest = { confirmClear = false },
-            title = { Text("Clear all history?") },
+            title = { Text(tr("Clear all history?")) },
             text = { Text("This removes every saved translation on this device. It can't be undone.") },
             confirmButton = {
                 TextButton(onClick = {
                     HistoryRepository.clear()
                     confirmClear = false
-                }) { Text("Clear all", color = Color(0xFFFF8A8A)) }
+                }) { Text(tr("Clear all"), color = Color(0xFFFF8A8A)) }
             },
-            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text(tr("Cancel")) } },
             containerColor = PortalColors.Surface,
             titleContentColor = PortalColors.TextPrimary,
             textContentColor = PortalColors.TextSecondary,
@@ -286,9 +287,9 @@ private fun HistoryCard(item: HistoryItem) {
             }
             IconButton(onClick = {
                 clipboard.setText(AnnotatedString(item.translatedText))
-                Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, tr("Copied"), Toast.LENGTH_SHORT).show()
             }) {
-                Icon(Icons.Filled.ContentCopy, contentDescription = "Copy translation", tint = PortalColors.Cyan)
+                Icon(Icons.Filled.ContentCopy, contentDescription = tr("Copy"), tint = PortalColors.Cyan)
             }
         }
     }

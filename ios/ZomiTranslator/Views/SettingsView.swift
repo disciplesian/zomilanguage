@@ -9,6 +9,7 @@ struct SettingsView: View {
 
     @State private var showResetConfirm = false
     @State private var showResetDone = false
+    @AppStorage(UiLanguage.storageKey) private var uiLanguage: String = UiLanguage.english.rawValue
 
     private var colors: ThemeColors { theme.colors }
 
@@ -19,6 +20,22 @@ struct SettingsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     header
+
+                    section("Interface language") {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Picker(L("Interface language"), selection: $uiLanguage) {
+                                ForEach(UiLanguage.allCases, id: \.rawValue) { language in
+                                    Text(language.displayName).tag(language.rawValue)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                            .sensoryFeedback(.selection, trigger: uiLanguage)
+                            Text(L("Menus and buttons only. Translation direction is unchanged."))
+                                .font(.footnote)
+                                .foregroundStyle(colors.textMuted)
+                                .padding(.horizontal, 4)
+                        }
+                    }
 
                     section("Account") {
                         AccountCard()
@@ -66,7 +83,7 @@ struct SettingsView: View {
                                 Button {
                                     showResetConfirm = true
                                 } label: {
-                                    settingsRow(icon: "trash", tint: Color(hex: 0xFF6B6B), background: Color(hex: 0xFF5A5A, alpha: 0.18), title: "Clear history on this device", chevron: false)
+                                    settingsRow(icon: "trash", tint: Color(hex: 0xFF6B6B), background: Color(hex: 0xFF5A5A, alpha: 0.18), title: "Clear history", chevron: false)
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -97,17 +114,17 @@ struct SettingsView: View {
                 .frame(maxWidth: .infinity)
             }
         }
-        .confirmationDialog("Clear history?", isPresented: $showResetConfirm, titleVisibility: .visible) {
-            Button("Clear history", role: .destructive) {
+        .confirmationDialog(L("Clear all history?"), isPresented: $showResetConfirm, titleVisibility: .visible) {
+            Button(L("Clear history"), role: .destructive) {
                 Haptics.warning()
                 translations.clear()
                 showResetDone = true
             }
-            Button("Cancel", role: .cancel) {}
+            Button(L("Cancel"), role: .cancel) {}
         } message: {
             Text("This removes every saved translation on this device. It can't be undone.")
         }
-        .alert("Done", isPresented: $showResetDone) {
+        .alert(L("Done"), isPresented: $showResetDone) {
             Button("OK", role: .cancel) {}
         } message: {
             Text("Your history on this device has been cleared.")
@@ -123,10 +140,10 @@ struct SettingsView: View {
             )
             .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Settings")
+                Text(L("Settings"))
                     .font(.title.bold())
                     .foregroundStyle(colors.text)
-                Text("Account, help, and privacy")
+                Text(L("Account, help, and privacy"))
                     .font(.subheadline)
                     .foregroundStyle(colors.textSecondary)
             }
@@ -144,7 +161,7 @@ struct SettingsView: View {
 
     private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(title)
+            Text(L(title))
                 .font(.title3.bold())
                 .foregroundStyle(colors.text)
                 .accessibilityAddTraits(.isHeader)
@@ -165,7 +182,7 @@ struct SettingsView: View {
                 .clipShape(.rect(cornerRadius: 14))
                 .accessibilityHidden(true)
 
-            Text(title)
+            Text(L(title))
                 .font(.body)
                 .foregroundStyle(colors.text)
                 .multilineTextAlignment(.leading)

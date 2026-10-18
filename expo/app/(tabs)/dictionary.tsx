@@ -45,6 +45,7 @@ import { fetchEntryExamples, type EntryExample } from '@/lib/portal';
 import { useStreamingTranslation } from '@/hooks/useStreamingTranslation';
 import { useAuth } from '@/contexts/AuthContext';
 import { getAnonymousId } from '@/lib/anonymousId';
+import { useUiLanguage } from '@/contexts/UiLanguageContext';
 
 type Direction = 'en-zo' | 'zo-en';
 
@@ -73,6 +74,7 @@ function highlightParts(text: string, query: string): { text: string; match: boo
 }
 
 export default function DictionaryScreen() {
+  const { t } = useUiLanguage();
   const [query, setQuery] = useState('');
   const [direction, setDirection] = useState<Direction>('en-zo');
   const [aiResult, setAiResult] = useState<string | null>(null);
@@ -335,14 +337,14 @@ export default function DictionaryScreen() {
           <View style={styles.header}>
             <View style={styles.headerTop}>
               <View>
-                <Text style={styles.headerTitle}>Dictionary</Text>
+                <Text style={styles.headerTitle}>{t('Dictionary')}</Text>
                 <Text style={styles.headerSubtitle}>
                   {activeDictionaryCount().toLocaleString()} verified entries · English ⇄ Zomi
                 </Text>
               </View>
               <View style={styles.offlineBadge}>
                 <WifiOff size={12} color={Colors.warning} />
-                <Text style={styles.offlineBadgeText}>Offline ready</Text>
+                <Text style={styles.offlineBadgeText}>{t('Offline ready')}</Text>
               </View>
             </View>
 
@@ -350,7 +352,7 @@ export default function DictionaryScreen() {
               <Search size={20} color={Colors.textSecondary} />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search English or Zomi..."
+                placeholder={t('Search English or Zomi…')}
                 placeholderTextColor={Colors.textMuted}
                 value={query}
                 onChangeText={setQuery}

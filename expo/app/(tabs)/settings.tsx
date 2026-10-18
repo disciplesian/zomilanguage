@@ -33,6 +33,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useUserProfile } from '@/contexts/UserProfileContext';
 import { useGlossary } from '@/contexts/GlossaryContext';
 import { useTranslationCache } from '@/contexts/TranslationCacheContext';
+import { useUiLanguage, type UiLanguage } from '@/contexts/UiLanguageContext';
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -40,6 +41,7 @@ export default function SettingsScreen() {
   const { resetAllData } = useUserProfile();
   const glossary = useGlossary();
   const cache = useTranslationCache();
+  const { language, setLanguage, t } = useUiLanguage();
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -150,9 +152,48 @@ export default function SettingsScreen() {
               <Settings size={26} color={colors.text} />
             </LinearGradient>
             <View>
-              <Text style={[styles.headerTitle, { color: colors.text }]}>Settings</Text>
+              <Text style={[styles.headerTitle, { color: colors.text }]}>{t('Settings')}</Text>
               <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>Customize your experience</Text>
             </View>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('Interface language')}</Text>
+            <GlassCard style={styles.aboutCard}>
+              <View style={styles.themeRow}>
+                {(['en', 'zo'] as UiLanguage[]).map((code) => {
+                  const active = language === code;
+                  return (
+                    <TouchableOpacity
+                      key={code}
+                      onPress={() => {
+                        if (Platform.OS !== 'web') {
+                          Haptics.selectionAsync();
+                        }
+                        setLanguage(code);
+                      }}
+                      style={[
+                        styles.themeChip,
+                        {
+                          backgroundColor: active ? colors.glassCyan : colors.glass,
+                          borderColor: active ? colors.glassCyanBorder : colors.glassBorder,
+                        },
+                      ]}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: active }}
+                      testID={`ui-language-${code}`}
+                    >
+                      <Text style={[styles.themeChipText, { color: active ? colors.text : colors.textSecondary }]}>
+                        {code === 'en' ? 'English' : 'Zomi'}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </GlassCard>
+            <Text style={[styles.dataHint, { color: colors.textMuted }]}>
+              {t('Menus and buttons only. Translation direction is unchanged.')}
+            </Text>
           </View>
 
           <View style={styles.section}>
@@ -200,7 +241,7 @@ export default function SettingsScreen() {
           </View>
 
           <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Learn</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('Learn')}</Text>
 
             <GlassCard style={styles.aboutCard}>
               <TouchableOpacity
@@ -210,7 +251,7 @@ export default function SettingsScreen() {
                 <View style={[styles.aboutIcon, { backgroundColor: colors.glassYellow }]}>
                   <BookOpen size={20} color={colors.accent} />
                 </View>
-                <Text style={[styles.aboutText, { color: colors.text }]}>Translation Tips</Text>
+                <Text style={[styles.aboutText, { color: colors.text }]}>{t('Translation Tips')}</Text>
                 <ChevronRight size={18} color={colors.textMuted} />
               </TouchableOpacity>
               <TouchableOpacity
@@ -220,14 +261,14 @@ export default function SettingsScreen() {
                 <View style={[styles.aboutIcon, { backgroundColor: colors.glassPink }]}>
                   <BookOpen size={20} color={colors.secondary} />
                 </View>
-                <Text style={[styles.aboutText, { color: colors.text }]}>Pronunciation Guide</Text>
+                <Text style={[styles.aboutText, { color: colors.text }]}>{t('Pronunciation Guide')}</Text>
                 <ChevronRight size={18} color={colors.textMuted} />
               </TouchableOpacity>
             </GlassCard>
           </View>
 
           <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Support</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('Support')}</Text>
             
             <GlassCard style={styles.aboutCard}>
               <TouchableOpacity 
@@ -244,7 +285,7 @@ export default function SettingsScreen() {
           </View>
 
           <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Community</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('Community')}</Text>
 
             <GlassCard style={styles.aboutCard}>
               <TouchableOpacity
@@ -262,7 +303,7 @@ export default function SettingsScreen() {
           </View>
 
           <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Data</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('Data')}</Text>
 
             <GlassCard style={styles.aboutCard}>
               <TouchableOpacity
@@ -283,7 +324,7 @@ export default function SettingsScreen() {
           </View>
 
           <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>About</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('About')}</Text>
             
             <GlassCard style={styles.aboutCard}>
               <TouchableOpacity 
@@ -293,7 +334,7 @@ export default function SettingsScreen() {
                 <View style={[styles.aboutIcon, { backgroundColor: colors.glassCyan }]}>
                   <Info size={20} color={colors.primary} />
                 </View>
-                <Text style={[styles.aboutText, { color: colors.text }]}>About Zomi Translator</Text>
+                <Text style={[styles.aboutText, { color: colors.text }]}>{t('About Zomi Translator')}</Text>
                 <ChevronRight size={18} color={colors.textMuted} />
               </TouchableOpacity>
 
@@ -306,7 +347,7 @@ export default function SettingsScreen() {
                 <View style={[styles.aboutIcon, { backgroundColor: colors.glassPurple }]}>
                   <Shield size={20} color={colors.tertiary} />
                 </View>
-                <Text style={[styles.aboutText, { color: colors.text }]}>Privacy Policy</Text>
+                <Text style={[styles.aboutText, { color: colors.text }]}>{t('Privacy Policy')}</Text>
                 <ChevronRight size={18} color={colors.textMuted} />
               </TouchableOpacity>
 
@@ -319,7 +360,7 @@ export default function SettingsScreen() {
                 <View style={[styles.aboutIcon, { backgroundColor: colors.glassYellow }]}>
                   <ExternalLink size={20} color={colors.accent} />
                 </View>
-                <Text style={[styles.aboutText, { color: colors.text }]}>Terms of Service</Text>
+                <Text style={[styles.aboutText, { color: colors.text }]}>{t('Terms of Service')}</Text>
                 <ChevronRight size={18} color={colors.textMuted} />
               </TouchableOpacity>
             </GlassCard>

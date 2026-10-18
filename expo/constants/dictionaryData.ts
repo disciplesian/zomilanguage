@@ -80,6 +80,15 @@ export function activeDictionaryRows(): string[][] {
   return activeEntries.map((e) => [e.english, e.pos, e.zomi, e.category]);
 }
 
+/** Repairs Windows-1252 smart quotes that arrive as C1 control characters
+ *  (they render as invisible boxes) and straightens curly quotes so typed
+ *  apostrophes match ("ka pa'"). */
+function cleanText(value: unknown): string {
+  return String(value ?? '')
+    .replace(/[\u0091\u0092\u2018\u2019]/g, "'")
+    .replace(/[\u0093\u0094\u201c\u201d]/g, '"');
+}
+
 /** Replaces the active dataset when the remote version is newer than the
  *  current one. Returns true when the dataset was applied. */
 export function applyRemoteDataset(version: number, entries: unknown): boolean {
@@ -88,9 +97,9 @@ export function applyRemoteDataset(version: number, entries: unknown): boolean {
   for (const row of entries) {
     if (!Array.isArray(row) || row.length < 3) continue;
     mapped.push({
-      english: String(row[0]),
+      english: cleanText(row[0]),
       pos: String(row[1] ?? ''),
-      zomi: String(row[2]),
+      zomi: cleanText(row[2]),
       category: (typeof row[3] === 'string' ? row[3] : 'other') as DictionaryCategory,
     });
   }

@@ -44,6 +44,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -53,6 +54,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rork.zomilanguageportal.BuildConfig
 import com.rork.zomilanguageportal.data.AuthManager
 import com.rork.zomilanguageportal.data.HistoryRepository
+import com.rork.zomilanguageportal.data.UiLanguage
+import com.rork.zomilanguageportal.data.UiStrings
+import com.rork.zomilanguageportal.data.tr
 import com.rork.zomilanguageportal.ui.components.GlassCard
 import com.rork.zomilanguageportal.ui.components.SignInPanel
 import com.rork.zomilanguageportal.ui.theme.PortalColors
@@ -87,15 +91,50 @@ fun SettingsScreen(
         ) {
             Spacer(Modifier.height(12.dp))
             Text(
-                "Settings",
+                tr("Settings"),
                 color = PortalColors.TextPrimary,
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.semantics { heading() },
             )
-            Text("Account, help, and privacy", color = PortalColors.TextSecondary, fontSize = 14.sp)
+            Text(tr("Account, help, and privacy"), color = PortalColors.TextSecondary, fontSize = 14.sp)
             Spacer(Modifier.height(16.dp))
 
+            SectionTitle("Interface language")
+            GlassCard {
+                Column {
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        UiLanguage.entries.forEachIndexed { index, language ->
+                            val selected = UiStrings.current == language
+                            if (index > 0) Spacer(Modifier.size(8.dp))
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 48.dp)
+                                    .background(
+                                        if (selected) PortalColors.Cyan.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.04f),
+                                        RoundedCornerShape(12.dp),
+                                    )
+                                    .border(1.dp, if (selected) PortalColors.Cyan.copy(alpha = 0.5f) else PortalColors.GlassBorder, RoundedCornerShape(12.dp))
+                                    .clickable { UiStrings.setLanguage(language) }
+                                    .semantics { this.selected = selected },
+                            ) {
+                                Text(
+                                    language.displayName,
+                                    color = if (selected) PortalColors.Cyan else PortalColors.TextSecondary,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text(tr("Menus and buttons only. Translation direction is unchanged."), color = PortalColors.TextMuted, fontSize = 13.sp)
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
             SectionTitle("Account")
             if (user == null) {
                 SignInPanel(
@@ -146,7 +185,7 @@ fun SettingsScreen(
             SectionTitle("Data")
             GlassCard {
                 Column {
-                    SettingsRow(Icons.Filled.DeleteSweep, "Clear history on this device", Color(0xFFFF8A8A), chevron = false) { confirmClear = true }
+                    SettingsRow(Icons.Filled.DeleteSweep, "Clear history", Color(0xFFFF8A8A), chevron = false) { confirmClear = true }
                     Text(
                         "Your history is saved on this device. When you're signed in, it also syncs with your account.",
                         color = PortalColors.TextMuted,
@@ -174,9 +213,9 @@ fun SettingsScreen(
                 TextButton(onClick = {
                     confirmDelete = false
                     viewModel.deleteAccount()
-                }) { Text("Delete account", color = Color(0xFFFF8A8A)) }
+                }) { Text(tr("Delete account"), color = Color(0xFFFF8A8A)) }
             },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(tr("Cancel")) } },
             containerColor = PortalColors.Surface,
             titleContentColor = PortalColors.TextPrimary,
             textContentColor = PortalColors.TextSecondary,
@@ -185,15 +224,15 @@ fun SettingsScreen(
     if (confirmClear) {
         AlertDialog(
             onDismissRequest = { confirmClear = false },
-            title = { Text("Clear history?") },
+            title = { Text(tr("Clear all history?")) },
             text = { Text("This removes every saved translation on this device. It can't be undone.") },
             confirmButton = {
                 TextButton(onClick = {
                     HistoryRepository.clear()
                     confirmClear = false
-                }) { Text("Clear history", color = Color(0xFFFF8A8A)) }
+                }) { Text(tr("Clear history"), color = Color(0xFFFF8A8A)) }
             },
-            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text(tr("Cancel")) } },
             containerColor = PortalColors.Surface,
             titleContentColor = PortalColors.TextPrimary,
             textContentColor = PortalColors.TextSecondary,
@@ -213,7 +252,7 @@ fun SettingsScreen(
 @Composable
 private fun SectionTitle(title: String) {
     Text(
-        title,
+        tr(title),
         color = PortalColors.TextPrimary,
         fontSize = 18.sp,
         fontWeight = FontWeight.Bold,
@@ -236,7 +275,7 @@ private fun SettingsRow(icon: ImageVector, label: String, tint: Color, chevron: 
     ) {
         Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
         Spacer(Modifier.size(12.dp))
-        Text(label, color = PortalColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+        Text(tr(label), color = PortalColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
         if (chevron) {
             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = PortalColors.TextFaint)
         }

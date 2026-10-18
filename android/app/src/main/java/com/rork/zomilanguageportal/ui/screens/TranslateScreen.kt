@@ -78,6 +78,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.rork.zomilanguageportal.data.tr
 import com.rork.zomilanguageportal.data.AuthManager
 import com.rork.zomilanguageportal.ui.components.GlassCard
 import com.rork.zomilanguageportal.ui.components.rememberIsOnline
@@ -116,7 +117,7 @@ fun TranslateScreen(
     fun copy() {
         clipboard.setText(AnnotatedString(state.output))
         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-        Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, tr("Copied"), Toast.LENGTH_SHORT).show()
     }
 
     fun share() {
@@ -168,7 +169,7 @@ fun TranslateScreen(
                     ) {
                         Icon(Icons.Filled.WifiOff, contentDescription = null, tint = PortalColors.Yellow, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.size(10.dp))
-                        Text("Offline: dictionary words still work.", color = PortalColors.Yellow, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                        Text(tr("Offline: dictionary words still work."), color = PortalColors.Yellow, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                     }
                     Spacer(Modifier.height(12.dp))
                 }
@@ -195,7 +196,7 @@ fun TranslateScreen(
                                 swapTurns += 180f
                                 viewModel.swapDirection()
                             }
-                            .semantics { contentDescription = "Swap languages" },
+                            .semantics { contentDescription = tr("Swap languages") },
                     ) {
                         Icon(Icons.Filled.SwapHoriz, contentDescription = null, tint = Color.White, modifier = Modifier.rotate(rotation))
                     }
@@ -222,7 +223,7 @@ fun TranslateScreen(
                             }
                             Box {
                                 if (state.input.isEmpty()) {
-                                    Text("Type ${state.sourceLabel} text\u2026", color = PortalColors.TextFaint, fontSize = 19.sp)
+                                    Text(tr("Type or paste text"), color = PortalColors.TextFaint, fontSize = 19.sp)
                                 }
                                 BasicTextField(
                                     value = state.input,
@@ -267,17 +268,17 @@ fun TranslateScreen(
                                     ) {
                                         Icon(Icons.Filled.Verified, contentDescription = null, tint = Color(0xFF7CC8FF), modifier = Modifier.size(12.dp))
                                         Spacer(Modifier.size(4.dp))
-                                        Text("Dictionary", color = Color(0xFF7CC8FF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        Text(tr("Verified"), color = Color(0xFF7CC8FF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
                                 Spacer(Modifier.weight(1f))
                                 val hasResult = state.output.isNotEmpty() && state.error == null && !state.isTranslating
                                 if (hasResult) {
                                     IconButton(onClick = { share() }) {
-                                        Icon(Icons.Filled.Share, contentDescription = "Share translation", tint = PortalColors.TextSecondary)
+                                        Icon(Icons.Filled.Share, contentDescription = tr("Share"), tint = PortalColors.TextSecondary)
                                     }
                                     IconButton(onClick = { copy() }) {
-                                        Icon(Icons.Filled.ContentCopy, contentDescription = "Copy translation", tint = PortalColors.TextSecondary)
+                                        Icon(Icons.Filled.ContentCopy, contentDescription = tr("Copy"), tint = PortalColors.TextSecondary)
                                     }
                                 }
                             }
@@ -304,7 +305,7 @@ fun TranslateScreen(
                                         Spacer(Modifier.size(10.dp))
                                         Text(if (state.isConnecting) "Connecting\u2026" else "Translating\u2026", color = PortalColors.TextMuted, fontSize = 15.sp)
                                     }
-                                    else -> Text("Translation appears here", color = PortalColors.TextFaint, fontSize = 19.sp)
+                                    else -> Text(tr("Translation appears here"), color = PortalColors.TextFaint, fontSize = 19.sp)
                                 }
                             }
                             AnimatedVisibility(state.alternatives.isNotEmpty() && state.error == null && !state.isTranslating) {
@@ -346,7 +347,7 @@ fun TranslateScreen(
                 state.freeWordsLeft?.takeIf { it > 0 && user == null }?.let { left ->
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        "Free today: $left words left",
+                        "${tr("Free today")}: $left ${tr("words left")}",
                         color = PortalColors.TextMuted,
                         fontSize = 13.sp,
                         modifier = Modifier.align(Alignment.CenterHorizontally),
@@ -383,7 +384,7 @@ internal fun PillButton(label: String, filled: Boolean, onClick: () -> Unit, mod
             .background(if (filled) PortalColors.Cyan else Color.White.copy(alpha = 0.1f), RoundedCornerShape(50)),
     ) {
         Text(
-            label,
+            tr(label),
             color = if (filled) PortalColors.Canvas else PortalColors.TextPrimary,
             fontWeight = FontWeight.SemiBold,
             fontSize = 15.sp,

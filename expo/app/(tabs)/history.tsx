@@ -30,10 +30,12 @@ import Colors from '@/constants/colors';
 import { languageLabel } from '@/constants/languages';
 import { trpc } from '@/lib/trpc';
 import { useUserProfile } from '@/contexts/UserProfileContext';
+import { useUiLanguage } from '@/contexts/UiLanguageContext';
 
 type FilterType = 'all' | 'text' | 'image' | 'document' | 'audio';
 
 export default function HistoryScreen() {
+  const { t } = useUiLanguage();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<FilterType>('all');
   const [showFilters, setShowFilters] = useState(false);
@@ -139,7 +141,7 @@ export default function HistoryScreen() {
         <View style={styles.header}>
           <View style={styles.headerTop}>
             <View>
-              <Text style={styles.headerTitle}>Translation History</Text>
+              <Text style={styles.headerTitle}>{t('History')}</Text>
               <Text style={styles.headerSubtitle}>
                 {filteredHistory.length} {filteredHistory.length === 1 ? 'translation' : 'translations'}
               </Text>
@@ -161,7 +163,7 @@ export default function HistoryScreen() {
             <Search size={20} color={Colors.textSecondary} />
             <TextInput
               style={styles.searchInput}
-              placeholder="Search translations..."
+              placeholder={t('Search history')}
               placeholderTextColor={Colors.textMuted}
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -214,7 +216,7 @@ export default function HistoryScreen() {
         ) : filteredHistory.length === 0 ? (
           <View style={styles.emptyContainer}>
             <History size={64} color={Colors.textSecondary} />
-            <Text style={styles.emptyTitle}>No Translations Yet</Text>
+            <Text style={styles.emptyTitle}>{t('No history yet')}</Text>
             <Text style={styles.emptySubtitle}>
               {searchQuery || filterType !== 'all'
                 ? 'No translations match your search'

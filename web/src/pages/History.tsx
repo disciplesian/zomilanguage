@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { SiteLayout, GlassCard } from '@/components/SiteLayout';
 import { history, useHistory } from '@/lib/history';
 import { cn } from '@/lib/utils';
+import { useUiLanguage } from '@/lib/i18n';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,6 +29,7 @@ const FILTERS: { id: Filter; label: string }[] = [
 
 const HistoryPage = () => {
   const items = useHistory();
+  const { t } = useUiLanguage();
   const [query, setQuery] = useState<string>('');
   const [filter, setFilter] = useState<Filter>('all');
   const [confirmClear, setConfirmClear] = useState<boolean>(false);
@@ -46,10 +48,10 @@ const HistoryPage = () => {
     <SiteLayout>
       <div className="mx-auto w-full max-w-3xl px-4 pt-5 sm:px-6 md:pt-10">
         <div className="mb-4 flex items-center">
-          <h1 className="flex-1 text-[28px] font-bold tracking-tight sm:text-3xl">History</h1>
+          <h1 className="flex-1 text-[28px] font-bold tracking-tight sm:text-3xl">{t('History')}</h1>
           {items.length > 0 && (
             <button type="button" onClick={() => setConfirmClear(true)} className="min-h-11 rounded-full px-4 text-sm font-semibold text-[#ff8a8a] hover:bg-white/5">
-              Clear all
+              {t('Clear all')}
             </button>
           )}
         </div>
@@ -59,8 +61,8 @@ const HistoryPage = () => {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search history"
-            aria-label="Search history"
+            placeholder={t('Search history')}
+            aria-label={t('Search history')}
             autoCapitalize="off"
             autoCorrect="off"
             spellCheck={false}
@@ -86,7 +88,7 @@ const HistoryPage = () => {
                 filter === f.id ? 'border-[#00f0ff]/50 bg-[#00f0ff]/15 text-[#00f0ff]' : 'border-white/20 bg-white/[0.06] text-white/80'
               )}
             >
-              {f.label}
+              {f.id === 'all' ? t('All') : f.id === 'favorites' ? t('Favorites') : f.label}
             </button>
           ))}
         </div>
@@ -94,13 +96,13 @@ const HistoryPage = () => {
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center py-16 text-center">
             <HistoryIcon className="h-12 w-12 text-white/45" aria-hidden="true" />
-            <p className="mt-3 text-xl font-bold">{items.length === 0 ? 'No translations yet' : 'Nothing found'}</p>
+            <p className="mt-3 text-xl font-bold">{items.length === 0 ? t('No history yet') : t('No matches')}</p>
             <p className="mt-1 text-white/75">
-              {items.length === 0 ? 'Your translations are saved here automatically.' : 'Try a different word or filter.'}
+              {items.length === 0 ? t('Your translations will appear here.') : t('Try a different word or filter.')}
             </p>
             {items.length === 0 && (
               <Link to="/" className="mt-4 inline-flex min-h-11 items-center rounded-full bg-[#00f0ff] px-5 text-sm font-semibold text-[#0b1020]">
-                Start translating
+                {t('Start translating')}
               </Link>
             )}
           </div>
@@ -129,7 +131,7 @@ const HistoryPage = () => {
                     <button
                       type="button"
                       onClick={() => {
-                        void navigator.clipboard.writeText(item.translatedText).then(() => toast.success('Copied'));
+                        void navigator.clipboard.writeText(item.translatedText).then(() => toast.success(t('Copied')));
                       }}
                       aria-label="Copy translation"
                       className="flex h-11 w-11 items-center justify-center rounded-full text-[#00f0ff] hover:bg-white/10"
@@ -139,7 +141,7 @@ const HistoryPage = () => {
                     <button
                       type="button"
                       onClick={() => history.remove(item.id)}
-                      aria-label="Delete"
+                      aria-label={t('Delete')}
                       className="flex h-11 w-11 items-center justify-center rounded-full text-[#ff8a8a] hover:bg-white/10"
                     >
                       <Trash2 className="h-5 w-5" />
@@ -155,15 +157,15 @@ const HistoryPage = () => {
       <AlertDialog open={confirmClear} onOpenChange={setConfirmClear}>
         <AlertDialogContent className="border-white/15 bg-[#252a41] text-white">
           <AlertDialogHeader>
-            <AlertDialogTitle>Clear all history?</AlertDialogTitle>
+            <AlertDialogTitle>{t('Clear all history?')}</AlertDialogTitle>
             <AlertDialogDescription className="text-white/75">
               This removes every saved translation in this browser. It can't be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="border-white/20 bg-transparent text-white hover:bg-white/10">Cancel</AlertDialogCancel>
+            <AlertDialogCancel className="border-white/20 bg-transparent text-white hover:bg-white/10">{t('Cancel')}</AlertDialogCancel>
             <AlertDialogAction onClick={() => history.clear()} className="bg-[#ff5e5e] text-white hover:bg-[#ff5e5e]/90">
-              Clear all
+              {t('Clear all')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

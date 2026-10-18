@@ -67,8 +67,10 @@ import { exportTranslation, ExportFormat, TranslationData } from '@/lib/exportUt
 import { createShareLink } from '@/lib/share';
 import TranslationShareCard from '@/components/TranslationShareCard';
 import { shareTranslationCard } from '@/lib/shareImage';
+import { useUiLanguage } from '@/contexts/UiLanguageContext';
 
 export default function TranslatorScreen() {
+  const { t } = useUiLanguage();
   const [inputText, setInputText] = useState('');
   const [outputText, setOutputText] = useState('');
   const [sourceLanguage, setSourceLanguage] = useState<'zomi' | 'english'>('zomi');
@@ -844,7 +846,7 @@ export default function TranslatorScreen() {
             
             <TextInput
               style={styles.textInput}
-              placeholder={`Type ${sourceLabel} text...`}
+              placeholder={t('Type or paste text')}
               placeholderTextColor={Colors.textMuted}
               value={inputText}
               onChangeText={setInputText}
@@ -878,7 +880,7 @@ export default function TranslatorScreen() {
                 {isOfflineResult && !!outputText && !isTranslating && !stream.isStreaming && (
                   <View style={styles.offlineBadge}>
                     <CloudOff size={12} color="#FFB84D" />
-                    <Text style={styles.offlineBadgeText}>Offline dictionary</Text>
+                    <Text style={styles.offlineBadgeText}>{t('Verified')}</Text>
                   </View>
                 )}
               </View>
@@ -978,7 +980,7 @@ export default function TranslatorScreen() {
                   <AlertCircle size={20} color={Colors.error} />
                   <Text style={styles.errorText}>{outputText}</Text>
                   <TouchableOpacity onPress={() => translate(inputText, sourceLanguage, targetLanguage)} style={styles.retryButton}>
-                    <Text style={styles.retryText}>Retry</Text>
+                    <Text style={styles.retryText}>{t('Try again')}</Text>
                   </TouchableOpacity>
                 </View>
               ) : glossarySegments.length > 0 ? (
@@ -1094,7 +1096,7 @@ export default function TranslatorScreen() {
       >
         <View style={styles.toastPill}>
           <Check size={16} color={Colors.success} />
-          <Text style={styles.toastText}>Copied!</Text>
+          <Text style={styles.toastText}>{t('Copied')}</Text>
         </View>
       </Animated.View>
 
@@ -1129,13 +1131,13 @@ export default function TranslatorScreen() {
                 ) : (
                   <ShareIcon size={18} color="#10131F" />
                 )}
-                <Text style={styles.shareSheetPrimaryText}>Share image</Text>
+                <Text style={styles.shareSheetPrimaryText}>{t('Share as image')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.shareSheetCancel}
                 onPress={() => setShareCardVisible(false)}
               >
-                <Text style={styles.shareSheetCancelText}>Cancel</Text>
+                <Text style={styles.shareSheetCancelText}>{t('Cancel')}</Text>
               </TouchableOpacity>
             </View>
           </View>

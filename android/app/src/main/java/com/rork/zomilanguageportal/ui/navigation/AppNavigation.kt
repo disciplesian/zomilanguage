@@ -32,6 +32,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.rork.zomilanguageportal.data.tr
 import com.rork.zomilanguageportal.ui.components.PortalBackground
 import com.rork.zomilanguageportal.ui.screens.AboutScreen
 import com.rork.zomilanguageportal.ui.screens.AdminScreen
@@ -106,7 +107,7 @@ fun AppNavigation(initialRoute: String? = null) {
                                     selected = tabRoute == destination.route,
                                     onClick = { navController.openTab(destination.route) },
                                     icon = { Icon(destination.icon, contentDescription = null) },
-                                    label = { Text(destination.label) },
+                                    label = { Text(tr(destination.label)) },
                                     colors = NavigationRailItemDefaults.colors(
                                         selectedIconColor = PortalColors.Canvas,
                                         selectedTextColor = PortalColors.Cyan,
@@ -130,7 +131,7 @@ fun AppNavigation(initialRoute: String? = null) {
                                     selected = tabRoute == destination.route,
                                     onClick = { navController.openTab(destination.route) },
                                     icon = { Icon(destination.icon, contentDescription = null) },
-                                    label = { Text(destination.label) },
+                                    label = { Text(tr(destination.label)) },
                                     colors = NavigationBarItemDefaults.colors(
                                         selectedIconColor = PortalColors.Canvas,
                                         selectedTextColor = PortalColors.Cyan,

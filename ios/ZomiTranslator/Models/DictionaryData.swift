@@ -71,6 +71,8 @@ nonisolated enum DictionaryData {
     /// Lowercases and strips tone marks/diacritics so "Pasiân" matches "pasian".
     static func fold(_ s: String) -> String {
         s.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: nil)
+            .replacingOccurrences(of: "\u{2019}", with: "'")
+            .replacingOccurrences(of: "\u{2018}", with: "'")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 

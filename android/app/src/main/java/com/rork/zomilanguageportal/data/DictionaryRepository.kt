@@ -112,6 +112,7 @@ object DictionaryRepository {
     /** Lowercases and strips tone marks so "Pasiân" matches "pasian". */
     fun fold(s: String): String =
         markRegex.replace(Normalizer.normalize(s.trim().lowercase(), Normalizer.Form.NFD), "")
+            .replace('\u2019', '\'').replace('\u2018', '\'')
 
     /** Individual Zomi renderings of an entry ("khial, dik lo" → ["khial", "dik lo"]). */
     fun zomiParts(zomi: String): List<String> =
