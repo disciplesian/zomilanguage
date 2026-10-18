@@ -59,7 +59,7 @@ const MAX_SCREENSHOTS = 8;
 /** Release state of the last publish (kept in one place, mirrors the Play Console). */
 const RELEASE = {
   version: '1.2.0',
-  productionStatus: '20% staged rollout — in progress',
+  productionStatus: 'Fully rolled out — 100% of users',
   internalStatus: 'Published (source track)',
   listingStatus: 'Text updated for current features',
 };

@@ -253,7 +253,7 @@ export default function AdminDashboardScreen() {
             <Rocket size={16} color={Colors.success} />
           </View>
           <Text style={styles.emptyText}>
-            Version 1.2.0 is in a 20% production rollout. Preview the listing exactly as
+            Version 1.2.0 is live for 100% of production users. Preview the listing exactly as
             users see it on Google Play.
           </Text>
           <TouchableOpacity
