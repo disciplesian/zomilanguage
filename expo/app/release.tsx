@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -96,6 +96,7 @@ export default function StoreReleaseScreen() {
   const { getCaption, setCaption, countFilled, getEmptyLocales, copyToEmptyLocales } =
     useStoreCaptions();
   const [copyNotice, setCopyNotice] = useState<string | null>(null);
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emptyLocales = getEmptyLocales(locale, SCREENSHOT_KEYS);
   const sourceFilled = countFilled(locale, SCREENSHOT_KEYS);
   const canCopy = sourceFilled > 0 && emptyLocales.length > 0;
@@ -107,8 +108,16 @@ export default function StoreReleaseScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     }
     setCopyNotice(`Copied to ${filled.join(', ')}`);
-    setTimeout(() => setCopyNotice(null), 2500);
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    noticeTimer.current = setTimeout(() => setCopyNotice(null), 2500);
   };
+
+  useEffect(
+    () => () => {
+      if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    },
+    [],
+  );
 
   const profileQuery = useQuery({
     queryKey: ['portal-profile', user?.id],
