@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Image,
   TextInput,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -24,7 +25,9 @@ import {
   Type,
   Image as ImageIcon,
   Globe,
+  CopyPlus,
 } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 import GlassCard from '@/components/GlassCard';
 import PageBottomNav, { PAGE_BOTTOM_NAV_SPACING } from '@/components/PageBottomNav';
 import Colors from '@/constants/colors';
@@ -90,7 +93,22 @@ export default function StoreReleaseScreen() {
   const router = useRouter();
   const [expanded, setExpanded] = useState<'about' | 'notes' | null>(null);
   const [locale, setLocale] = useState<string>(DEFAULT_STORE_LOCALE);
-  const { getCaption, setCaption, countFilled } = useStoreCaptions();
+  const { getCaption, setCaption, countFilled, getEmptyLocales, copyToEmptyLocales } =
+    useStoreCaptions();
+  const [copyNotice, setCopyNotice] = useState<string | null>(null);
+  const emptyLocales = getEmptyLocales(locale, SCREENSHOT_KEYS);
+  const sourceFilled = countFilled(locale, SCREENSHOT_KEYS);
+  const canCopy = sourceFilled > 0 && emptyLocales.length > 0;
+
+  const handleCopyToEmpty = () => {
+    const filled = copyToEmptyLocales(locale, SCREENSHOT_KEYS);
+    if (filled.length === 0) return;
+    if (Platform.OS !== 'web') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    }
+    setCopyNotice(`Copied to ${filled.join(', ')}`);
+    setTimeout(() => setCopyNotice(null), 2500);
+  };
 
   const profileQuery = useQuery({
     queryKey: ['portal-profile', user?.id],
@@ -235,8 +253,32 @@ export default function StoreReleaseScreen() {
             <Globe size={13} color={PLAY.textMuted} />
             <Text style={styles.localeHeaderText}>Screenshot captions</Text>
             <Text style={styles.localeCount}>
-              {countFilled(locale, SCREENSHOT_KEYS)}/{SCREENSHOTS.length} filled
+              {sourceFilled}/{SCREENSHOTS.length} filled
             </Text>
+          </View>
+          <View style={styles.copyRow}>
+            <TouchableOpacity
+              style={[styles.copyButton, !canCopy && styles.copyButtonDisabled]}
+              onPress={handleCopyToEmpty}
+              disabled={!canCopy}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !canCopy }}
+              accessibilityLabel={`Copy ${locale} captions to ${emptyLocales.length} empty locales`}
+              testID="copy-captions-to-empty"
+            >
+              <CopyPlus size={14} color={canCopy ? PLAY.text : PLAY.textMuted} />
+              <Text style={[styles.copyButtonText, !canCopy && styles.copyButtonTextDisabled]}>
+                {emptyLocales.length > 0
+                  ? `Copy to ${emptyLocales.length} empty locale${emptyLocales.length === 1 ? '' : 's'}`
+                  : 'No empty locales'}
+              </Text>
+            </TouchableOpacity>
+            {copyNotice ? (
+              <Text style={styles.copyNotice} numberOfLines={1}>
+                {copyNotice}
+              </Text>
+            ) : null}
           </View>
           <ScrollView
             horizontal
@@ -566,6 +608,41 @@ const styles = StyleSheet.create({
   localeCount: {
     fontSize: 11,
     color: PLAY.textMuted,
+  },
+  copyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+  },
+  copyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minHeight: 36,
+    paddingHorizontal: 12,
+    borderRadius: 18,
+    backgroundColor: 'rgba(1, 135, 95, 0.25)',
+    borderWidth: 1,
+    borderColor: PLAY.green,
+  },
+  copyButtonDisabled: {
+    backgroundColor: 'transparent',
+    borderColor: 'rgba(232, 234, 237, 0.15)',
+  },
+  copyButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: PLAY.text,
+  },
+  copyButtonTextDisabled: {
+    color: PLAY.textMuted,
+  },
+  copyNotice: {
+    flex: 1,
+    fontSize: 11,
+    color: '#34A853',
   },
   localeRow: {
     paddingHorizontal: 16,

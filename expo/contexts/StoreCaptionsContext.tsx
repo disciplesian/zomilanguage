@@ -92,5 +92,51 @@ export const [StoreCaptionsProvider, useStoreCaptions] = createContextHook(() =>
     [captions],
   );
 
-  return { captions, isLoaded, setCaption, getCaption, countFilled };
+  /** Locales (other than `source`) that have no caption for any of the given screenshots. */
+  const getEmptyLocales = useCallback(
+    (source: string, keys: string[]): string[] =>
+      STORE_LOCALES.map((l) => l.code).filter(
+        (code) =>
+          code !== source &&
+          keys.every((k) => (captions[code]?.[k] ?? '').trim().length === 0),
+      ),
+    [captions],
+  );
+
+  /**
+   * Copies `source` captions into every other locale that is still completely empty.
+   * Locales with any caption already written are left untouched.
+   * Returns the locale codes that were filled.
+   */
+  const copyToEmptyLocales = useCallback(
+    (source: string, keys: string[]): string[] => {
+      const targets = getEmptyLocales(source, keys);
+      const sourceCaptions = captions[source] ?? {};
+      const hasSource = keys.some((k) => (sourceCaptions[k] ?? '').trim().length > 0);
+      if (!hasSource || targets.length === 0) return [];
+      const copied: Record<string, string> = {};
+      keys.forEach((k) => {
+        copied[k] = sourceCaptions[k] ?? '';
+      });
+      setCaptions((prev) => {
+        const next: CaptionsByLocale = { ...prev };
+        targets.forEach((code) => {
+          next[code] = { ...(prev[code] ?? {}), ...copied };
+        });
+        return next;
+      });
+      return targets;
+    },
+    [captions, getEmptyLocales],
+  );
+
+  return {
+    captions,
+    isLoaded,
+    setCaption,
+    getCaption,
+    countFilled,
+    getEmptyLocales,
+    copyToEmptyLocales,
+  };
 });
