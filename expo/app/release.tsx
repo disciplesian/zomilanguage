@@ -65,10 +65,11 @@ const RELEASE = {
 };
 
 const SCREENSHOTS: { key: string; source: number }[] = [
-  { key: '01-translator', source: require('../assets/store/01-translator.png') },
-  { key: '02-glossary', source: require('../assets/store/02-glossary.png') },
-  { key: '03-pronunciation', source: require('../assets/store/03-pronunciation.png') },
-  { key: '04-settings', source: require('../assets/store/04-settings.png') },
+  { key: '01-translate', source: require('../assets/store/01-translate.png') },
+  { key: '02-zomi-to-english', source: require('../assets/store/02-zomi-to-english.png') },
+  { key: '03-dictionary', source: require('../assets/store/03-dictionary.png') },
+  { key: '04-history', source: require('../assets/store/04-history.png') },
+  { key: '05-settings', source: require('../assets/store/05-settings.png') },
 ];
 const SCREENSHOT_KEYS: string[] = SCREENSHOTS.map((s) => s.key);
 

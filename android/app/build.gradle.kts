@@ -37,6 +37,10 @@ android {
         compose = true
         buildConfig = true
     }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
 }
 
 kotlin {
@@ -67,4 +71,12 @@ dependencies {
     implementation(libs.coil.network.okhttp)
     implementation(libs.koin.androidx.compose)
     debugImplementation(libs.androidx.ui.tooling)
+
+    // Play Store screenshot capture (JVM, Robolectric native graphics):
+    // app/src/test/.../StoreScreenshots.kt, run via scripts/capture-play-screenshots.sh
+    testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.ui.test.junit4)
+    debugImplementation(libs.androidx.ui.test.manifest)
 }

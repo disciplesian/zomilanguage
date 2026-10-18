@@ -142,8 +142,10 @@ fun DictionaryScreen(viewModel: DictionaryViewModel = viewModel()) {
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Bold,
                         color = PortalColors.TextPrimary,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
                     )
-                    Spacer(Modifier.weight(1f))
                     Icon(
                         imageVector = Icons.Filled.Refresh,
                         contentDescription = "Check for dictionary updates",
@@ -152,10 +154,14 @@ fun DictionaryScreen(viewModel: DictionaryViewModel = viewModel()) {
                             .size(20.dp)
                             .clickable(enabled = !state.isRefreshing) { viewModel.refreshDictionary() },
                     )
-                    Spacer(Modifier.width(8.dp))
+                }
+                // Badge sits beside the count so the title never truncates on 360dp phones.
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
                     Text(
                         "Offline ready",
                         fontSize = 10.sp,
+                        maxLines = 1,
+                        softWrap = false,
                         fontWeight = FontWeight.Bold,
                         color = PortalColors.Yellow,
                         modifier = Modifier
@@ -163,13 +169,15 @@ fun DictionaryScreen(viewModel: DictionaryViewModel = viewModel()) {
                             .border(1.dp, PortalColors.Yellow.copy(alpha = 0.35f), RoundedCornerShape(50))
                             .padding(horizontal = 8.dp, vertical = 3.dp),
                     )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "${"%,d".format(state.totalCount)} verified entries",
+                        fontSize = 13.sp,
+                        color = PortalColors.TextSecondary,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
                 }
-                Text(
-                    "${"%,d".format(state.totalCount)} verified entries · English ⇄ Zomi",
-                    fontSize = 13.sp,
-                    color = PortalColors.TextSecondary,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
             }
         }
 

@@ -22,10 +22,11 @@ const SAVE_DELAY_MS = 400;
 
 const DEFAULT_CAPTIONS: CaptionsByLocale = {
   [DEFAULT_STORE_LOCALE]: {
-    '01-translator': 'Instant Zomi translation',
-    '02-glossary': 'Offline Zomi dictionary',
-    '03-pronunciation': 'Say it right',
-    '04-settings': 'Made your own',
+    '01-translate': 'Free, instant Zomi translation',
+    '02-zomi-to-english': 'Zomi to English, too',
+    '03-dictionary': '33,444 verified words, offline',
+    '04-history': 'Every translation, saved',
+    '05-settings': 'No sign-in needed',
   },
 };
 
