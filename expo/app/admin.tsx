@@ -23,6 +23,8 @@ import {
   X,
   TrendingUp,
   ArrowLeft,
+  Rocket,
+  Eye,
 } from 'lucide-react-native';
 import GlassCard from '@/components/GlassCard';
 import PageBottomNav, { PAGE_BOTTOM_NAV_SPACING } from '@/components/PageBottomNav';
@@ -244,6 +246,26 @@ export default function AdminDashboardScreen() {
             <Text style={styles.errorText}>{error}</Text>
           </GlassCard>
         ) : null}
+
+        <GlassCard variant="green" style={styles.card}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Play Store Release</Text>
+            <Rocket size={16} color={Colors.success} />
+          </View>
+          <Text style={styles.emptyText}>
+            Version 1.2.0 is in a 20% production rollout. Preview the listing exactly as
+            users see it on Google Play.
+          </Text>
+          <TouchableOpacity
+            style={styles.releasePreviewButton}
+            onPress={() => router.push('/release')}
+            activeOpacity={0.85}
+            accessibilityLabel="Open the Play Store listing preview"
+          >
+            <Eye size={15} color={Colors.text} />
+            <Text style={styles.releasePreviewText}>Preview listing</Text>
+          </TouchableOpacity>
+        </GlassCard>
 
         <GlassCard variant="cyan" glow style={styles.card}>
           <Text style={styles.sectionTitle}>Usage Overview</Text>
@@ -761,5 +783,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: Colors.textSecondary,
+  },
+  releasePreviewButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    marginTop: 12,
+    paddingVertical: 11,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0, 255, 136, 0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 255, 136, 0.45)',
+  },
+  releasePreviewText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.text,
   },
 });

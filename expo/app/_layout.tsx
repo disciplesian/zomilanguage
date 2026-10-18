@@ -127,6 +127,13 @@ function RootLayoutNav() {
             presentation: "card",
           }} 
         />
+        <Stack.Screen
+          name="release"
+          options={{
+            title: "Store Release",
+            presentation: "card",
+          }}
+        />
         <Stack.Screen 
           name="pronunciation-guide" 
           options={{ 
