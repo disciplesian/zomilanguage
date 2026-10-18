@@ -1,6 +1,6 @@
 import { API_BASE_URL } from './config';
 
-/** Client for the Zomi Language Portal backend (roles, verification, admin). */
+/** Client for the Zomi Translator backend (translation, account, admin). */
 
 export type PortalRole = 'user' | 'moderator' | 'admin';
 export type VerificationStatus = 'none' | 'pending' | 'approved' | 'rejected';
@@ -64,7 +64,7 @@ async function fetchWithRetry(
       // Retry on 5xx / 0-ish network errors, but not on 4xx (auth/bad request).
       if (res.status >= 500 && res.status < 600 && attempt < retries) {
         onRetry?.();
-        await new Promise((r) => setTimeout(r, 800 * 2 ** attempt));
+        await new Promise((r) => setTimeout(r, 400 * 2 ** attempt));
         continue;
       }
       return res;
@@ -76,7 +76,7 @@ async function fetchWithRetry(
       }
       if (attempt < retries) {
         onRetry?.();
-        await new Promise((r) => setTimeout(r, 800 * 2 ** attempt));
+        await new Promise((r) => setTimeout(r, 400 * 2 ** attempt));
       }
     }
   }
@@ -487,13 +487,38 @@ export interface UsageInfo {
   wordLimit: number;
 }
 
-/** Machine-readable marker thrown when the anonymous free tier is exhausted. */
+/** Machine-readable marker thrown when the guest daily allowance is used up. */
 export const WORD_LIMIT_ERROR = 'WORD_LIMIT_REACHED';
 
+/** Short, kind messages for the server's fair-use answers. */
+export function friendlyServiceMessage(code: string | undefined): string | null {
+  switch (code) {
+    case 'rate_limited':
+    case 'TOO_MANY_REQUESTS':
+      return 'Lots of translations at once. Please wait a moment and try again.';
+    case 'text_too_long':
+      return "That's a long text. Please translate up to 500 characters at a time, or sign in for longer texts.";
+    case 'dictionary_only':
+      return 'Sentence translation is busy right now. Dictionary words still work. Please try again shortly.';
+    case 'blocked':
+      return "Translation isn't available on this device right now. Contact support@zomitranslator.com if this seems wrong.";
+    default:
+      return null;
+  }
+}
+
+/** Permanently deletes the signed-in account and its synced data. */
+export async function deleteAccount(token: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/portal/me`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error("Couldn't delete your account right now. Please try again.");
+}
+
 /**
- * Streams a translation from the backend. Signed-in members translate without
- * limits; anonymous visitors draw down their 1,500-word free allowance via
- * `anonymousId` and are asked to sign in once it runs out.
+ * Streams a translation from the backend. Signed-in users translate without
+ * limits; guests draw down a daily allowance via `anonymousId`.
  */
 export async function streamTranslation(
   input: {
@@ -509,8 +534,7 @@ export async function streamTranslation(
 ): Promise<TranslationResult> {
   let res: Response;
   try {
-    // 3 retries: the backend host occasionally returns transient 503s under
-    // capacity pressure, so ride out short blips instead of failing fast.
+    // One quick retry rides out a transient blip without a long wait.
     res = await fetchWithRetry(
       `${API_BASE_URL}/api/translate/stream`,
       {
@@ -529,20 +553,24 @@ export async function streamTranslation(
         }),
         signal,
       },
-      3,
+      1,
       onRetry
     );
   } catch (err) {
     if (signal?.aborted) throw err;
-    throw new Error('Translation service is unreachable. Please check your connection and try again.');
+    throw new Error("You're offline. Dictionary words still work. Reconnect for sentences.");
   }
 
-  if (res.status === 401) {
+  if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-    if (body.error === 'word_limit_reached') throw new Error(WORD_LIMIT_ERROR);
-    throw new Error('Your session expired. Please sign in again.');
+    const code = typeof body.error === 'string' ? body.error : undefined;
+    if (code === 'word_limit_reached') throw new Error(WORD_LIMIT_ERROR);
+    const friendly = friendlyServiceMessage(code);
+    if (friendly) throw new Error(friendly);
+    if (res.status === 401) throw new Error('Your session expired. Please sign in again.');
+    throw new Error("Translation didn't come through. Please try again.");
   }
-  if (!res.ok || !res.body) throw new Error(`Translation failed (${res.status})`);
+  if (!res.body) throw new Error("Translation didn't come through. Please try again.");
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -592,7 +620,8 @@ export async function streamTranslation(
         },
       };
     } else if (eventName === 'error') {
-      throw new Error(String(payload.message ?? 'Translation failed'));
+      const code = typeof payload.code === 'string' ? payload.code : undefined;
+      throw new Error(friendlyServiceMessage(code) ?? "Translation didn't come through. Please try again.");
     }
   };
 

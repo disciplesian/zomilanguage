@@ -12,7 +12,7 @@ class TokenStore(context: Context) {
 
     /**
      * Stable per-device identifier for the anonymous translation free tier.
-     * Guests may translate up to 1,500 words before an account is required;
+     * Guests get a daily allowance of free AI words;
      * the ID persists so the allowance is tracked across app restarts.
      */
     fun anonymousId(): String {

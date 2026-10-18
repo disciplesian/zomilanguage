@@ -396,14 +396,12 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 28;
+				CURRENT_PROJECT_VERSION = 31;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Zomi Translator";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSCameraUsageDescription = "Zomi Translator uses the camera to capture documents and extract text for translation.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Zomi Translator uses the microphone for voice input so you can speak instead of typing.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Zomi Translator accesses your photos to extract text from images for translation.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -413,7 +411,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.0;
+				MARKETING_VERSION = 1.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.rork.c71czcicbp014dj0l1fu3;
 				PRODUCT_NAME = "Zomi AI Translator";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -432,14 +430,12 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 28;
+				CURRENT_PROJECT_VERSION = 31;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Zomi Translator";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSCameraUsageDescription = "Zomi Translator uses the camera to capture documents and extract text for translation.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Zomi Translator uses the microphone for voice input so you can speak instead of typing.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Zomi Translator accesses your photos to extract text from images for translation.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -449,7 +445,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.0;
+				MARKETING_VERSION = 1.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.rork.c71czcicbp014dj0l1fu3;
 				PRODUCT_NAME = "Zomi AI Translator";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -467,11 +463,11 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 28;
+				CURRENT_PROJECT_VERSION = 31;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				MARKETING_VERSION = 1.1.0;
+				MARKETING_VERSION = 1.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "app.rork.c71czcicbp014dj0l1fu3.tests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -489,11 +485,11 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 28;
+				CURRENT_PROJECT_VERSION = 31;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				MARKETING_VERSION = 1.1.0;
+				MARKETING_VERSION = 1.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "app.rork.c71czcicbp014dj0l1fu3.tests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -510,10 +506,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 28;
+				CURRENT_PROJECT_VERSION = 31;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.1.0;
+				MARKETING_VERSION = 1.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "app.rork.c71czcicbp014dj0l1fu3.uitests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -530,10 +526,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 28;
+				CURRENT_PROJECT_VERSION = 31;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.1.0;
+				MARKETING_VERSION = 1.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "app.rork.c71czcicbp014dj0l1fu3.uitests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;

@@ -14,13 +14,11 @@ enum Config {
     nonisolated static let EXPO_PUBLIC_RORK_API_BASE_URL = ""
     nonisolated static let EXPO_PUBLIC_RORK_APP_KEY = ""
     nonisolated static let EXPO_PUBLIC_RORK_AUTH_URL = ""
-    nonisolated static let EXPO_PUBLIC_TOOLKIT_URL = ""
 
     nonisolated static let allValues: [String: String] = [
         "EXPO_PUBLIC_PROJECT_ID": EXPO_PUBLIC_PROJECT_ID,
         "EXPO_PUBLIC_RORK_API_BASE_URL": EXPO_PUBLIC_RORK_API_BASE_URL,
         "EXPO_PUBLIC_RORK_APP_KEY": EXPO_PUBLIC_RORK_APP_KEY,
         "EXPO_PUBLIC_RORK_AUTH_URL": EXPO_PUBLIC_RORK_AUTH_URL,
-        "EXPO_PUBLIC_TOOLKIT_URL": EXPO_PUBLIC_TOOLKIT_URL,
     ]
 }

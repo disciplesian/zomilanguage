@@ -1,396 +1,449 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   ArrowLeftRight,
-  Copy,
-  Check,
-  Loader2,
-  Trash2,
-  AlertCircle,
-  Sparkles,
-  Volume2,
   BadgeCheck,
+  ClipboardPaste,
+  Copy,
+  Image as ImageIcon,
+  Loader2,
+  Share2,
+  Sparkles,
+  WifiOff,
+  X,
+  XCircle,
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { SiteLayout, GlassCard } from '@/components/SiteLayout';
-import { SignInPanel } from '@/components/SignInPanel';
 import { useAuth } from '@/lib/auth';
 import { getAnonymousId } from '@/lib/anonymousId';
-import {
-  languageLabel,
-  languageTtsCode,
-} from '@/lib/languages';
-import { streamTranslation, WORD_LIMIT_ERROR, type UsageInfo } from '@/lib/portalApi';
+import { instantTranslation } from '@/lib/dictionary';
+import { history } from '@/lib/history';
+import { streamTranslation, WORD_LIMIT_ERROR } from '@/lib/portalApi';
+import { useOnline } from '@/hooks/use-online';
+import { shareTranslationImage } from '@/lib/shareImage';
 
-const SUGGESTIONS = [
-  'Na dam maw?',
-  'Ka lungdam hi',
-  'Nang min bang ahi?',
-  'Pasian in hong thupha hen',
-];
+const GUEST_MAX_CHARS = 500;
+const MEMBER_MAX_CHARS = 5000;
+const CONSENT_KEY = 'zomi_ai_consent_v1';
+const BANNER_KEY = 'zomi_get_app_dismissed';
 
-const MAX_CHARS = 5000;
+type Lang = 'zomi' | 'english';
 
 const Translate = () => {
-  const { user, isLoading, getAccessToken } = useAuth();
-  const [sourceLanguage, setSourceLanguage] = useState<'zomi' | 'english'>('zomi');
-  const [targetLanguage, setTargetLanguage] = useState<string>('english');
+  const { user, getAccessToken } = useAuth();
+  const online = useOnline();
+  const [source, setSource] = useState<Lang>('zomi');
+  const target: Lang = source === 'zomi' ? 'english' : 'zomi';
   const [input, setInput] = useState<string>('');
   const [output, setOutput] = useState<string>('');
-  const [confidence, setConfidence] = useState<number>(0);
   const [alternatives, setAlternatives] = useState<string[]>([]);
-  const [isConnecting, setIsConnecting] = useState<boolean>(false);
+  const [isVerified, setIsVerified] = useState<boolean>(false);
   const [isTranslating, setIsTranslating] = useState<boolean>(false);
+  const [isConnecting, setIsConnecting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [needsSignIn, setNeedsSignIn] = useState<boolean>(false);
-  const [usage, setUsage] = useState<UsageInfo | null>(null);
-  const [copied, setCopied] = useState<boolean>(false);
+  const [isLimit, setIsLimit] = useState<boolean>(false);
+  const [freeLeft, setFreeLeft] = useState<number | null>(null);
+  const [consent, setConsent] = useState<boolean>(() => localStorage.getItem(CONSENT_KEY) === '1');
+  const [showBanner, setShowBanner] = useState<boolean>(() => localStorage.getItem(BANNER_KEY) !== '1');
+  const [turns, setTurns] = useState<number>(0);
   const abortRef = useRef<AbortController | null>(null);
+  const debounceRef = useRef<number | null>(null);
+  const historyRef = useRef<number | null>(null);
+  const lastKeyRef = useRef<string>('');
 
-  const sourceLabel = sourceLanguage === 'zomi' ? 'Zomi' : 'English';
-  const targetLabel = languageLabel(targetLanguage);
+  const sourceLabel = source === 'zomi' ? 'Zomi' : 'English';
+  const targetLabel = target === 'zomi' ? 'Zomi' : 'English';
+  const maxChars = user ? MEMBER_MAX_CHARS : GUEST_MAX_CHARS;
 
-  const runTranslation = useCallback(async (): Promise<void> => {
-    const text = input.trim();
-    if (!text) return;
-
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    setIsTranslating(true);
-    setError(null);
-    setNeedsSignIn(false);
+  const resetOutput = useCallback((): void => {
     setOutput('');
-    setConfidence(0);
     setAlternatives([]);
-    setIsConnecting(false);
-
-    try {
-      // Signed-in members translate without limits; guests draw down their
-      // 1,500-word free allowance tracked by a stable anonymous ID.
-      const token = user ? await getAccessToken() : null;
-      const result = await streamTranslation(
-        {
-          text,
-          sourceLanguage,
-          targetLanguage,
-          token,
-          anonymousId: getAnonymousId(),
-        },
-        (chunk) => {
-          setIsConnecting(false);
-          setOutput((prev) => prev + chunk);
-        },
-        controller.signal,
-        // Fires when a transient network blip triggers an automatic retry.
-        () => setIsConnecting(true)
-      );
-      setOutput(result.text);
-      setConfidence(result.confidence);
-      setAlternatives(result.alternatives);
-      if (result.usage) setUsage(result.usage);
-    } catch (err) {
-      if (controller.signal.aborted) return;
-      if (err instanceof Error && err.message === WORD_LIMIT_ERROR) {
-        setError('You have used your 1,500 free words. Sign in below to keep translating — it is free.');
-        setNeedsSignIn(true);
-      } else {
-        setError(err instanceof Error ? err.message : 'Translation failed. Please try again.');
-      }
-    } finally {
-      if (!controller.signal.aborted) {
-        setIsTranslating(false);
-        setIsConnecting(false);
-      }
-    }
-  }, [input, sourceLanguage, targetLanguage, getAccessToken, user]);
-
-  useEffect(() => {
-    return () => abortRef.current?.abort();
-  }, []);
-
-  const swap = useCallback((): void => {
-    // Full reversal: the previous output becomes the new input.
-    setSourceLanguage(targetLanguage as 'zomi' | 'english');
-    setTargetLanguage(sourceLanguage);
-    setInput(output);
-    setOutput(input);
+    setIsVerified(false);
     setError(null);
-  }, [sourceLanguage, targetLanguage, input, output]);
-
-  const clearAll = useCallback((): void => {
-    abortRef.current?.abort();
-    setInput('');
-    setOutput('');
-    setConfidence(0);
-    setAlternatives([]);
-    setError(null);
+    setIsLimit(false);
     setIsTranslating(false);
     setIsConnecting(false);
   }, []);
 
-  const swapAlternatives = useCallback((index: number): void => {
-    // Promote the tapped alternative to the main translation.
-    const chosen = alternatives[index];
-    if (!chosen) return;
-    const previous = output;
-    setOutput(chosen);
-    setAlternatives(alternatives.map((a, i) => (i === index ? previous : a)));
-  }, [alternatives, output]);
+  const showInstant = useCallback(
+    (text: string, from: Lang): boolean => {
+      const hit = instantTranslation(text, from === 'zomi');
+      if (!hit) return false;
+      abortRef.current?.abort();
+      lastKeyRef.current = `${from}|${text}`;
+      setOutput(hit.text);
+      setAlternatives(hit.alternatives);
+      setIsVerified(true);
+      setError(null);
+      setIsLimit(false);
+      setIsTranslating(false);
+      if (historyRef.current) window.clearTimeout(historyRef.current);
+      historyRef.current = window.setTimeout(() => {
+        history.save({
+          sourceText: text,
+          translatedText: hit.text,
+          sourceLanguage: from,
+          targetLanguage: from === 'zomi' ? 'english' : 'zomi',
+        });
+      }, 1200);
+      return true;
+    },
+    []
+  );
 
-  const copyOutput = useCallback(async (): Promise<void> => {
-    if (!output) return;
+  const runTranslation = useCallback(
+    async (text: string, from: Lang, force = false): Promise<void> => {
+      if (!text) return;
+      if (showInstant(text, from)) return;
+      if (!consent) {
+        setError('Please review the AI notice above to translate sentences.');
+        return;
+      }
+      const key = `${from}|${text}`;
+      if (!force && key === lastKeyRef.current) return;
+      lastKeyRef.current = key;
+      const to: Lang = from === 'zomi' ? 'english' : 'zomi';
+
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      const cached = history.lookup(text, to);
+      setOutput(cached?.translatedText ?? '');
+      setAlternatives([]);
+      setIsVerified(false);
+      setError(null);
+      setIsLimit(false);
+      setIsTranslating(!cached);
+      setIsConnecting(false);
+
+      try {
+        const token = user ? await getAccessToken() : null;
+        let streamed = '';
+        const result = await streamTranslation(
+          { text, sourceLanguage: from, targetLanguage: to, token, anonymousId: getAnonymousId() },
+          (chunk) => {
+            streamed += chunk;
+            setIsConnecting(false);
+            setIsTranslating(false);
+            setOutput(streamed);
+          },
+          controller.signal,
+          () => setIsConnecting(true)
+        );
+        if (controller.signal.aborted) return;
+        setOutput(result.text);
+        setAlternatives(result.alternatives);
+        setIsVerified(result.model === 'verified-dictionary');
+        if (result.usage) {
+          const u = result.usage;
+          if (u.authed || u.wordsUsed < 0 || u.wordLimit <= 0) setFreeLeft(u.authed ? null : freeLeft);
+          else setFreeLeft(u.wordsUsed * 2 > u.wordLimit ? Math.max(0, u.wordLimit - u.wordsUsed) : null);
+        }
+        history.save({ sourceText: text, translatedText: result.text, sourceLanguage: from, targetLanguage: to });
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        if (cached) {
+          setOutput(cached.translatedText);
+        } else {
+          const limit = err instanceof Error && err.message === WORD_LIMIT_ERROR;
+          setIsLimit(limit);
+          if (limit) setFreeLeft(0);
+          setOutput('');
+          setError(
+            limit
+              ? "You've used today's free words. Sign in for unlimited translation, or come back tomorrow. Dictionary words still work."
+              : err instanceof Error
+                ? err.message
+                : "Translation didn't come through. Please try again."
+          );
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsTranslating(false);
+          setIsConnecting(false);
+        }
+      }
+    },
+    [consent, getAccessToken, showInstant, user, freeLeft]
+  );
+
+  // Auto-translate: dictionary words instantly, sentences after a short pause.
+  useEffect(() => {
+    if (debounceRef.current) window.clearTimeout(debounceRef.current);
+    const text = input.trim();
+    if (!text) {
+      abortRef.current?.abort();
+      lastKeyRef.current = '';
+      resetOutput();
+      return;
+    }
+    if (showInstant(text, source)) return;
+    debounceRef.current = window.setTimeout(() => void runTranslation(text, source), 250);
+    return () => {
+      if (debounceRef.current) window.clearTimeout(debounceRef.current);
+    };
+    // runTranslation intentionally excluded: it changes with streaming state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [input, source]);
+
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+  const swap = (): void => {
+    const canReverse = output && !error;
+    setTurns((t) => t + 180);
+    lastKeyRef.current = '';
+    if (canReverse) {
+      setInput(output);
+      setOutput(input);
+    }
+    setSource(target);
+  };
+
+  const copy = async (): Promise<void> => {
     try {
       await navigator.clipboard.writeText(output);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1600);
+      navigator.vibrate?.(10);
+      toast.success('Copied');
     } catch {
-      setError('Could not copy to the clipboard.');
+      toast.error("Couldn't copy. Select the text and copy it instead.");
     }
-  }, [output]);
+  };
 
-  const speak = useCallback((): void => {
-    if (!output || typeof window.speechSynthesis === 'undefined') return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(output);
-    utterance.lang = languageTtsCode(targetLanguage);
-    utterance.rate = 0.92;
-    window.speechSynthesis.speak(utterance);
-  }, [output, targetLanguage]);
+  const paste = async (): Promise<void> => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) setInput(text.slice(0, maxChars));
+    } catch {
+      toast.error('Paste is blocked by your browser. Use your keyboard instead.');
+    }
+  };
 
-  if (isLoading) {
-    return (
-      <SiteLayout>
-        <div className="flex min-h-[60vh] items-center justify-center">
-          <Loader2 className="h-7 w-7 animate-spin text-[#00f0ff]" />
-        </div>
-      </SiteLayout>
-    );
-  }
+  const shareText = async (): Promise<void> => {
+    const text = `${sourceLabel}: ${input.trim()}\n\n${targetLabel}: ${output}\n\nTranslated with Zomi Translator`;
+    if (navigator.share) {
+      await navigator.share({ text }).catch(() => undefined);
+    } else {
+      await navigator.clipboard.writeText(text).catch(() => undefined);
+      toast.success('Copied to share');
+    }
+  };
 
-  const freeWordsLeft = usage && !usage.authed && usage.wordLimit > 0
-    ? Math.max(0, usage.wordLimit - usage.wordsUsed)
-    : null;
+  const hasResult = output.length > 0 && !error && !isTranslating;
+  const words = input.trim() ? input.trim().split(/\s+/).length : 0;
 
   return (
     <SiteLayout>
-      <div className="mx-auto w-full max-w-4xl px-5 pb-20 pt-12">
-        <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Translator</h1>
-            <p className="mt-1.5 text-sm text-white/50">
-              {user
-                ? `Signed in as ${user.name ?? user.email}`
-                : 'Free for your first 1,500 words — no account needed'}
-            </p>
+      <div className="mx-auto w-full max-w-6xl px-4 pt-5 sm:px-6 md:pt-10">
+        <div className="mb-5 hidden md:block">
+          <h1 className="text-3xl font-bold tracking-tight">Translate</h1>
+          <p className="mt-1 text-sm text-white/70">Free, instant Zomi ⇄ English. No sign-in needed.</p>
+        </div>
+
+        {showBanner && (
+          <div className="mb-4 flex items-center gap-3 rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-3 text-sm">
+            <span className="flex-1 text-white/80">Get Zomi Translator on your phone.</span>
+            <a href="https://apps.apple.com/app/id6804354953" target="_blank" rel="noreferrer" className="font-semibold text-[#00f0ff] hover:underline">App Store</a>
+            <a href="https://play.google.com/store/apps/details?id=com.rork.zomilanguageportal" target="_blank" rel="noreferrer" className="font-semibold text-[#00f0ff] hover:underline">Google Play</a>
+            <button
+              type="button"
+              aria-label="Dismiss"
+              onClick={() => {
+                localStorage.setItem(BANNER_KEY, '1');
+                setShowBanner(false);
+              }}
+              className="flex h-9 w-9 items-center justify-center rounded-full text-white/60 hover:bg-white/10 hover:text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
-          {!user && (
-            <div className="flex flex-col items-end gap-1.5">
-              {freeWordsLeft !== null ? (
-                <span className="rounded-full border border-[#00f0ff]/30 bg-[#00f0ff]/10 px-3 py-1 text-xs font-semibold text-[#7de9ff]">
-                  {freeWordsLeft.toLocaleString()} of 1,500 free words left
-                </span>
-              ) : (
-                <span className="text-xs text-white/40">1,500 free words without an account</span>
-              )}
-              <span className="text-xs text-white/35">Sign in anytime for unlimited translation</span>
-            </div>
-          )}
-          <div className="flex items-center gap-2 rounded-xl border border-white/15 p-1.5">
+        )}
+
+        {!online && (
+          <div className="mb-4 flex items-center gap-2.5 rounded-xl border border-[#ffd000]/35 bg-[#ffd000]/10 px-4 py-3 text-sm font-medium text-[#ffd000]">
+            <WifiOff className="h-4 w-4" aria-hidden="true" />
+            Offline: dictionary words still work.
+          </div>
+        )}
+
+        {!consent && (
+          <GlassCard tint="cyan" className="mb-4">
+            <p className="text-sm leading-relaxed text-white/85">
+              Dictionary words are translated in your browser. Sentences are sent securely to the Zomi AI translation
+              service, which uses Google Gemini and the Rork AI gateway as a backup. Your text is not used to identify
+              you. See the <Link to="/privacy" className="text-[#00f0ff] underline">Privacy Policy</Link>.
+            </p>
             <button
               type="button"
               onClick={() => {
-                const next: 'zomi' | 'english' = sourceLanguage === 'zomi' ? 'english' : 'zomi';
-                setSourceLanguage(next);
-                setTargetLanguage(next === 'zomi' ? 'english' : 'zomi');
-                setOutput('');
-                setConfidence(0);
-                setAlternatives([]);
+                localStorage.setItem(CONSENT_KEY, '1');
+                setConsent(true);
+                lastKeyRef.current = '';
+                const text = input.trim();
+                if (text) void runTranslation(text, source, true);
               }}
-              className="rounded-lg px-3.5 py-2 text-sm font-semibold text-white/80 transition-colors hover:bg-white/5 hover:text-[#00f0ff]"
+              className="mt-3 inline-flex min-h-11 items-center rounded-full bg-[#00f0ff] px-5 text-sm font-semibold text-[#0b1020] transition-transform active:scale-95"
             >
-              {sourceLabel}
+              Agree &amp; continue
             </button>
+          </GlassCard>
+        )}
+
+        {/* Language selector */}
+        <GlassCard tint="cyan" className="mb-3 p-2">
+          <div className="flex items-center gap-2">
+            <span className="flex min-h-12 flex-1 items-center justify-center rounded-xl bg-[#00f0ff]/10 text-[17px] font-semibold">{sourceLabel}</span>
             <button
               type="button"
               onClick={swap}
-              aria-label="Swap languages"
-              className="rounded-lg p-2 text-white/50 transition-colors hover:bg-white/5 hover:text-[#00f0ff]"
+              aria-label={`Swap languages. Now translating ${sourceLabel} to ${targetLabel}`}
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#00f0ff]/85 to-[#8c5cff]/85 text-white shadow-lg transition-transform active:scale-90"
             >
-              <ArrowLeftRight className="h-4 w-4" />
+              <ArrowLeftRight
+                className="h-5 w-5 transition-transform duration-300 motion-reduce:transition-none"
+                style={{ transform: `rotate(${turns}deg)` }}
+                aria-hidden="true"
+              />
             </button>
-            <span className="inline-flex items-center rounded-lg px-3.5 py-2 text-sm font-semibold text-[#00f0ff]">
-              {targetLabel}
-            </span>
+            <span className="flex min-h-12 flex-1 items-center justify-center rounded-xl bg-[#00f0ff]/20 text-[17px] font-semibold text-[#00f0ff]">{targetLabel}</span>
           </div>
-        </div>
+        </GlassCard>
 
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-2 md:gap-4">
           {/* Input */}
-          <GlassCard className="flex flex-col p-0">
-            <div className="flex items-center justify-between border-b border-white/10 px-5 py-3">
-              <span className="text-xs font-semibold uppercase tracking-wider text-white/50">
-                {sourceLabel}
-              </span>
-              <span className="text-xs text-white/35">
-                {input.length}/{MAX_CHARS}
-              </span>
+          <GlassCard tint="purple" className="flex flex-col">
+            <div className="mb-2 flex items-center">
+              <span className="flex-1 text-sm font-semibold">{sourceLabel}</span>
+              <button type="button" onClick={() => void paste()} aria-label="Paste" className="flex h-11 w-11 items-center justify-center rounded-full text-white/80 hover:bg-white/10">
+                <ClipboardPaste className="h-5 w-5" />
+              </button>
+              {input && (
+                <button type="button" onClick={() => setInput('')} aria-label="Clear text" className="flex h-11 w-11 items-center justify-center rounded-full text-white/80 hover:bg-white/10">
+                  <XCircle className="h-5 w-5" />
+                </button>
+              )}
             </div>
             <textarea
               value={input}
-              onChange={(e) => setInput(e.target.value.slice(0, MAX_CHARS))}
-              placeholder={`Type or paste ${sourceLabel} text…`}
-              rows={8}
-              className="w-full flex-1 resize-none bg-transparent px-5 py-4 text-[17px] leading-relaxed text-white placeholder:text-white/30 focus:outline-none"
+              onChange={(e) => setInput(e.target.value.slice(0, maxChars))}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  void runTranslation(input.trim(), source, true);
+                }
+              }}
+              placeholder={`Type ${sourceLabel} text…`}
+              aria-label={`Text to translate from ${sourceLabel}`}
+              rows={5}
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              enterKeyHint="done"
+              className="min-h-[8rem] w-full flex-1 resize-none bg-transparent text-[20px] leading-relaxed text-white placeholder:text-white/50 focus:outline-none md:min-h-[14rem]"
             />
-            <div className="flex items-center gap-2 border-t border-white/10 px-5 py-3">
-              <button
-                type="button"
-                onClick={() => void runTranslation()}
-                disabled={isTranslating || input.trim().length === 0}
-                className="inline-flex items-center gap-2 rounded-lg bg-[#00f0ff] px-4 py-2.5 text-sm font-semibold text-[#10131f] transition-transform hover:scale-[1.03] disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {isTranslating ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Sparkles className="h-4 w-4" />
-                )}
-                Translate
-              </button>
-              {(input || output) && (
-                <button
-                  type="button"
-                  onClick={clearAll}
-                  className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2.5 text-sm font-medium text-white/50 transition-colors hover:text-white"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Clear
-                </button>
-              )}
+            <div className="mt-2 flex justify-between text-xs tabular-nums text-white/60">
+              <span>
+                {input.length}/{maxChars}
+              </span>
+              <span>
+                {words} {words === 1 ? 'word' : 'words'}
+              </span>
             </div>
           </GlassCard>
 
           {/* Output */}
-          <GlassCard className="flex flex-col p-0">
-            <div className="flex items-center justify-between border-b border-white/10 px-5 py-3">
-              <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[#00f0ff]">
-                {targetLabel}
-                {output && !isTranslating && (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-[#1d9bf0]/40 bg-[#1d9bf0]/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#63c0ff]">
-                    <BadgeCheck className="h-3 w-3" />
-                    Official
-                  </span>
-                )}
-              </span>
-              {confidence > 0 && (
-                <span className="rounded-full border border-[#00ff88]/30 bg-[#00ff88]/10 px-2 py-0.5 text-[11px] font-semibold text-[#7dffc0]">
-                  {confidence}% confidence
+          <GlassCard tint="green" className="flex flex-col">
+            <div className="mb-2 flex items-center gap-2">
+              <span className="text-sm font-semibold">{targetLabel}</span>
+              {isVerified && output && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-[#1d9bf0]/20 px-2 py-0.5 text-[11px] font-bold text-[#7cc8ff]">
+                  <BadgeCheck className="h-3 w-3" aria-hidden="true" />
+                  Dictionary
                 </span>
               )}
-            </div>
-            <div className="min-h-[13rem] flex-1 px-5 py-4">
-              {output ? (
+              <span className="flex-1" />
+              {hasResult && (
                 <>
-                  <p className="whitespace-pre-wrap text-[17px] leading-relaxed text-white/95">
-                    {output}
-                    {isTranslating && (
-                      <span className="ml-0.5 inline-block h-[1.1em] w-[2px] animate-pulse bg-[#00f0ff] align-middle" />
-                    )}
-                  </p>
-                  {alternatives.length > 0 && !isTranslating && (
-                    <div className="mt-4 border-t border-white/10 pt-3">
-                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-white/40">
-                        Also common
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {alternatives.map((alt, i) => (
-                          <button
-                            key={`${alt}-${i}`}
-                            type="button"
-                            onClick={() => swapAlternatives(i)}
-                            title="Use this phrasing"
-                            className="rounded-full border border-white/15 bg-white/5 px-3.5 py-1.5 text-sm text-white/70 transition-colors hover:border-[#00f0ff]/40 hover:bg-[#00f0ff]/10 hover:text-[#00f0ff]"
-                          >
-                            {alt}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void shareTranslationImage({ sourceLabel, targetLabel, sourceText: input.trim(), translatedText: output }).catch(() =>
+                        toast.error("Couldn't create the image.")
+                      )
+                    }
+                    aria-label="Share as image"
+                    className="flex h-11 w-11 items-center justify-center rounded-full text-white/80 hover:bg-white/10"
+                  >
+                    <ImageIcon className="h-5 w-5" />
+                  </button>
+                  <button type="button" onClick={() => void shareText()} aria-label="Share as text" className="flex h-11 w-11 items-center justify-center rounded-full text-white/80 hover:bg-white/10">
+                    <Share2 className="h-5 w-5" />
+                  </button>
+                  <button type="button" onClick={() => void copy()} aria-label="Copy translation" className="flex h-11 w-11 items-center justify-center rounded-full text-white/80 hover:bg-white/10">
+                    <Copy className="h-5 w-5" />
+                  </button>
                 </>
+              )}
+            </div>
+            <div className="min-h-[5rem] flex-1 md:min-h-[14rem]" aria-live="polite">
+              {error ? (
+                <div className="flex flex-col items-center gap-3 py-2 text-center">
+                  {isLimit ? <Sparkles className="h-5 w-5 text-[#00f0ff]" /> : null}
+                  <p className="text-[15px] leading-relaxed text-white/85">{error}</p>
+                  {isLimit ? (
+                    <Link to="/settings" className="inline-flex min-h-11 items-center rounded-full bg-[#00f0ff] px-5 text-sm font-semibold text-[#0b1020]">
+                      Sign in
+                    </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => void runTranslation(input.trim(), source, true)}
+                      className="inline-flex min-h-11 items-center rounded-full bg-white/10 px-5 text-sm font-semibold"
+                    >
+                      Try again
+                    </button>
+                  )}
+                </div>
+              ) : output ? (
+                <p className="whitespace-pre-wrap text-[20px] leading-relaxed text-white">{output}</p>
               ) : isTranslating ? (
-                <div className="flex items-center gap-2 text-white/40">
+                <div className="flex items-center gap-2 text-white/75">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   {isConnecting ? 'Connecting…' : 'Translating…'}
                 </div>
               ) : (
-                <p className="text-[17px] text-white/25">Your translation will appear here.</p>
+                <p className="text-[20px] text-white/50">Translation appears here</p>
               )}
             </div>
-            {output && !isTranslating && (
-              <div className="flex items-center gap-2 border-t border-white/10 px-5 py-3">
-                <button
-                  type="button"
-                  onClick={() => void copyOutput()}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 px-3.5 py-2 text-sm font-medium text-white/70 transition-colors hover:border-white/35 hover:text-white"
-                >
-                  {copied ? (
-                    <Check className="h-4 w-4 text-[#00ff88]" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
-                  {copied ? 'Copied' : 'Copy'}
-                </button>
-                <button
-                  type="button"
-                  onClick={speak}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 px-3.5 py-2 text-sm font-medium text-white/70 transition-colors hover:border-white/35 hover:text-white"
-                >
-                  <Volume2 className="h-4 w-4" />
-                  Listen
-                </button>
+            {alternatives.length > 0 && hasResult && (
+              <div className="mt-3">
+                <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-white/60">Also</p>
+                <div className="flex flex-wrap gap-2">
+                  {alternatives.map((alt, i) => (
+                    <button
+                      key={`${alt}-${i}`}
+                      type="button"
+                      onClick={() => {
+                        const previous = output;
+                        setOutput(alt);
+                        setAlternatives(alternatives.map((a, j) => (j === i ? previous : a)));
+                      }}
+                      className="min-h-9 rounded-full border border-white/25 bg-white/10 px-3.5 text-sm transition-colors hover:border-[#00f0ff]/50"
+                    >
+                      {alt}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </GlassCard>
         </div>
 
-        {error && (
-          <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-[#ff5e5e]/30 bg-[#ff5e5e]/10 p-4">
-            <AlertCircle className="mt-0.5 h-4.5 w-4.5 shrink-0 text-[#ff8a8a]" />
-            <p className="text-sm text-[#ffb3b3]">{error}</p>
-          </div>
+        {freeLeft !== null && freeLeft > 0 && !user && (
+          <p className="mt-3 text-center text-sm text-white/65">Free today: {freeLeft.toLocaleString()} words left</p>
         )}
-
-        {needsSignIn && !user && (
-          <div className="mt-6">
-            <SignInPanel
-              title="Keep translating"
-              message="You have used your 1,500 free words. Sign in with Google or Apple for unlimited translation — it is free and your history syncs across devices."
-            />
-          </div>
-        )}
-
-        <div className="mt-8">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-white/40">
-            Try a phrase
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {SUGGESTIONS.map((phrase) => (
-              <button
-                key={phrase}
-                type="button"
-                onClick={() => {
-                  setSourceLanguage('zomi');
-                  setTargetLanguage('english');
-                  setInput(phrase);
-                }}
-                className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm text-white/70 transition-colors hover:border-[#00f0ff]/40 hover:bg-[#00f0ff]/10 hover:text-[#00f0ff]"
-              >
-                {phrase}
-              </button>
-            ))}
-          </div>
-        </div>
       </div>
     </SiteLayout>
   );

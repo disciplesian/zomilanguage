@@ -152,10 +152,10 @@ struct TranslationTipsView: View {
                             ForEach(Array(qualityFactors.enumerated()), id: \.offset) { _, item in
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(item.factor)
-                                        .font(.system(size: 14, weight: .semibold))
+                                        .scaledFont(size: 14, weight: .semibold)
                                         .foregroundStyle(colors.text)
                                     Text(item.impact)
-                                        .font(.system(size: 13))
+                                        .scaledFont(size: 13)
                                         .foregroundStyle(colors.textSecondary)
                                 }
                             }
@@ -170,7 +170,7 @@ struct TranslationTipsView: View {
                                     Text("•")
                                     Text(mistake)
                                 }
-                                .font(.system(size: 14))
+                                .scaledFont(size: 14)
                                 .foregroundStyle(colors.textSecondary)
                             }
                         }
@@ -182,13 +182,13 @@ struct TranslationTipsView: View {
                             GlassCard(padding: 14, colors: colors, isDark: theme.isDark) {
                                 VStack(alignment: .leading, spacing: 8) {
                                     Image(systemName: practice.systemImage)
-                                        .font(.system(size: 18))
+                                        .scaledFont(size: 18)
                                         .foregroundStyle(colors[keyPath: practice.tint])
                                     Text(practice.title)
-                                        .font(.system(size: 14, weight: .semibold))
+                                        .scaledFont(size: 14, weight: .semibold)
                                         .foregroundStyle(colors.text)
                                     Text(practice.description)
-                                        .font(.system(size: 12))
+                                        .scaledFont(size: 12)
                                         .foregroundStyle(colors.textSecondary)
                                         .lineSpacing(2)
                                 }
@@ -214,10 +214,10 @@ struct TranslationTipsView: View {
             )
             VStack(alignment: .leading, spacing: 2) {
                 Text("Translation Tips & Guide")
-                    .font(.system(size: 20, weight: .bold))
+                    .scaledFont(size: 20, weight: .bold)
                     .foregroundStyle(colors.text)
                 Text("Get the best results from Zomi Translator")
-                    .font(.system(size: 13))
+                    .scaledFont(size: 13)
                     .foregroundStyle(colors.textSecondary)
             }
             Spacer()
@@ -228,7 +228,7 @@ struct TranslationTipsView: View {
     private var intro: some View {
         GlassCard(colors: colors, isDark: theme.isDark) {
             Text("Welcome to the Zomi Translator guide! This page will help you understand how to get the most accurate translations possible. Whether you are translating from English to Zomi or Zomi to English, these tips will significantly improve your results.")
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundStyle(colors.textSecondary)
                 .lineSpacing(4)
         }
@@ -240,14 +240,14 @@ struct TranslationTipsView: View {
                 Image(systemName: "bolt.fill")
                     .foregroundStyle(colors.accent)
                 Text("Key Insight")
-                    .font(.system(size: 16, weight: .bold))
+                    .scaledFont(size: 16, weight: .bold)
                     .foregroundStyle(colors.text)
             }
             (Text("Context is everything. ")
-                .font(.system(size: 14, weight: .bold))
+                .font(.subheadline.bold())
                 .foregroundStyle(colors.accent)
              + Text("The single most effective way to improve translation accuracy is to provide more context. A complete sentence will always translate better than a single word or phrase.")
-                .font(.system(size: 14))
+                .font(.subheadline)
                 .foregroundStyle(colors.textSecondary))
                 .lineSpacing(4)
         }
@@ -272,18 +272,18 @@ struct TranslationTipsView: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 10) {
                     Image(systemName: section.systemImage)
-                        .font(.system(size: 18))
+                        .scaledFont(size: 18)
                         .foregroundStyle(colors[keyPath: section.iconTint])
                         .frame(width: 36, height: 36)
                         .background(Color.white.opacity(0.1))
                         .clipShape(.rect(cornerRadius: 10))
                     Text(section.title)
-                        .font(.system(size: 16, weight: .semibold))
+                        .scaledFont(size: 16, weight: .semibold)
                         .foregroundStyle(colors.text)
                 }
                 ForEach(section.content, id: \.self) { paragraph in
                     Text(paragraph)
-                        .font(.system(size: 14))
+                        .scaledFont(size: 14)
                         .foregroundStyle(colors.textSecondary)
                         .lineSpacing(4)
                 }
@@ -297,26 +297,26 @@ struct TranslationTipsView: View {
                 HStack(alignment: .top, spacing: 12) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("✗ Avoid")
-                            .font(.system(size: 12, weight: .bold))
+                            .scaledFont(size: 12, weight: .bold)
                             .foregroundStyle(colors.error)
                         Text("\u{201C}\(example.bad)\u{201D}")
-                            .font(.system(size: 13))
+                            .scaledFont(size: 13)
                             .foregroundStyle(colors.textSecondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text("✓ Better")
-                            .font(.system(size: 12, weight: .bold))
+                            .scaledFont(size: 12, weight: .bold)
                             .foregroundStyle(colors.success)
                         Text("\u{201C}\(example.good)\u{201D}")
-                            .font(.system(size: 13))
+                            .scaledFont(size: 13)
                             .foregroundStyle(colors.text)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 Text(example.explanation)
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundStyle(colors.textMuted)
             }
         }
@@ -325,10 +325,10 @@ struct TranslationTipsView: View {
     private func sectionHeader(_ title: String, systemImage: String, tint: Color) -> some View {
         HStack(spacing: 10) {
             Image(systemName: systemImage)
-                .font(.system(size: 18))
+                .scaledFont(size: 18)
                 .foregroundStyle(tint)
             Text(title)
-                .font(.system(size: 18, weight: .bold))
+                .scaledFont(size: 18, weight: .bold)
                 .foregroundStyle(colors.text)
         }
         .padding(.top, 8)

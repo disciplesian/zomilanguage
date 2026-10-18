@@ -125,7 +125,7 @@ fun AdminScreen(
             fontWeight = FontWeight.Bold,
         )
         Text(
-            "Members, verification and translation activity",
+            "Users, verification and translation activity",
             color = PortalColors.TextFaint,
             fontSize = 13.sp,
             modifier = Modifier.padding(top = 2.dp),
@@ -245,11 +245,11 @@ fun AdminScreen(
 
         Spacer(Modifier.height(12.dp))
 
-        // Members
+        // Users
         GlassCard {
             Column {
                 Text(
-                    "Members",
+                    "Users",
                     color = PortalColors.TextPrimary,
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,

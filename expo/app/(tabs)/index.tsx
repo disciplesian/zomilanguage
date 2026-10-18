@@ -46,10 +46,7 @@ import type { Svg } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
 
-import * as ImagePicker from 'expo-image-picker';
-import { generateText } from '@rork-ai/toolkit-sdk';
 import { trpc } from '@/lib/trpc';
-import { buildFallbackPrompt } from '@/constants/zomiPrompt';
 import {
   languageLabel,
   languageTtsCode,
@@ -62,11 +59,8 @@ import TypingDots from '@/components/TypingDots';
 
 import Colors from '@/constants/colors';
 
-import { useTextToSpeech } from '@/hooks/useTextToSpeech';
-import { useSpeechToText } from '@/hooks/useSpeechToText';
 import { useStreamingTranslation } from '@/hooks/useStreamingTranslation';
 import { useTranslationCache } from '@/contexts/TranslationCacheContext';
-import { useGlossary } from '@/contexts/GlossaryContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { getAnonymousId } from '@/lib/anonymousId';
 import { exportTranslation, ExportFormat, TranslationData } from '@/lib/exportUtils';
@@ -87,7 +81,6 @@ export default function TranslatorScreen() {
   
   const [copied, setCopied] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
-  const [showSpeedOptions, setShowSpeedOptions] = useState(false);
 
   const [showExportOptions, setShowExportOptions] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -98,7 +91,6 @@ export default function TranslatorScreen() {
   
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const recordingAnim = useRef(new Animated.Value(1)).current;
   const resultAnim = useRef(new Animated.Value(1)).current;
   const resultSlide = useRef(new Animated.Value(0)).current;
   const toastOpacity = useRef(new Animated.Value(0)).current;
@@ -138,23 +130,6 @@ export default function TranslatorScreen() {
     };
   }, []);
 
-  const { 
-    speak, 
-    stop: stopSpeaking, 
-    isSpeaking, 
-    currentSpeed, 
-    setSpeed, 
-    availableSpeeds 
-  } = useTextToSpeech();
-  
-  const { 
-    isRecording, 
-    isTranscribing, 
-    recordingDuration,
-    startRecording, 
-    stopRecording, 
-    cancelRecording 
-  } = useSpeechToText();
 
 
 
@@ -166,33 +141,12 @@ export default function TranslatorScreen() {
     }).start();
   }, [fadeAnim]);
 
-  useEffect(() => {
-    if (isRecording) {
-      const pulse = Animated.loop(
-        Animated.sequence([
-          Animated.timing(recordingAnim, {
-            toValue: 1.2,
-            duration: 500,
-            useNativeDriver: true,
-          }),
-          Animated.timing(recordingAnim, {
-            toValue: 1,
-            duration: 500,
-            useNativeDriver: true,
-          }),
-        ])
-      );
-      pulse.start();
-      return () => pulse.stop();
-    } else {
-      recordingAnim.setValue(1);
-    }
-  }, [isRecording, recordingAnim]);
 
   const translateMutation = trpc.translation.translate.useMutation();
   const stream = useStreamingTranslation();
   const cache = useTranslationCache();
-  const glossary = useGlossary();
+  // Personal glossary removed: translation relies on the verified dictionary.
+  const glossary = useMemo(() => ({ terms: [] as { term: string; meaning: string }[], asRecord: (): Record<string, string> => ({}) }), []);
   const { user, getAccessToken } = useAuth();
   const translationRequestId = useRef(0);
   const isTranslatingRef = useRef(false);
@@ -307,8 +261,8 @@ export default function TranslatorScreen() {
     // last translation visible while a new one streams in prevents the display
     // from blinking on every keystroke.
     try {
-      // Signed-in members translate without limits; guests draw down their
-      // 1,500-word free allowance tracked by a stable per-device anonymous ID.
+      // Signed-in users translate without limits; guests draw down a daily
+      // allowance tracked by a stable per-device anonymous ID.
       const authToken = (await getAccessToken()) ?? undefined;
       const anonymousId = await getAnonymousId();
       const streamResult = await stream.start(text.trim(), targetLang, {
@@ -339,7 +293,7 @@ export default function TranslatorScreen() {
       if (streamResult.error && streamResult.error !== 'cancelled') {
         // Quota and session problems must not fall through to the client-side fallback.
         if (/word.?limit/i.test(streamResult.error)) {
-          setOutputText('You have used your 1,500 free words. Sign in from the Profile tab to keep translating.');
+          setOutputText("Translation limit: You've used today's free words. Sign in for unlimited translation, or come back tomorrow. Dictionary words still work.");
           setTranslationQuality(0);
           setIsTranslating(false);
           isTranslatingRef.current = false;
@@ -348,8 +302,8 @@ export default function TranslatorScreen() {
         if (/401|unauthorized|sign.?in/i.test(streamResult.error)) {
           setOutputText(
             user
-              ? 'Your session expired. Please sign in again from the Profile tab.'
-              : 'You have used your 1,500 free words. Sign in from the Profile tab to keep translating.'
+              ? 'Your session expired. Please sign in again from Settings.'
+              : "Translation limit: You've used today's free words. Sign in for unlimited translation, or come back tomorrow. Dictionary words still work."
           );
           setTranslationQuality(0);
           setIsTranslating(false);
@@ -404,14 +358,14 @@ export default function TranslatorScreen() {
       }
       const errMsg = backendError instanceof Error ? backendError.message : String(backendError);
       if (errMsg.toLowerCase().includes('word_limit_reached')) {
-        setOutputText('You have used your 1,500 free words. Sign in from the Profile tab to keep translating.');
+        setOutputText("Translation limit: You've used today's free words. Sign in for unlimited translation, or come back tomorrow. Dictionary words still work.");
         setTranslationQuality(0);
         setIsTranslating(false);
         isTranslatingRef.current = false;
         return;
       }
       if (errMsg.toLowerCase().includes('sign in')) {
-        setOutputText('Your session expired. Please sign in again from the Profile tab.');
+        setOutputText('Your session expired. Please sign in again from Settings.');
         setTranslationQuality(0);
         setIsTranslating(false);
         isTranslatingRef.current = false;
@@ -429,28 +383,8 @@ export default function TranslatorScreen() {
     
     // Fallback to client-side AI translation
     try {
-      console.log('Using client-side AI fallback...');
-      const prompt = buildFallbackPrompt(text.trim(), sourceLang, targetLang);
-
-      const fallbackResult = await generateText({ messages: [{ role: 'user', content: prompt }] });
-      
-      // Check if this is still the latest request
-      if (currentRequestId !== translationRequestId.current) {
-        console.log(`[Request ${currentRequestId}] Outdated after fallback, ignoring`);
-        return;
-      }
-      
-      const finalText = fallbackResult.trim();
-      setOutputText(finalText);
-      setTranslationQuality(92);
-      cache.save({
-        sourceText: text.trim(),
-        translatedText: finalText,
-        sourceLanguage: sourceLang,
-        targetLanguage: targetLang,
-        confidence: 92,
-        model: 'rork-toolkit',
-      });
+      // Both server paths failed: fall through to the on-device answers below.
+      throw new Error('network');
     } catch (fallbackError: unknown) {
       // Check if this is still the latest request
       if (currentRequestId !== translationRequestId.current) {
@@ -526,8 +460,8 @@ export default function TranslatorScreen() {
     }
     const timeoutId = setTimeout(() => {
       translateRef.current(inputText, sourceLanguage, targetLanguage);
-    }, 600); 
-    
+    }, 250);
+
     return () => clearTimeout(timeoutId);
   }, [inputText, sourceLanguage, targetLanguage]);
 
@@ -575,11 +509,10 @@ export default function TranslatorScreen() {
     setInputText('');
     setOutputText('');
     setTranslationQuality(0);
-    stopSpeaking();
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-  }, [stopSpeaking]);
+  }, []);
 
   const handleFavorite = useCallback(() => {
     setIsFavorite(!isFavorite);
@@ -774,137 +707,6 @@ export default function TranslatorScreen() {
     }
   }, []);
 
-  const extractTextFromImage = useCallback(async (base64Image: string) => {
-    setIsTranslating(true);
-    try {
-      console.log('Extracting text from image...');
-      const extractedText = await generateText({
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'image',
-                image: base64Image,
-              },
-              {
-                type: 'text',
-                text: 'Extract all visible text from this image. Return ONLY the extracted text, nothing else. If there is no text in the image, return "No text found".',
-              },
-            ],
-          },
-        ],
-      });
-
-      console.log('Extracted text:', extractedText);
-
-      if (extractedText && extractedText !== 'No text found') {
-        setInputText(extractedText.trim());
-        if (Platform.OS !== 'web') {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        }
-      } else {
-        Alert.alert('No Text Found', 'Could not detect any text in the image.');
-      }
-    } catch (error) {
-      console.error('OCR error:', error);
-      Alert.alert('Error', 'Failed to extract text from image. Please try again.');
-    } finally {
-      setIsTranslating(false);
-    }
-  }, []);
-
-  const handleImagePick = useCallback(async () => {
-    try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
-      if (permissionResult.granted === false) {
-        Alert.alert('Permission Required', 'Please allow access to your photo library to use this feature.');
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: false,
-        quality: 0.8,
-        base64: true,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        const asset = result.assets[0];
-        if (asset.base64) {
-          await extractTextFromImage(asset.base64);
-        } else {
-          Alert.alert('Error', 'Failed to process image.');
-        }
-      }
-    } catch (error) {
-      console.error('Image picker error:', error);
-      Alert.alert('Error', 'Failed to pick image.');
-    }
-  }, [extractTextFromImage]);
-
-  const handleCameraCapture = useCallback(async () => {
-    try {
-      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-      
-      if (permissionResult.granted === false) {
-        Alert.alert('Permission Required', 'Please allow camera access to use this feature.');
-        return;
-      }
-
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ['images'],
-        allowsEditing: false,
-        quality: 0.8,
-        base64: true,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        const asset = result.assets[0];
-        if (asset.base64) {
-          await extractTextFromImage(asset.base64);
-        } else {
-          Alert.alert('Error', 'Failed to process image.');
-        }
-      }
-    } catch (error) {
-      console.error('Camera error:', error);
-      Alert.alert('Error', 'Failed to capture image.');
-    }
-  }, [extractTextFromImage]);
-
-  const handleVoiceInput = useCallback(async () => {
-    if (isRecording) {
-      const transcription = await stopRecording();
-      if (transcription) {
-        setInputText(transcription);
-        if (Platform.OS !== 'web') {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        }
-      }
-    } else {
-      await startRecording();
-      if (Platform.OS !== 'web') {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      }
-    }
-  }, [isRecording, startRecording, stopRecording]);
-
-  const handleSpeak = useCallback((text: string, language: string) => {
-    if (isSpeaking) {
-      stopSpeaking();
-    } else {
-      speak(text, { language, rate: currentSpeed });
-    }
-  }, [speak, stopSpeaking, isSpeaking, currentSpeed]);
-
-  const formatDuration = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
   const wordCount = inputText.trim() ? inputText.trim().split(/\s+/).length : 0;
   const charCount = inputText.length;
 
@@ -944,7 +746,7 @@ export default function TranslatorScreen() {
                 </View>
                 <View>
                   <Text style={styles.headerTitle}>ZOMI TRANSLATOR</Text>
-                  <Text style={styles.headerSubtitle}>AI-Powered Translation</Text>
+                  <Text style={styles.headerSubtitle}>Zomi ⇄ English</Text>
                 </View>
               </View>
             </LinearGradient>
@@ -997,10 +799,8 @@ export default function TranslatorScreen() {
             style={styles.quickMenu}
           >
             {[
-              { id: 'tools', label: 'Tools', Icon: Wrench, color: '#8C5CFF', route: '/(tabs)/tools' },
               { id: 'history', label: 'History', Icon: HistoryIcon, color: '#22D3A3', route: '/(tabs)/history' },
-              { id: 'glossary', label: 'Glossary', Icon: BookOpen, color: '#FFB547', route: '/glossary' },
-              { id: 'pronounce', label: 'Pronounce', Icon: Mic2, color: '#FF6B9D', route: '/pronunciation-guide' },
+              { id: 'dictionary', label: 'Dictionary', Icon: BookOpen, color: '#FFB547', route: '/(tabs)/dictionary' },
               { id: 'tips', label: 'Tips', Icon: Lightbulb, color: '#FFD166', route: '/translation-tips' },
             ].map(({ id, label, Icon, color, route }) => (
               <TouchableOpacity
@@ -1032,45 +832,15 @@ export default function TranslatorScreen() {
                 {sourceLabel}
               </Text>
               <View style={styles.inputActions}>
-                <Animated.View style={{ transform: [{ scale: isRecording ? recordingAnim : 1 }] }}>
-                  <TouchableOpacity 
-                    onPress={handleVoiceInput} 
-                    style={[styles.actionButton, isRecording && styles.recordingButton]}
-                    disabled={isTranscribing}
-                  >
-                    {isTranscribing ? (
-                      <ActivityIndicator size="small" color={Colors.accent} />
-                    ) : isRecording ? (
-                      <Square size={18} color={Colors.error} fill={Colors.error} />
-                    ) : (
-                      <Mic size={18} color={Colors.textSecondary} />
-                    )}
-                  </TouchableOpacity>
-                </Animated.View>
-                <TouchableOpacity onPress={handlePaste} style={styles.actionButton}>
+                <TouchableOpacity onPress={handlePaste} style={styles.actionButton} accessibilityLabel="Paste">
                   <ClipboardIcon size={18} color={Colors.textSecondary} />
                 </TouchableOpacity>
-                <TouchableOpacity onPress={handleCameraCapture} style={styles.actionButton}>
-                  <Camera size={18} color={Colors.textSecondary} />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={handleImagePick} style={styles.actionButton}>
-                  <ImageIcon size={18} color={Colors.textSecondary} />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={handleClear} style={styles.actionButton}>
+                <TouchableOpacity onPress={handleClear} style={styles.actionButton} accessibilityLabel="Clear text">
                   <Trash2 size={18} color={Colors.textSecondary} />
                 </TouchableOpacity>
               </View>
             </View>
             
-            {isRecording && (
-              <View style={styles.recordingIndicator}>
-                <View style={styles.recordingDot} />
-                <Text style={styles.recordingText}>Recording... {formatDuration(recordingDuration)}</Text>
-                <TouchableOpacity onPress={cancelRecording} style={styles.cancelButton}>
-                  <Text style={styles.cancelText}>Cancel</Text>
-                </TouchableOpacity>
-              </View>
-            )}
             
             <TextInput
               style={styles.textInput}
@@ -1081,7 +851,11 @@ export default function TranslatorScreen() {
               multiline
               textAlignVertical="top"
               blurOnSubmit={true}
-              editable={!isRecording && !isTranscribing}
+              autoCorrect={false}
+              autoCapitalize="none"
+              spellCheck={false}
+              returnKeyType="done"
+              accessibilityLabel={`Text to translate from ${sourceLabel}`}
             />
             <View style={styles.inputStats}>
               <Text style={styles.statsText}>{charCount}/5000</Text>
@@ -1109,21 +883,21 @@ export default function TranslatorScreen() {
                 )}
               </View>
               <View style={styles.outputActions}>
-                <TouchableOpacity onPress={handleFavorite} style={styles.actionButton}>
+                <TouchableOpacity onPress={handleFavorite} style={styles.actionButton} accessibilityLabel="Favorite">
                   <Star 
                     size={18} 
                     color={isFavorite ? Colors.accent : Colors.textSecondary}
                     fill={isFavorite ? Colors.accent : 'transparent'}
                   />
                 </TouchableOpacity>
-                <TouchableOpacity onPress={handleShare} style={styles.actionButton} disabled={isCreatingShareLink}>
+                <TouchableOpacity onPress={handleShare} style={styles.actionButton} disabled={isCreatingShareLink} accessibilityLabel="Share link">
                   {isCreatingShareLink ? (
                     <ActivityIndicator size="small" color={Colors.accent} />
                   ) : (
                     <ShareIcon size={18} color={Colors.textSecondary} />
                   )}
                 </TouchableOpacity>
-                <TouchableOpacity onPress={handleShareImage} style={styles.actionButton}>
+                <TouchableOpacity onPress={handleShareImage} style={styles.actionButton} accessibilityLabel="Share as image">
                   <ImagePlus size={18} color={Colors.textSecondary} />
                 </TouchableOpacity>
                 <TouchableOpacity 
@@ -1136,15 +910,8 @@ export default function TranslatorScreen() {
                     <Download size={18} color={Colors.textSecondary} />
                   )}
                 </TouchableOpacity>
-                <TouchableOpacity onPress={handleCopy} style={styles.actionButton}>
+                <TouchableOpacity onPress={handleCopy} style={styles.actionButton} accessibilityLabel="Copy translation">
                   <Copy size={18} color={copied ? Colors.success : Colors.textSecondary} />
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  onPress={() => handleSpeak(outputText, languageTtsCode(targetLanguage))} 
-                  style={styles.actionButton}
-                  onLongPress={() => setShowSpeedOptions(true)}
-                >
-                  <Volume2 size={18} color={isSpeaking ? Colors.accent : Colors.textSecondary} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -1192,33 +959,6 @@ export default function TranslatorScreen() {
               </View>
             )}
             
-            {showSpeedOptions && (
-              <View style={styles.speedOptionsContainer}>
-                <Text style={styles.speedLabel}>TTS Speed</Text>
-                <View style={styles.speedOptions}>
-                  {availableSpeeds.map((speed) => (
-                    <TouchableOpacity
-                      key={speed}
-                      style={[
-                        styles.speedOption,
-                        currentSpeed === speed && styles.speedOptionActive
-                      ]}
-                      onPress={() => {
-                        setSpeed(speed);
-                        setShowSpeedOptions(false);
-                      }}
-                    >
-                      <Text style={[
-                        styles.speedOptionText,
-                        currentSpeed === speed && styles.speedOptionTextActive
-                      ]}>
-                        {speed}x
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-            )}
             
             <Animated.View
               style={[
@@ -1296,14 +1036,6 @@ export default function TranslatorScreen() {
               </View>
             )}
 
-            {hasGlossaryHighlights && !isTranslating && !stream.isStreaming && (
-              <View style={styles.glossaryLegend}>
-                <View style={styles.glossaryLegendDot} />
-                <Text style={styles.glossaryLegendText}>
-                  Highlighted words come from your personal glossary
-                </Text>
-              </View>
-            )}
 
             {translationQuality > 0 && !isTranslating && (
               <View style={styles.qualitySection}>

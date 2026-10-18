@@ -72,8 +72,8 @@ export default function SettingsScreen() {
       case 'terms':
         router.push('/terms' as any);
         break;
-      case 'glossary':
-        router.push('/glossary' as any);
+      case 'tips':
+        router.push('/translation-tips' as any);
         break;
       case 'rate':
         (async () => {
@@ -88,7 +88,7 @@ export default function SettingsScreen() {
       case 'reset':
         Alert.alert(
           'Reset App Data',
-          'This will permanently delete your profile, stats, saved translations, and glossary on this device. This cannot be undone.',
+          'This will permanently delete your profile, stats, and saved translations on this device. This cannot be undone.',
           [
             { text: 'Cancel', style: 'cancel' },
             {
@@ -200,17 +200,27 @@ export default function SettingsScreen() {
           </View>
 
           <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Personalisation</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Learn</Text>
 
             <GlassCard style={styles.aboutCard}>
               <TouchableOpacity
                 style={styles.aboutItem}
-                onPress={() => handlePress('glossary')}
+                onPress={() => router.push('/translation-tips' as any)}
               >
                 <View style={[styles.aboutIcon, { backgroundColor: colors.glassYellow }]}>
                   <BookOpen size={20} color={colors.accent} />
                 </View>
-                <Text style={[styles.aboutText, { color: colors.text }]}>My Zomi Glossary</Text>
+                <Text style={[styles.aboutText, { color: colors.text }]}>Translation Tips</Text>
+                <ChevronRight size={18} color={colors.textMuted} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.aboutItem}
+                onPress={() => router.push('/pronunciation-guide' as any)}
+              >
+                <View style={[styles.aboutIcon, { backgroundColor: colors.glassPink }]}>
+                  <BookOpen size={20} color={colors.secondary} />
+                </View>
+                <Text style={[styles.aboutText, { color: colors.text }]}>Pronunciation Guide</Text>
                 <ChevronRight size={18} color={colors.textMuted} />
               </TouchableOpacity>
             </GlassCard>
@@ -268,7 +278,7 @@ export default function SettingsScreen() {
               </TouchableOpacity>
             </GlassCard>
             <Text style={[styles.dataHint, { color: colors.textMuted }]}>
-              Zomi Translator stores your data on this device only. Resetting clears your profile, stats, saved translations, and glossary.
+              Zomi Translator stores your data on this device only. Resetting clears your profile, stats, and saved translations.
             </Text>
           </View>
 

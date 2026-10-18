@@ -1,15 +1,12 @@
-import { Lock, LogIn, AlertCircle } from 'lucide-react';
+import { UserRound, LogIn, AlertCircle } from 'lucide-react';
 
 import { GlassCard } from '@/components/SiteLayout';
 import { useAuth } from '@/lib/auth';
 
-/**
- * Sign-in card. Translation is free for the first 1,500 words; signing in
- * unlocks unlimited translation plus synced history and a personal glossary.
- */
+/** Optional sign-in card: unlimited translation and synced history. */
 export function SignInPanel({
   title = 'Sign in',
-  message = 'Sign in with Google or Apple for unlimited translation, synced history and a personal glossary — it is free.',
+  message = 'Sign in with Google or Apple for unlimited translation and history that syncs between your devices.',
 }: {
   title?: string;
   message?: string;
@@ -19,10 +16,10 @@ export function SignInPanel({
   return (
     <GlassCard className="mx-auto max-w-md text-center">
       <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-[#00f0ff]/30 bg-[#00f0ff]/10">
-        <Lock className="h-6 w-6 text-[#00f0ff]" />
+        <UserRound className="h-6 w-6 text-[#00f0ff]" />
       </span>
       <h2 className="mt-5 text-xl font-bold">{title}</h2>
-      <p className="mt-2.5 text-sm leading-relaxed text-white/55">{message}</p>
+      <p className="mt-2.5 text-sm leading-relaxed text-white/80">{message}</p>
 
       {error && (
         <div className="mt-5 flex items-start gap-2.5 rounded-xl border border-[#ff5e5e]/30 bg-[#ff5e5e]/10 p-3 text-left">
@@ -88,8 +85,8 @@ export function SignInPanel({
         </p>
       )}
 
-      <p className="mt-5 text-xs leading-relaxed text-white/35">
-        By signing in you agree to our Terms of Use and Privacy Policy.
+      <p className="mt-5 text-xs leading-relaxed text-white/60">
+        By signing in you agree to our Terms of Service and Privacy Policy.
       </p>
     </GlassCard>
   );

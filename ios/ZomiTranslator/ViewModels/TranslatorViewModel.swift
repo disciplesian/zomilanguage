@@ -1,9 +1,9 @@
 import Foundation
 import SwiftUI
 
-/// Drives the Translate screen: debounced auto-translation with streaming
-/// token reveal, offline cache, and toolkit fallback — mirroring the Expo
-/// translator logic (including the no-flicker rules).
+/// Drives the Translate screen. Dictionary words and short phrases are
+/// answered instantly on the device; sentences stream from the Zomi AI
+/// service. Free for everyone — guests get a daily allowance of AI words.
 @Observable
 final class TranslatorViewModel {
     var inputText = "" {
@@ -12,32 +12,30 @@ final class TranslatorViewModel {
     var isZomiToEnglish = true {
         didSet { scheduleTranslation() }
     }
-    // Translation is offered in two directions only — Zomi ⇄ English — so the
-    // direction fully determines both languages (no target-language picker).
 
     private(set) var outputText = ""
     private(set) var isTranslating = false
-    /// True from request start until the response completes — drives the
-    /// typing indicator on the Translate screen.
+    /// True from request start until the response completes.
     private(set) var isStreaming = false
     /// True once any streamed token has arrived for the current request.
     private(set) var hasStreamedText = false
-    /// True while an automatic retry reconnects after a transient network blip.
+    /// True while an automatic retry reconnects after a network blip.
     private(set) var isConnecting = false
     private(set) var quality = 0
-    /// Alternative phrasings returned when the input has multiple common senses.
+    /// True when the current result came straight from the verified dictionary.
+    private(set) var isVerifiedWord = false
+    /// Alternative renderings for words with several common senses.
     private(set) var alternatives: [String] = []
     private(set) var errorText: String?
-
-    /// Completed translations from the current app session (chronological,
-    /// newest last) — powers the on-device PDF session report.
-    private(set) var sessionTranslations: [SavedTranslation] = []
+    /// True when the error is the friendly daily-allowance note.
+    private(set) var isLimitNotice = false
+    /// Remaining free AI words today (guests only, shown after half is used).
+    private(set) var freeWordsLeft: Int?
 
     var translationStore: TranslationStore?
-    var glossaryStore: GlossaryStore?
 
     /// App Store guideline 5.1: explicit consent before sending user text to
-    /// a third-party AI service (Google Gemini). Persisted across launches.
+    /// a third-party AI service. Persisted across launches.
     var aiConsentGiven: Bool {
         get { UserDefaults.standard.bool(forKey: "ai_consent_given") }
         set { UserDefaults.standard.set(newValue, forKey: "ai_consent_given") }
@@ -47,20 +45,19 @@ final class TranslatorViewModel {
     func grantAIConsent() {
         aiConsentGiven = true
         errorText = nil
+        lastTranslatedText = ""
         scheduleTranslation()
     }
 
     private var debounceTask: Task<Void, Never>?
     private var streamTask: Task<Void, Never>?
+    private var historyTask: Task<Void, Never>?
     private var requestId = 0
     private var lastTranslatedText = ""
     private var lastDirection = "zomi→english"
 
-    /// Catalog codes for the current translation direction.
     var targetLanguage: String { isZomiToEnglish ? "english" : "zomi" }
     var sourceLanguage: String { isZomiToEnglish ? "zomi" : "english" }
-
-    /// Display names for the current direction.
     var sourceLabel: String { isZomiToEnglish ? "Zomi" : "English" }
     var targetLabel: String { isZomiToEnglish ? "English" : "Zomi" }
 
@@ -74,10 +71,11 @@ final class TranslatorViewModel {
     func swapLanguages() {
         let previousInput = inputText
         let previousOutput = outputText
+        let canReverse = !previousOutput.isEmpty && errorText == nil
 
         isZomiToEnglish.toggle()
 
-        if !previousOutput.isEmpty, errorText == nil {
+        if canReverse {
             lastTranslatedText = previousOutput.trimmingCharacters(in: .whitespacesAndNewlines)
             lastDirection = "\(sourceLanguage)→\(targetLanguage)"
             inputText = previousOutput
@@ -88,35 +86,18 @@ final class TranslatorViewModel {
         }
         quality = 0
         alternatives = []
-    }
-
-    /// Taps the source chip: flips Zomi ⇄ English without exchanging text.
-    func toggleSource() {
-        isZomiToEnglish.toggle()
-        lastTranslatedText = ""
-        outputText = ""
-        quality = 0
-        alternatives = []
-        errorText = nil
+        isVerifiedWord = false
     }
 
     func clear() {
         debounceTask?.cancel()
         streamTask?.cancel()
+        historyTask?.cancel()
         inputText = ""
-        outputText = ""
-        quality = 0
-        alternatives = []
-        errorText = nil
-        isTranslating = false
-        isStreaming = false
-        isConnecting = false
-        hasStreamedText = false
-        lastTranslatedText = ""
+        resetOutput()
     }
 
-    /// Promotes one of the alternative phrasings to the main translation,
-    /// demoting the current text back into the alternatives list.
+    /// Promotes one of the alternative renderings to the main translation.
     func promoteAlternative(_ alternative: String) {
         guard !alternative.isEmpty else { return }
         let previous = outputText
@@ -129,39 +110,90 @@ final class TranslatorViewModel {
         translate(text: inputText)
     }
 
-    /// Records a completed translation in the current session log, replacing
-    /// any earlier occurrence of the same text so retries don't duplicate.
-    private func recordSession(_ translation: SavedTranslation) {
-        sessionTranslations.removeAll { $0.cacheKey == translation.cacheKey }
-        sessionTranslations.append(translation)
+    /// Runs the translation now (keyboard Done / Translate tap), skipping the typing pause.
+    func translateNow() {
+        debounceTask?.cancel()
+        translate(text: inputText)
+    }
+
+    private func resetOutput() {
+        outputText = ""
+        quality = 0
+        alternatives = []
+        errorText = nil
+        isLimitNotice = false
+        isVerifiedWord = false
+        isTranslating = false
+        isStreaming = false
+        isConnecting = false
+        hasStreamedText = false
+        lastTranslatedText = ""
     }
 
     private func scheduleTranslation() {
         debounceTask?.cancel()
         let text = inputText
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !trimmed.isEmpty else {
+            streamTask?.cancel()
+            resetOutput()
+            return
+        }
+
+        // Instant path: verified dictionary words appear on the very keystroke,
+        // with no network and no consent needed (nothing leaves the device).
+        if showInstantDictionaryAnswer(for: trimmed) { return }
 
         guard aiConsentGiven else {
             errorText = "Please agree to AI translation processing to continue."
             return
         }
 
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            outputText = ""
-            quality = 0
-            alternatives = []
-            errorText = nil
-            isTranslating = false
-            isStreaming = false
-            isConnecting = false
-            hasStreamedText = false
-            lastTranslatedText = ""
-            return
-        }
-
         debounceTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(600))
+            try? await Task.sleep(for: .milliseconds(250))
             guard !Task.isCancelled else { return }
             self?.translate(text: text)
+        }
+    }
+
+    /// Shows a verified dictionary answer immediately. Returns true on a hit.
+    @discardableResult
+    private func showInstantDictionaryAnswer(for trimmed: String) -> Bool {
+        guard let hit = DictionaryData.instantTranslation(trimmed, zomiToEnglish: isZomiToEnglish) else { return false }
+        requestId += 1
+        streamTask?.cancel()
+        lastTranslatedText = trimmed
+        lastDirection = "\(sourceLanguage)→\(targetLanguage)"
+        outputText = hit.text
+        alternatives = hit.alternatives
+        quality = 100
+        isVerifiedWord = true
+        errorText = nil
+        isLimitNotice = false
+        isTranslating = false
+        isStreaming = false
+        isConnecting = false
+        hasStreamedText = false
+        saveToHistoryWhenSettled(SavedTranslation(
+            sourceText: trimmed,
+            translatedText: hit.text,
+            sourceLanguage: sourceLanguage,
+            targetLanguage: targetLanguage,
+            confidence: 100,
+            model: "verified-dictionary"
+        ))
+        return true
+    }
+
+    /// Saves to History only once typing has paused, so each keystroke doesn't add an entry.
+    private func saveToHistoryWhenSettled(_ translation: SavedTranslation) {
+        historyTask?.cancel()
+        historyTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(1200))
+            guard !Task.isCancelled, let self else { return }
+            guard self.inputText.trimmingCharacters(in: .whitespacesAndNewlines) == translation.sourceText else { return }
+            self.translationStore?.save(translation)
         }
     }
 
@@ -169,62 +201,53 @@ final class TranslatorViewModel {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
-        // Portal policy: translation is a members-only service.
-        guard AuthManager.hasStoredSession() else {
-            outputText = ""
-            quality = 0
-            isTranslating = false
-            isStreaming = false
-            hasStreamedText = false
-            errorText = "Sign in required — please sign in from the Settings tab."
+        if showInstantDictionaryAnswer(for: trimmed) { return }
+
+        guard aiConsentGiven else {
+            errorText = "Please agree to AI translation processing to continue."
             return
         }
 
         // Skip identical re-translations (prevents flicker on refocus).
         let directionKey = "\(sourceLanguage)→\(targetLanguage)"
-        if trimmed == lastTranslatedText && directionKey == lastDirection { return }
+        if trimmed == lastTranslatedText && directionKey == lastDirection && errorText == nil { return }
 
         requestId += 1
         let currentRequest = requestId
         lastTranslatedText = trimmed
         lastDirection = directionKey
         errorText = nil
+        isLimitNotice = false
         hasStreamedText = false
         isConnecting = false
+        isVerifiedWord = false
         alternatives = []
 
         let target = targetLanguage
         let source = sourceLanguage
 
-        // Offline / instant cache hit.
+        // Device cache hit: show immediately.
         if let hit = translationStore?.lookup(text: trimmed, target: target) {
             outputText = hit.translatedText
             quality = hit.confidence
             isTranslating = false
-            recordSession(hit)
-            if hit.confidence >= 90 {
-                isStreaming = false
-                return
-            }
+            isStreaming = false
+            if hit.confidence >= 90 { return }
         } else if outputText.isEmpty {
-            // Only show the loading state when there is nothing on screen yet.
             isTranslating = true
         }
-
-        let extraGlossary = glossaryStore?.asRecord() ?? [:]
 
         isStreaming = true
         streamTask?.cancel()
         streamTask = Task { [weak self] in
             guard let self else { return }
             var streamedText = ""
-            var finished = false
 
             for await event in TranslationService.shared.stream(
                 text: trimmed,
                 sourceLanguage: source,
                 targetLanguage: target,
-                extraGlossary: extraGlossary
+                extraGlossary: [:]
             ) {
                 guard currentRequest == self.requestId, !Task.isCancelled else { return }
                 switch event {
@@ -244,103 +267,78 @@ final class TranslatorViewModel {
                     self.outputText = final
                     self.quality = confidence
                     self.alternatives = alts
+                    self.isVerifiedWord = model == "verified-dictionary"
                     self.isTranslating = false
                     self.isStreaming = false
                     self.isConnecting = false
-                    finished = true
-                    self.translationStore?.save(SavedTranslation(
+                    let saved = SavedTranslation(
                         sourceText: trimmed,
                         translatedText: final,
                         sourceLanguage: source,
                         targetLanguage: target,
                         confidence: confidence,
                         model: model
-                    ))
-                    self.recordSession(SavedTranslation(
-                        sourceText: trimmed,
-                        translatedText: final,
-                        sourceLanguage: source,
-                        targetLanguage: target,
-                        confidence: confidence,
-                        model: model
-                    ))
+                    )
+                    self.translationStore?.save(saved)
+                    ReviewPrompter.recordSuccess()
+                case .usage(let used, let limit, let signedIn):
+                    if signedIn || used < 0 || limit <= 0 {
+                        if signedIn { self.freeWordsLeft = nil }
+                    } else {
+                        let left = max(0, limit - used)
+                        self.freeWordsLeft = used * 2 > limit ? left : nil
+                    }
                 case .failure(let message):
                     if message == "cancelled" { return }
-                    if message == "word_limit_reached" {
-                        self.errorText = "You've used your 1,500 free words — sign in from the Settings tab to keep translating."
-                        self.isTranslating = false
-                        self.isStreaming = false
-                        finished = true
-                        break
+                    self.isTranslating = false
+                    self.isStreaming = false
+                    self.isConnecting = false
+                    // Last resort: a cached earlier answer beats an error.
+                    if self.outputText.isEmpty,
+                       let hit = self.translationStore?.lookup(text: trimmed, target: target) {
+                        self.outputText = hit.translatedText
+                        self.quality = hit.confidence
+                        return
                     }
-                    if message == "sign_in_required" {
-                        self.errorText = "Sign in required — please sign in from the Settings tab."
-                        self.isTranslating = false
-                        self.isStreaming = false
-                        finished = true
-                        break
-                    }
-                    print("[Translator] stream failed, falling back: \(message)")
-                }
-            }
-
-            guard currentRequest == self.requestId, !Task.isCancelled else { return }
-            if finished { return }
-
-            // Fallback: Rork toolkit text generation.
-            do {
-                let fallback = try await TranslationService.shared.fallbackTranslate(
-                    text: trimmed,
-                    sourceLanguage: source,
-                    targetLanguage: target
-                )
-                guard currentRequest == self.requestId else { return }
-                self.outputText = fallback
-                self.quality = 92
-                self.alternatives = []
-                self.isTranslating = false
-                self.isStreaming = false
-                self.isConnecting = false
-                self.translationStore?.save(SavedTranslation(
-                    sourceText: trimmed,
-                    translatedText: fallback,
-                    sourceLanguage: source,
-                    targetLanguage: target,
-                    confidence: 92,
-                    model: "rork-toolkit"
-                ))
-                self.recordSession(SavedTranslation(
-                    sourceText: trimmed,
-                    translatedText: fallback,
-                    sourceLanguage: source,
-                    targetLanguage: target,
-                    confidence: 92,
-                    model: "rork-toolkit"
-                ))
-            } catch {
-                guard currentRequest == self.requestId else { return }
-                self.isTranslating = false
-                self.isStreaming = false
-                self.isConnecting = false
-
-                // Last resort: any cached entry.
-                if let hit = self.translationStore?.lookup(text: trimmed, target: target) {
-                    self.outputText = hit.translatedText
-                    self.quality = max(50, hit.confidence - 20)
+                    self.isLimitNotice = message == "word_limit_reached"
+                    if self.isLimitNotice { self.freeWordsLeft = 0 }
+                    self.errorText = Self.friendlyMessage(for: message)
+                    self.outputText = ""
+                    ReviewPrompter.recordError()
                     return
                 }
-
-                let message = error.localizedDescription.lowercased()
-                if message.contains("quota") || message.contains("429") {
-                    self.errorText = "Translation quota exceeded. Please wait a moment and try again."
-                } else if message.contains("network") || message.contains("offline") || message.contains("internet") {
-                    self.errorText = "Network error. Please check your internet connection."
-                } else if message.contains("timed out") {
-                    self.errorText = "Request timed out. Please try again."
-                } else {
-                    self.errorText = "Translation failed. Please try again."
-                }
             }
+            if currentRequest == self.requestId {
+                self.isStreaming = false
+                self.isTranslating = false
+            }
+        }
+    }
+
+    /// Maps service error codes to short, kind, non-technical messages.
+    static func friendlyMessage(for code: String) -> String {
+        switch code {
+        case "word_limit_reached":
+            return "You've used today's free words. Sign in for unlimited translation, or come back tomorrow. Dictionary words still work."
+        case "rate_limited", "TOO_MANY_REQUESTS":
+            return "Lots of translations at once. Please wait a moment and try again."
+        case "text_too_long":
+            return "That's a long text. Please translate up to 500 characters at a time, or sign in for longer texts."
+        case "dictionary_only":
+            return "Sentence translation is busy right now. Dictionary words still work. Please try again shortly."
+        case "blocked":
+            return "Translation isn't available on this device right now. Contact support@zomitranslator.com if this seems wrong."
+        case "session_expired":
+            return "Your sign-in has expired. Please sign in again from Settings."
+        default:
+            let lower = code.lowercased()
+            if lower.contains("offline") || lower.contains("network") || lower.contains("internet") || lower.contains("connect") {
+                return "You're offline. Dictionary words still work. Reconnect for sentences."
+            }
+            if lower.contains("timed out") {
+                return "The connection is slow. Please try again."
+            }
+            return "Translation didn't come through. Please try again."
         }
     }
 }

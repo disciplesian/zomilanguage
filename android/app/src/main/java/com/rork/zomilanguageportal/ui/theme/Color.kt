@@ -19,9 +19,9 @@ object PortalColors {
     val Red = Color(0xFFFF5E5E)
 
     val TextPrimary = Color(0xFFFFFFFF)
-    val TextSecondary = Color(0xB3FFFFFF)
-    val TextMuted = Color(0x8AFFFFFF)
-    val TextFaint = Color(0x59FFFFFF)
+    val TextSecondary = Color(0xE6FFFFFF)
+    val TextMuted = Color(0xB8FFFFFF)
+    val TextFaint = Color(0x94FFFFFF)
 
     val GlassFill = Color(0x0FFFFFFF)
     val GlassBorder = Color(0x1FFFFFFF)

@@ -1,7 +1,6 @@
 /**
- * Stable per-browser identifier for the anonymous translation free tier.
- * Generated once and kept in localStorage; sent to the backend so the
- * 1,500-word guest allowance can be tracked across visits.
+ * Stable per-browser identifier for the guest daily free allowance.
+ * Generated once and kept in localStorage.
  */
 const STORAGE_KEY = 'zomi_anonymous_id';
 

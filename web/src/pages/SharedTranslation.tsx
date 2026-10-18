@@ -7,7 +7,6 @@ import {
   Check,
   Copy,
   Link2,
-  Volume2,
 } from 'lucide-react';
 
 import { SiteLayout, PageHeader, GlassCard } from '@/components/SiteLayout';
@@ -121,21 +120,12 @@ const SharedTranslation = () => {
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
-  const speak = (text: string) => {
-    try {
-      const utterance = new SpeechSynthesisUtterance(text);
-      window.speechSynthesis.speak(utterance);
-    } catch {
-      /* speech not supported */
-    }
-  };
-
   return (
     <SiteLayout>
       <PageHeader
         eyebrow="Shared Translation"
         title="Zomi Translation"
-        subtitle="Shared with you via Zomi Language Portal"
+        subtitle="Shared with you via Zomi Translator"
       />
 
       <div className="mx-auto w-full max-w-3xl px-5 pb-20">
@@ -198,14 +188,6 @@ const SharedTranslation = () => {
                 )}
                 {copiedLink ? 'Link copied' : 'Copy link'}
               </button>
-              <button
-                type="button"
-                onClick={() => speak(data.translatedText)}
-                className="inline-flex items-center gap-2 rounded-lg border border-white/12 bg-white/[0.06] px-3.5 py-2 text-sm font-medium text-white/80 transition hover:border-cyan-300/40 hover:text-white"
-              >
-                <Volume2 size={15} />
-                Listen
-              </button>
               <Link
                 to="/translate"
                 className="ml-auto inline-flex items-center gap-2 rounded-lg bg-cyan-300/90 px-4 py-2 text-sm font-semibold text-[#0B1226] transition hover:bg-cyan-200"
@@ -215,7 +197,7 @@ const SharedTranslation = () => {
             </div>
 
             <p className="mt-4 text-xs text-white/35">
-              Translated with AI (Google Gemini) · Zomi Language Portal ·{' '}
+              Translated with Zomi Translator ·{' '}
               <Link to="/privacy" className="underline decoration-white/20 hover:text-white/60">
                 Privacy Policy
               </Link>

@@ -1,81 +1,125 @@
 import SwiftUI
 
-/// Root tab bar — clone of the Expo (tabs) layout:
-/// Translate · Dictionary · Tools · History · Settings.
+/// Root navigation: Translate · Dictionary · History · Settings.
+/// Bottom tabs on iPhone; a sidebar on iPad and wide windows.
 struct ContentView: View {
     @Environment(ThemeManager.self) private var theme
-    @Environment(\.colorScheme) private var systemColorScheme
+    @Environment(AppRouter.self) private var router
+    @AppStorage("whats_new_seen_v12") private var whatsNewSeen = false
+    @State private var showWhatsNew = false
 
     var body: some View {
-        TabView {
-            NavigationStack {
-                TranslatorView()
-                    .toolbar(.hidden, for: .navigationBar)
-            }
-            .tabItem {
-                Label("Translate", systemImage: "character.bubble")
-            }
-
-            NavigationStack {
-                DictionaryView()
-                    .navigationTitle("Dictionary")
-                    .navigationBarTitleDisplayMode(.inline)
-            }
-            .tabItem {
-                Label("Dictionary", systemImage: "book.fill")
+        @Bindable var router = router
+        TabView(selection: $router.selectedTab) {
+            Tab("Translate", systemImage: "character.bubble", value: AppTab.translate) {
+                NavigationStack {
+                    TranslatorView()
+                        .toolbar(.hidden, for: .navigationBar)
+                }
             }
 
-            NavigationStack {
-                ToolsView()
-            }
-            .tabItem {
-                Label("Tools", systemImage: "wrench.and.screwdriver")
-            }
-
-            NavigationStack {
-                HistoryView()
-            }
-            .tabItem {
-                Label("History", systemImage: "clock.arrow.circlepath")
+            Tab("Dictionary", systemImage: "book.fill", value: AppTab.dictionary) {
+                NavigationStack {
+                    DictionaryView()
+                        .navigationTitle("Dictionary")
+                        .navigationBarTitleDisplayMode(.inline)
+                }
             }
 
-            NavigationStack {
-                SettingsView()
-                    .navigationTitle("Settings")
-                    .navigationBarTitleDisplayMode(.inline)
+            Tab("History", systemImage: "clock.arrow.circlepath", value: AppTab.history) {
+                NavigationStack {
+                    HistoryView()
+                }
             }
-            .tabItem {
-                Label("Settings", systemImage: "gearshape")
+
+            Tab("Settings", systemImage: "gearshape", value: AppTab.settings) {
+                NavigationStack {
+                    SettingsView()
+                        .navigationTitle("Settings")
+                        .navigationBarTitleDisplayMode(.inline)
+                }
             }
         }
+        .tabViewStyle(.sidebarAdaptable)
         .tint(theme.colors.primary)
-        .preferredColorScheme(theme.preferredColorScheme)
+        .preferredColorScheme(.dark)
+        .onChange(of: router.selectedTab) { _, _ in
+            // Switching tabs always closes the keyboard.
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        }
         .onAppear {
-            theme.systemIsDark = systemColorScheme == .dark
             applyTabBarAppearance()
+            if !whatsNewSeen && UserDefaults.standard.object(forKey: "ai_consent_given") != nil {
+                showWhatsNew = true
+            }
+            whatsNewSeen = true
         }
-        .onChange(of: systemColorScheme) { _, newValue in
-            theme.systemIsDark = newValue == .dark
-            applyTabBarAppearance()
-        }
-        .onChange(of: theme.mode) { _, _ in
-            applyTabBarAppearance()
+        .sheet(isPresented: $showWhatsNew) {
+            WhatsNewView()
+                .presentationDetents([.medium, .large])
         }
     }
 
-    /// Match the Expo tab bar look (dark navy translucent bar with hairline top border).
+    /// Dark navy translucent bar with a hairline top border.
     private func applyTabBarAppearance() {
         let appearance = UITabBarAppearance()
         appearance.configureWithTransparentBackground()
-        if theme.isDark {
-            appearance.backgroundColor = UIColor(red: 0x2A / 255, green: 0x2F / 255, blue: 0x45 / 255, alpha: 0.95)
-            appearance.shadowColor = UIColor.white.withAlphaComponent(0.2)
-        } else {
-            appearance.backgroundColor = UIColor(red: 0xF4 / 255, green: 0xF6 / 255, blue: 0xFB / 255, alpha: 0.95)
-            appearance.shadowColor = UIColor.black.withAlphaComponent(0.1)
-        }
+        appearance.backgroundColor = UIColor(red: 0x2A / 255, green: 0x2F / 255, blue: 0x45 / 255, alpha: 0.95)
+        appearance.shadowColor = UIColor.white.withAlphaComponent(0.2)
         UITabBar.appearance().standardAppearance = appearance
         UITabBar.appearance().scrollEdgeAppearance = appearance
+    }
+}
+
+/// One-time note shown after updating to this version.
+struct WhatsNewView: View {
+    @Environment(\.dismiss) private var dismiss
+    private let colors = ThemeColors.dark
+
+    var body: some View {
+        ZStack {
+            AppBackground(colors: colors, isDark: true)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    Text("What's new")
+                        .font(.largeTitle.bold())
+                        .foregroundStyle(colors.text)
+                    row("gift", "Free for everyone", "Translate Zomi and English without signing in.")
+                    row("bolt.fill", "Instant words", "Dictionary words appear the moment you type, even offline.")
+                    row("hare.fill", "Faster sentences", "Sentences start appearing in about a second.")
+                    row("sparkles", "Lighter app", "A simpler app focused on Translate, Dictionary, and History.")
+                    Button {
+                        dismiss()
+                    } label: {
+                        Text("Continue")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .foregroundStyle(Color(hex: 0x0B1020))
+                            .background(colors.primary)
+                            .clipShape(.rect(cornerRadius: 14))
+                    }
+                    .padding(.top, 6)
+                }
+                .padding(24)
+                .frame(maxWidth: 560)
+                .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    private func row(_ icon: String, _ title: String, _ body: String) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundStyle(colors.primary)
+                .frame(width: 32)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.headline).foregroundStyle(colors.text)
+                Text(body).font(.subheadline).foregroundStyle(colors.textSecondary)
+            }
+        }
     }
 }
 
@@ -83,7 +127,7 @@ struct ContentView: View {
     ContentView()
         .environment(ThemeManager())
         .environment(TranslationStore())
-        .environment(GlossaryStore())
-        .environment(SpeechService())
         .environment(AuthManager())
+        .environment(AppRouter.shared)
+        .environment(NetworkMonitor.shared)
 }

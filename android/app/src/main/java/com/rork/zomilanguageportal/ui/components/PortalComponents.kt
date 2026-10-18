@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -23,6 +23,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -76,7 +78,7 @@ fun RoleBadge(role: String, verified: Boolean, modifier: Modifier = Modifier) {
     val (bg, fg, label) = when (role) {
         "admin" -> Triple(PortalColors.Pink.copy(alpha = 0.16f), Color(0xFFFF9ECB), "ADMIN")
         "moderator" -> Triple(PortalColors.Purple.copy(alpha = 0.16f), Color(0xFFC0A6FF), "MODERATOR")
-        else -> Triple(Color.White.copy(alpha = 0.08f), PortalColors.TextSecondary, "MEMBER")
+        else -> Triple(Color.White.copy(alpha = 0.08f), PortalColors.TextSecondary, "SIGNED IN")
     }
 
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
@@ -113,10 +115,7 @@ fun PortalLoading(modifier: Modifier = Modifier) {
     }
 }
 
-/**
- * Members-only gate shown when no one is signed in. Translation is a
- * members-only service, enforced by the backend.
- */
+/** Optional sign-in card (unlimited translation and synced history). */
 @Composable
 fun SignInPanel(
     title: String,
@@ -142,7 +141,7 @@ fun SignInPanel(
                         .border(1.dp, PortalColors.Cyan.copy(alpha = 0.3f), RoundedCornerShape(16.dp)),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Filled.Lock, contentDescription = null, tint = PortalColors.Cyan)
+                    Icon(Icons.Filled.Person, contentDescription = null, tint = PortalColors.Cyan)
                 }
 
                 Spacer(Modifier.height(16.dp))
@@ -232,7 +231,7 @@ fun SignInPanel(
 
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    "By signing in you agree to our Terms of Use and Privacy Policy.",
+                    "By signing in you agree to our Terms of Service and Privacy Policy.",
                     color = PortalColors.TextFaint,
                     fontSize = 11.sp,
                     textAlign = TextAlign.Center,
@@ -242,4 +241,31 @@ fun SignInPanel(
             }
         }
     }
+}
+
+/** Live connectivity state for the offline note. */
+@Composable
+fun rememberIsOnline(): Boolean {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val manager = androidx.compose.runtime.remember(context) {
+        context.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+    }
+    var online by androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf(
+            manager.getNetworkCapabilities(manager.activeNetwork)
+                ?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+        )
+    }
+    androidx.compose.runtime.DisposableEffect(manager) {
+        val callback = object : android.net.ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: android.net.Network) { online = true }
+            override fun onLost(network: android.net.Network) {
+                online = manager.getNetworkCapabilities(manager.activeNetwork)
+                    ?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+            }
+        }
+        runCatching { manager.registerDefaultNetworkCallback(callback) }
+        onDispose { runCatching { manager.unregisterNetworkCallback(callback) } }
+    }
+    return online
 }

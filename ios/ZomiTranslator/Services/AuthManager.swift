@@ -39,9 +39,11 @@ final class AuthManager {
         Task { await checkAuth() }
     }
 
+    /// True when a user is signed in (unlimited translation, synced history).
+    var isSignedIn: Bool { user != nil }
+
     /// Quick synchronous check for any stored session (Keychain tokens or the
-    /// simulator-injected refresh token). Used by the translator gate — the
-    /// translation service is members-only in the Zomi Language Portal.
+    /// simulator-injected refresh token).
     nonisolated static func hasStoredSession() -> Bool {
         if KeychainHelper.get("access_token") != nil { return true }
         if KeychainHelper.get("refresh_token") != nil { return true }

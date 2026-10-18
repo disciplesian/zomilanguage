@@ -121,13 +121,6 @@ function RootLayoutNav() {
           }} 
         />
         <Stack.Screen 
-          name="profile" 
-          options={{ 
-            title: "Profile",
-            presentation: "card",
-          }} 
-        />
-        <Stack.Screen 
           name="feedback" 
           options={{ 
             title: "Feedback",
@@ -145,13 +138,6 @@ function RootLayoutNav() {
           name="translation-tips" 
           options={{ 
             title: "Translation Tips",
-            presentation: "card",
-          }} 
-        />
-        <Stack.Screen 
-          name="glossary" 
-          options={{ 
-            title: "My Glossary",
             presentation: "card",
           }} 
         />

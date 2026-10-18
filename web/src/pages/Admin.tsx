@@ -162,7 +162,7 @@ const Admin = () => {
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Admin dashboard</h1>
             <p className="mt-1.5 text-sm text-white/50">
-              Members, verification and translation activity across the portal.
+              Users, verification and translation activity.
             </p>
           </div>
           <span className="rounded-full border border-[#ff4d9e]/40 bg-[#ff4d9e]/15 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-[#ff9ecb]">
@@ -173,7 +173,7 @@ const Admin = () => {
         {/* Stats */}
         {overview ? (
           <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatTile icon={Users} label="Members" value={overview.totalUsers} tone="text-[#00f0ff]" />
+            <StatTile icon={Users} label="Users" value={overview.totalUsers} tone="text-[#00f0ff]" />
             <StatTile
               icon={Languages}
               label="Translations"
@@ -256,9 +256,9 @@ const Admin = () => {
           )}
         </GlassCard>
 
-        {/* Members */}
+        {/* Users */}
         <GlassCard className="mt-6">
-          <h2 className="text-lg font-semibold">Members</h2>
+          <h2 className="text-lg font-semibold">Users</h2>
           {usersQuery.isLoading ? (
             <div className="flex justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-[#00f0ff]" />
@@ -269,7 +269,7 @@ const Admin = () => {
               <p className="text-sm text-[#ffb3b3]">
                 {usersQuery.error instanceof Error
                   ? usersQuery.error.message
-                  : 'Could not load members.'}
+                  : 'Could not load users.'}
               </p>
             </div>
           ) : (

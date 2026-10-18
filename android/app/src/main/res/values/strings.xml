@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Zomi Translator</string>
+    <string name="shortcut_translate_short">Translate</string>
+    <string name="shortcut_translate_long">Translate Zomi ⇄ English</string>
+    <string name="shortcut_dictionary_short">Look up a word</string>
+    <string name="shortcut_dictionary_long">Zomi dictionary</string>
+</resources>

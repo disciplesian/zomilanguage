@@ -52,7 +52,7 @@ struct AccountCard: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This permanently deletes your account and all associated data from Zomi's servers — saved translations, glossary, history, and verification status. This cannot be undone.")
+            Text("This permanently deletes your account and the history saved with it. Translations on this device stay until you clear them. This can't be undone.")
         }
     }
 
@@ -61,11 +61,11 @@ struct AccountCard: View {
     private var signedOutView: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Account")
-                .font(.system(size: 16, weight: .bold))
+                .scaledFont(size: 16, weight: .bold)
                 .foregroundStyle(colors.text)
 
-            Text("Sign in with Google or Apple to link your account across the Zomi Translator apps.")
-                .font(.system(size: 13))
+            Text("Optional. Sign in with Google or Apple for unlimited translation and history that syncs between your devices.")
+                .scaledFont(size: 13)
                 .foregroundStyle(colors.textSecondary)
                 .lineSpacing(3)
 
@@ -91,7 +91,7 @@ struct AccountCard: View {
                     providerButton(
                         title: "Apple",
                         icon: Image(systemName: "apple.logo")
-                            .font(.system(size: 16, weight: .semibold))
+                            .scaledFont(size: 16, weight: .semibold)
                             .foregroundStyle(.white),
                         background: Color(hex: 0x141418, alpha: 0.95),
                         border: Color.white.opacity(0.15)
@@ -103,24 +103,24 @@ struct AccountCard: View {
 
                 HStack(spacing: 4) {
                     Text("By signing in, you agree to our")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundStyle(colors.textMuted)
                     Button {
                         showTerms = true
                     } label: {
                         Text("Terms")
-                            .font(.system(size: 12, weight: .semibold))
+                            .scaledFont(size: 12, weight: .semibold)
                             .foregroundStyle(colors.accent)
                     }
                     .buttonStyle(.plain)
                     Text("and")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundStyle(colors.textMuted)
                     Button {
                         showPrivacy = true
                     } label: {
                         Text("Privacy Policy")
-                            .font(.system(size: 12, weight: .semibold))
+                            .scaledFont(size: 12, weight: .semibold)
                             .foregroundStyle(colors.accent)
                     }
                     .buttonStyle(.plain)
@@ -139,7 +139,7 @@ struct AccountCard: View {
 
     private var googleIcon: some View {
         Text("G")
-            .font(.system(size: 16, weight: .bold))
+            .scaledFont(size: 16, weight: .bold)
             .foregroundStyle(.white)
     }
 
@@ -154,7 +154,7 @@ struct AccountCard: View {
             HStack(spacing: 8) {
                 icon
                 Text(title)
-                    .font(.system(size: 14, weight: .semibold))
+                    .scaledFont(size: 14, weight: .semibold)
                     .foregroundStyle(.white)
             }
             .frame(maxWidth: .infinity)
@@ -184,7 +184,7 @@ struct AccountCard: View {
                     }
                     .overlay {
                         Text(String((user.name ?? user.email ?? "?").first ?? "?").uppercased())
-                            .font(.system(size: 17, weight: .bold))
+                            .scaledFont(size: 17, weight: .bold)
                             .foregroundStyle(colors.accent)
                             .allowsHitTesting(false)
                     }
@@ -192,18 +192,18 @@ struct AccountCard: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 5) {
                         Text(user.name ?? "Signed in")
-                            .font(.system(size: 15, weight: .bold))
+                            .scaledFont(size: 15, weight: .bold)
                             .foregroundStyle(colors.text)
                             .lineLimit(1)
                         if user.verified ?? false {
                             Image(systemName: "checkmark.seal.fill")
-                                .font(.system(size: 12))
+                                .scaledFont(size: 12)
                                 .foregroundStyle(Color(red: 0.39, green: 0.75, blue: 1.0))
                                 .accessibilityLabel("Verified contributor")
                         }
                     }
                     Text((user.email ?? "").isEmpty ? "Account linked" : user.email ?? "")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundStyle(colors.textMuted)
                         .lineLimit(1)
                 }
@@ -215,7 +215,7 @@ struct AccountCard: View {
                     Task { await auth.signOut() }
                 } label: {
                     Image(systemName: "rectangle.portrait.and.arrow.right")
-                        .font(.system(size: 15))
+                        .scaledFont(size: 15)
                         .foregroundStyle(colors.textSecondary)
                         .frame(width: 36, height: 36)
                         .background(colors.glass)
@@ -227,10 +227,10 @@ struct AccountCard: View {
 
             HStack(spacing: 8) {
                 Image(systemName: "checkmark.seal.fill")
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundStyle(colors.success)
                 Text("Signed in — your account links the Zomi Translator apps.")
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundStyle(colors.textSecondary)
             }
             .padding(10)
@@ -252,9 +252,9 @@ struct AccountCard: View {
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "person.badge.minus")
-                            .font(.system(size: 14))
+                            .scaledFont(size: 14)
                         Text("Delete Account")
-                            .font(.system(size: 14, weight: .semibold))
+                            .scaledFont(size: 14, weight: .semibold)
                     }
                     .foregroundStyle(Color(hex: 0xFF5A5A))
                     .frame(maxWidth: .infinity)

@@ -18,7 +18,23 @@ import {
   geminiConfigured,
   translationModelChain,
 } from "./geminiDirect";
-import { lookupVerified } from "./verifiedDictionary";
+import { lookupVerifiedFor, groundingFor } from "./verifiedDictionary";
+import {
+  GUEST_MAX_CHARS,
+  MEMBER_MAX_CHARS,
+  addBlock,
+  guardSnapshot,
+  isBlocked,
+  isRateLimited,
+  listBlocks,
+  loadBlockList,
+  recallTranslation,
+  recordGuestModelCall,
+  rememberTranslation,
+  removeBlock,
+  safetyBrakeEngaged,
+  type BlockEntry,
+} from "./guard";
 import { usageSnapshot } from "./usage";
 import {
   FREE_WORD_LIMIT,
@@ -41,8 +57,38 @@ import {
 
 const app = new Hono();
 
+/**
+ * Browser access is limited to the project's own websites (and local
+ * development). Native apps send no Origin header and are unaffected.
+ * Extra origins can be added with the ALLOWED_ORIGINS env (comma-separated).
+ */
+function allowedOrigin(origin: string): string | null {
+  if (!origin) return null;
+  let host = "";
+  try {
+    host = new URL(origin).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+  const extra = (process.env.ALLOWED_ORIGINS ?? "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  if (extra.includes(origin.toLowerCase())) return origin;
+  const ok =
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "zomitranslator.com" ||
+    host.endsWith(".zomitranslator.com") ||
+    host === "zomi.me" ||
+    host.endsWith(".zomi.me") ||
+    /(^|\.)rork\.[a-z]+$/.test(host) ||
+    host.includes("rork");
+  return ok ? origin : null;
+}
+
 app.use("*", cors({
-  origin: '*',
+  origin: (origin) => allowedOrigin(origin) ?? "",
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowHeaders: ['Content-Type', 'Authorization', 'X-Platform', 'X-Requested-With', 'Accept', 'X-Anonymous-Id'],
   exposeHeaders: ['Content-Length', 'X-Request-Id'],
@@ -223,31 +269,35 @@ app.post("/translate/stream", async (c) => {
     return c.json({ error: "invalid_json" }, 400);
   }
 
-  // Free tier: anyone can translate up to FREE_WORD_LIMIT words without an
-  // account (tracked per device). Past the limit a signed-in account is
-  // required; signed-in members translate without limits.
+  // Free tier: dictionary words are unlimited for everyone; guests get
+  // FREE_WORD_LIMIT AI-translated words per device per day. Signed-in users
+  // translate without limits.
   const auth = await authFromRequest(c.req.header("authorization"));
-  const anonymousId =
-    (body.anonymousId ?? "").trim() ||
-    (c.req.header("x-anonymous-id") ?? "").trim() ||
+  const networkId =
+    (c.req.header("cf-connecting-ip") ?? "").trim() ||
     (c.req.header("x-forwarded-for") ?? "").split(",")[0].trim() ||
+    (c.req.header("x-real-ip") ?? "").trim();
+  const anonymousId =
+    (body.anonymousId ?? "").trim().slice(0, 128) ||
+    (c.req.header("x-anonymous-id") ?? "").trim().slice(0, 128) ||
+    networkId ||
     "anonymous";
-  if (!auth) {
-    try {
-      const db = await getDB();
-      const wordsUsed = await anonymousWordsUsed(db, anonymousId);
-      if (wordsUsed >= FREE_WORD_LIMIT) {
-        return c.json(
-          { error: "word_limit_reached", wordsUsed, wordLimit: FREE_WORD_LIMIT },
-          401
-        );
-      }
-    } catch {
-      // Quota store unavailable — fail open rather than blocking translation.
-    }
+
+  // Abuse protection — all in-memory, zero added latency.
+  void ensureBlockListLoaded();
+  if (!auth && isBlocked([anonymousId, networkId])) {
+    return c.json({ error: "blocked", message: "This device can't use translation right now." }, 403);
+  }
+  const rateKeys = auth ? [`u:${auth.userId}`] : [`d:${anonymousId}`, networkId ? `n:${networkId}` : ""];
+  if (isRateLimited(rateKeys, auth ? 60 : undefined)) {
+    return c.json({ error: "rate_limited", message: "Too many translations at once. Please wait a moment." }, 429);
   }
 
   const text = (body.text ?? "").trim();
+  const maxChars = auth ? MEMBER_MAX_CHARS : GUEST_MAX_CHARS;
+  if (text.length > maxChars) {
+    return c.json({ error: "text_too_long", maxChars, signedIn: Boolean(auth) }, 413);
+  }
   const target = sanitizeLanguageCode(body.targetLanguage);
   // Clients state the source language explicitly; stale clients fall back to
   // auto-detection so they keep working.
@@ -263,11 +313,41 @@ app.post("/translate/stream", async (c) => {
   // human-verified dataset is answered instantly (fast path, zero model
   // latency), and matched entries are injected into the prompt otherwise so
   // the AI translation always agrees with the verified dictionary.
-  const verified = lookupVerified(text);
+  const verified = lookupVerifiedFor(text, source);
   const verifiedFastPath =
     verified !== null &&
-    ((verified.side === "english" && target === "zomi" && (source === "english" || source === "auto")) ||
-      (verified.side === "zomi" && target === "english" && (source === "zomi" || source === "auto")));
+    ((verified.side === "english" && target === "zomi") ||
+      (verified.side === "zomi" && target === "english"));
+  const remembered = verifiedFastPath ? null : recallTranslation(text, source, target);
+  const needsModel = !verifiedFastPath && !remembered;
+
+  // Guest daily allowance + safety brake apply only to AI sentences.
+  if (!auth && needsModel) {
+    if (safetyBrakeEngaged()) {
+      return c.json(
+        {
+          error: "dictionary_only",
+          message: "Sentence translation is busy right now. Dictionary words still work — please try again shortly.",
+        },
+        503
+      );
+    }
+    try {
+      const db = await getDB();
+      const wordsUsed = await Promise.race([
+        anonymousWordsUsed(db, anonymousId),
+        new Promise<number>((resolve) => setTimeout(() => resolve(0), 400)),
+      ]);
+      if (wordsUsed >= FREE_WORD_LIMIT) {
+        return c.json(
+          { error: "word_limit_reached", wordsUsed, wordLimit: FREE_WORD_LIMIT },
+          401
+        );
+      }
+    } catch {
+      // Quota store unavailable — fail open rather than blocking translation.
+    }
+  }
 
   // The fast path needs no AI provider — verified words still translate even
   // when every model is unavailable.
@@ -279,15 +359,13 @@ app.post("/translate/stream", async (c) => {
   // generic professional-translation context. The source language is always
   // stated explicitly so the model never has to guess.
   const systemInstruction = buildSystemInstruction(source, target);
-  const prompt = buildUserPrompt(
-    text,
-    source,
-    target,
-    extraGlossary,
-    verified && !verifiedFastPath && (source === "zomi" || target === "zomi")
+  const involvesZomi = source === "zomi" || target === "zomi";
+  const grounding = !involvesZomi
+    ? undefined
+    : verified && !verifiedFastPath
       ? verified.matches
-      : undefined
-  );
+      : groundingFor(text, source === "zomi" ? "zomi" : "english");
+  const prompt = buildUserPrompt(text, source, target, extraGlossary, grounding);
 
   return streamSSE(c, async (stream) => {
     // Shared tail for both answer paths (verified fast path and model path):
@@ -302,6 +380,12 @@ app.post("/translate/stream", async (c) => {
           await stream.writeSSE({
             event: "usage",
             data: JSON.stringify({ authed: true, wordsUsed: 0, wordLimit: 0 }),
+          });
+        } else if (answerModel === "verified-dictionary" || answerModel === "translation-memory") {
+          // Dictionary words and remembered sentences are free and unlimited.
+          await stream.writeSSE({
+            event: "usage",
+            data: JSON.stringify({ authed: false, wordsUsed: -1, wordLimit: FREE_WORD_LIMIT }),
           });
         } else {
           const db = await getDB();
@@ -335,19 +419,30 @@ app.post("/translate/stream", async (c) => {
     // verified rendering directly — Google-Translate dictionary behavior
     // with zero model latency — and never call a model.
     if (verifiedFastPath && verified) {
-      const primary = verified.matches[0];
-      const answer = verified.side === "english" ? primary.zomi : primary.english;
-      const seen = new Set<string>([answer.trim().toLowerCase()]);
-      const alternatives: string[] = [];
-      for (const m of verified.matches.slice(1)) {
-        const other = verified.side === "english" ? m.zomi : m.english;
-        const key = other.trim().toLowerCase();
-        if (!seen.has(key)) {
-          seen.add(key);
-          alternatives.push(other);
+      // English → Zomi entries list several renderings ("khial, dik lo"):
+      // the first is the answer, the rest become alternatives.
+      const candidates: string[] = [];
+      for (const m of verified.matches) {
+        if (verified.side === "english") {
+          const parts = m.zomi
+            .replace(/\([^)]*\)/g, " ")
+            .split(/[,;]/)
+            .map((s) => s.trim().replace(/\s+/g, " "))
+            .filter((s) => s.length > 0 && s.length <= 40);
+          candidates.push(...(parts.length > 0 ? parts : [m.zomi.trim()]));
+        } else {
+          candidates.push(m.english.trim());
         }
-        if (alternatives.length >= 2) break;
       }
+      const seen = new Set<string>();
+      const unique = candidates.filter((s) => {
+        const k = s.toLowerCase();
+        if (!s || seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+      const answer = unique[0] ?? (verified.side === "english" ? verified.matches[0].zomi : verified.matches[0].english);
+      const alternatives = unique.slice(1, 3);
       await stream.writeSSE({ event: "start", data: JSON.stringify({ model: "verified-dictionary" }) });
       await stream.writeSSE({ event: "delta", data: JSON.stringify({ text: answer }) });
       await stream.writeSSE({ event: "confidence", data: JSON.stringify({ confidence: 100 }) });
@@ -359,11 +454,36 @@ app.post("/translate/stream", async (c) => {
       return;
     }
 
+    // Shared translation memory: a sentence translated before (by anyone)
+    // comes back instantly with no model call. Text only — never who asked.
+    if (remembered) {
+      await stream.writeSSE({ event: "start", data: JSON.stringify({ model: remembered.model }) });
+      await stream.writeSSE({ event: "delta", data: JSON.stringify({ text: remembered.text }) });
+      await stream.writeSSE({ event: "confidence", data: JSON.stringify({ confidence: remembered.confidence }) });
+      await stream.writeSSE({
+        event: "done",
+        data: JSON.stringify({
+          text: remembered.text,
+          model: remembered.model,
+          confidence: remembered.confidence,
+          alternatives: remembered.alternatives,
+        }),
+      });
+      await reportUsageAndLog(remembered.text, "translation-memory", remembered.confidence);
+      return;
+    }
+    if (!auth) recordGuestModelCall();
+
     // Fast-by-default chain: auto-discovered newest models (Flash first),
     // capped to a short list so a failing request never churns through every
     // candidate. Direct Gemini is preferred; the Rork AI proxy is the fallback.
     const modelNames = await translationModelChain();
-    const primaryModels = modelNames.slice(0, 3);
+    // Only stable, fast models serve interactive translation: preview, image,
+    // experimental, thinking and lite variants are excluded.
+    const stable = modelNames.filter((m) => !/(preview|image|exp|thinking|lite|tts|audio)/i.test(m));
+    const primaryModels = (stable.length > 0 ? stable : modelNames).slice(0, 3);
+    // Output cap sized to the input so a runaway generation never stalls the stream.
+    const maxTokens = Math.min(8192, Math.max(512, 256 + Math.ceil(text.length * 1.5)));
     type Attempt = {
       model: string;
       run: (req: ChatRequest, onDelta: (piece: string) => void | Promise<void>) => Promise<string>;
@@ -389,7 +509,7 @@ app.post("/translate/stream", async (c) => {
       // displayable arrives within this window the attempt is aborted and the
       // next model in the chain takes over, instead of the user waiting out
       // the full per-model timeout.
-      const FIRST_TOKEN_TIMEOUT_MS = 8_000;
+      const FIRST_TOKEN_TIMEOUT_MS = 4_000;
       let gotFirstToken = false;
       const firstTokenController = new AbortController();
       const firstTokenTimer = setTimeout(() => {
@@ -407,7 +527,7 @@ app.post("/translate/stream", async (c) => {
         const raw = await run(
           {
             model,
-            maxTokens: 8192,
+            maxTokens,
             messages: [
               { role: "system", content: systemInstruction },
               { role: "user", content: prompt },
@@ -445,10 +565,12 @@ app.post("/translate/stream", async (c) => {
           event: "done",
           data: JSON.stringify({ text: trimmed, model, confidence, alternatives }),
         });
+        rememberTranslation(text, source, target, { text: trimmed, model, confidence, alternatives });
         await reportUsageAndLog(trimmed, model, confidence);
         return;
       } catch (err) {
-        console.error(`[stream] model ${model} failed`, err);
+        // Never log user text — only the model and a short error summary.
+        console.error(`[stream] model ${model} failed:`, (err instanceof Error ? err.message : String(err)).slice(0, 160));
         const message = err instanceof Error ? err.message : String(err);
         const lower = message.toLowerCase();
         if (lower.includes("429") || lower.includes("quota") || lower.includes("rate limit")) {
@@ -468,6 +590,21 @@ app.post("/translate/stream", async (c) => {
     });
   });
 });
+
+/** Loads persisted blocks once per instance (no-op if the table is absent). */
+async function ensureBlockListLoaded(): Promise<void> {
+  await loadBlockList(async () => {
+    const db = await getDB();
+    const { data } = await db.client.from("blocked_clients").select("value, kind, note, created_at");
+    const rows = (data ?? []) as { value: string; kind: string; note: string | null; created_at: string }[];
+    return rows.map((r) => ({
+      value: String(r.value),
+      kind: r.kind === "network" ? "network" : "device",
+      note: r.note ?? "",
+      createdAt: String(r.created_at ?? ""),
+    }));
+  });
+}
 
 /**
  * Cloud sync: stores each signed-in user's personal glossary and saved
@@ -770,7 +907,68 @@ app.get("/admin/usage", async (c) => {
       err instanceof Error ? err.message : err
     );
   }
-  return c.json({ ...snapshot, history, persistAvailable });
+  return c.json({ ...snapshot, history, persistAvailable, guard: guardSnapshot() });
+});
+
+/** Admin: abuse-protection status (block list, safety brake, memory size). */
+app.get("/admin/guard", async (c) => {
+  const guard = await requireAdmin(c);
+  if (!guard.ok) return guard.response;
+  await ensureBlockListLoaded();
+  return c.json({ ...guardSnapshot(), blocks: listBlocks() });
+});
+
+/** Admin: block a device id or network address. Body: { value, kind, note? }. */
+app.post("/admin/block", async (c) => {
+  const guard = await requireAdmin(c);
+  if (!guard.ok) return guard.response;
+  let body: { value?: unknown; kind?: unknown; note?: unknown } = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_json" }, 400);
+  }
+  const value = typeof body.value === "string" ? body.value.trim().slice(0, 128) : "";
+  if (!value) return c.json({ error: "missing_value" }, 400);
+  const entry: BlockEntry = {
+    value,
+    kind: body.kind === "network" ? "network" : "device",
+    note: typeof body.note === "string" ? body.note.slice(0, 200) : "",
+    createdAt: new Date().toISOString(),
+  };
+  addBlock(entry);
+  try {
+    await guard.db.client.from("blocked_clients").upsert({
+      value: entry.value,
+      kind: entry.kind,
+      note: entry.note,
+      created_at: entry.createdAt,
+    });
+  } catch {
+    // persistence optional (backend/sql/abuse-protection.sql)
+  }
+  return c.json({ success: true });
+});
+
+/** Admin: unblock a device id or network address. Body: { value }. */
+app.delete("/admin/block", async (c) => {
+  const guard = await requireAdmin(c);
+  if (!guard.ok) return guard.response;
+  let body: { value?: unknown } = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_json" }, 400);
+  }
+  const value = typeof body.value === "string" ? body.value.trim() : "";
+  if (!value) return c.json({ error: "missing_value" }, 400);
+  removeBlock(value);
+  try {
+    await guard.db.client.from("blocked_clients").delete().eq("value", value);
+  } catch {
+    // persistence optional
+  }
+  return c.json({ success: true });
 });
 
 /** Admin: list every portal user with roles, verification state, usage. */

@@ -1,5 +1,5 @@
 /**
- * Public runtime configuration for the Zomi Language Portal web app.
+ * Public runtime configuration for the Zomi Translator web app.
  *
  * These values are all client-side public identifiers (the same ones shipped
  * inside the mobile bundles). Vite env vars take precedence so the deployment
@@ -29,4 +29,4 @@ export const API_BASE_URL: string = pick(
 
 export const SUPPORT_EMAIL = 'support@zomitranslator.com';
 
-export const APP_NAME = 'Zomi Language Portal';
+export const APP_NAME = 'Zomi Translator';

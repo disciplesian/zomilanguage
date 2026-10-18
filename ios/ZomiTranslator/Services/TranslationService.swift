@@ -15,6 +15,8 @@ nonisolated enum TranslationEvent {
     /// the UI shows a "Connecting..." indicator while this is in flight.
     case connecting
     case done(text: String, model: String, confidence: Int, alternatives: [String])
+    /// Guest daily allowance after this request (wordsUsed < 0 = free dictionary answer).
+    case usage(wordsUsed: Int, wordLimit: Int, signedIn: Bool)
     case failure(message: String)
 }
 
@@ -38,8 +40,8 @@ nonisolated final class TranslationService: Sendable {
         return "https://api.rork.app"
     }
 
-    /// Stable per-device identifier for the anonymous free tier. Guests may
-    /// translate up to 1,500 words before an account is required.
+    /// Stable per-device identifier for the free tier: guests get a daily
+    /// allowance of AI words; dictionary words are always free.
     var anonymousId: String {
         if let existing = KeychainHelper.get("anonymous_id") {
             return existing
@@ -64,9 +66,9 @@ nonisolated final class TranslationService: Sendable {
     }
 
     /// Streams a translation. Emits events as they arrive; the stream finishes
-    /// after a `.done` or `.failure` event. Transient connection failures are
-    /// retried automatically (up to 2 times) with a `.connecting` event before
-    /// each retry so the UI can show a "Connecting..." indicator.
+    /// after a `.done` or `.failure` event. A transient connection failure is
+    /// retried once, quickly, with a `.connecting` event so the UI can show a
+    /// "Connecting..." indicator.
     func stream(
         text: String,
         sourceLanguage: String,
@@ -75,8 +77,8 @@ nonisolated final class TranslationService: Sendable {
     ) -> AsyncStream<TranslationEvent> {
         AsyncStream { continuation in
             let task = Task {
-                // Free tier: members translate without limits; guests draw
-                // down a 1,500-word allowance tracked by anonymous ID.
+                // Free tier: signed-in users are unlimited; guests draw down a
+                // daily allowance tracked by an anonymous device ID.
                 let accessToken = KeychainHelper.get("access_token")
                 let guestId = anonymousId
                 guard let url = URL(string: "\(baseURL)/api/translate/stream") else {
@@ -92,18 +94,17 @@ nonisolated final class TranslationService: Sendable {
                 if let accessToken {
                     request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
                 }
-                request.timeoutInterval = 60
+                request.timeoutInterval = 45
 
                 let body: [String: Any] = [
                     "text": text,
                     "sourceLanguage": sourceLanguage,
                     "targetLanguage": targetLanguage,
-                    "extraGlossary": extraGlossary,
                     "anonymousId": guestId,
                 ]
                 request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
-                let maxRetries = 2
+                let maxRetries = 1
                 var attempt = 0
 
                 streamLoop: while true {
@@ -111,16 +112,23 @@ nonisolated final class TranslationService: Sendable {
                         let (bytes, response) = try await URLSession.shared.bytes(for: request)
                         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                             let code = (response as? HTTPURLResponse)?.statusCode ?? -1
-                            if code == 401 {
-                                // Read the JSON error body to tell an exhausted free
-                                // tier apart from an expired member session.
+                            // Read the JSON error body: the server explains free-tier,
+                            // speed-limit and length-limit answers with an error code.
+                            var errorCode: String?
+                            if code >= 400 {
                                 var raw = ""
                                 for try await line in bytes.lines {
                                     raw += line
                                     if raw.count > 512 { break }
                                 }
-                                let errorCode = ((try? JSONSerialization.jsonObject(with: Data(raw.utf8))) as? [String: Any])?["error"] as? String
-                                continuation.yield(.failure(message: errorCode ?? "sign_in_required"))
+                                errorCode = ((try? JSONSerialization.jsonObject(with: Data(raw.utf8))) as? [String: Any])?["error"] as? String
+                            }
+                            if let errorCode, ["word_limit_reached", "rate_limited", "text_too_long", "dictionary_only", "blocked"].contains(errorCode) {
+                                continuation.yield(.failure(message: errorCode))
+                                break streamLoop
+                            }
+                            if code == 401 {
+                                continuation.yield(.failure(message: errorCode ?? "session_expired"))
                                 break streamLoop
                             }
                             // Transient 5xx: retry with backoff before failing.
@@ -140,6 +148,7 @@ nonisolated final class TranslationService: Sendable {
                         var alternatives: [String] = []
                         var currentEvent = "message"
                         var sawDone = false
+                        var shouldStop = false
 
                         for try await line in bytes.lines {
                             if Task.isCancelled { break }
@@ -164,6 +173,11 @@ nonisolated final class TranslationService: Sendable {
                                     }
                                 case "confidence":
                                     if let c = json["confidence"] as? Int { confidence = c }
+                                case "usage":
+                                    let used = (json["wordsUsed"] as? Int) ?? 0
+                                    let limit = (json["wordLimit"] as? Int) ?? 0
+                                    let authed = (json["authed"] as? Bool) ?? false
+                                    continuation.yield(.usage(wordsUsed: used, wordLimit: limit, signedIn: authed))
                                 case "done":
                                     let full = (json["text"] as? String) ?? accumulated
                                     let m = (json["model"] as? String) ?? model
@@ -171,15 +185,17 @@ nonisolated final class TranslationService: Sendable {
                                     alternatives = Self.normalizeAlternatives(json["alternatives"], primary: full)
                                     sawDone = true
                                     continuation.yield(.done(text: full, model: m, confidence: confidence > 0 ? confidence : 95, alternatives: alternatives))
+                                    // The usage event follows "done"; the server closes the stream right after.
                                 case "error":
-                                    let message = (json["message"] as? String) ?? (json["code"] as? String) ?? "stream_error"
+                                    let message = (json["code"] as? String) ?? (json["message"] as? String) ?? "stream_error"
                                     sawDone = true
+                                    shouldStop = true
                                     continuation.yield(.failure(message: message))
                                 default:
                                     break
                                 }
                             }
-                            if sawDone { break }
+                            if shouldStop { break }
                         }
 
                         if !sawDone {
@@ -189,7 +205,7 @@ nonisolated final class TranslationService: Sendable {
                                 if attempt < maxRetries {
                                     attempt += 1
                                     continuation.yield(.connecting)
-                                    try? await Task.sleep(for: .milliseconds(400 << (attempt - 1)))
+                                    try? await Task.sleep(for: .milliseconds(300))
                                     continue streamLoop
                                 }
                                 continuation.yield(.failure(message: "no_data"))
@@ -206,7 +222,7 @@ nonisolated final class TranslationService: Sendable {
                         if attempt < maxRetries {
                             attempt += 1
                             continuation.yield(.connecting)
-                            try? await Task.sleep(for: .milliseconds(800 << (attempt - 1)))
+                            try? await Task.sleep(for: .milliseconds(500))
                             continue streamLoop
                         }
                         continuation.yield(.failure(message: error.localizedDescription))
@@ -217,13 +233,6 @@ nonisolated final class TranslationService: Sendable {
             }
             continuation.onTermination = { _ in task.cancel() }
         }
-    }
-
-    /// Non-streaming fallback via the Rork toolkit LLM, mirroring the Expo
-    /// client-side generateText fallback.
-    func fallbackTranslate(text: String, sourceLanguage: String, targetLanguage: String) async throws -> String {
-        let prompt = ZomiPrompt.fallbackPrompt(text: text, sourceLanguage: sourceLanguage, targetLanguage: targetLanguage)
-        return try await ToolkitService.shared.generateText(prompt: prompt)
     }
 
     /// Fetches two AI-generated example sentences for a verified dictionary

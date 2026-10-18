@@ -4,6 +4,7 @@ import { createTRPCRouter, publicProcedure } from '../../create-context';
 import { chatCompletion, aiProxyConfigured, type ChatMessage, type ChatRequest } from '../../../aiProxy';
 import { chatCompletionDirect, geminiConfigured, translationModelChain } from '../../../geminiDirect';
 import { authFromRequest, logTranslation, FREE_WORD_LIMIT, anonymousWordsUsed, countWords, recordAnonymousWords } from '../../../portal';
+import { GUEST_MAX_CHARS, isBlocked, isRateLimited } from '../../../guard';
 import { getDB } from '../../../db/client';
 import {
   ZOMI_SYSTEM_INSTRUCTION,
@@ -343,23 +344,36 @@ export default createTRPCRouter({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      // Free tier: anonymous visitors may translate up to FREE_WORD_LIMIT words
-      // (tracked per device); past that a signed-in account is required.
+      // Free tier: guests get FREE_WORD_LIMIT AI words per device per day;
+      // signed-in users are unlimited. Same rules as /translate/stream.
       const auth = await authFromRequest(ctx.req?.headers?.get('authorization') ?? undefined);
+      const networkId = (ctx.req?.headers?.get('x-forwarded-for') ?? '').split(',')[0].trim();
       const anonymousId =
         (input.anonymousId ?? '').trim() ||
-        (ctx.req?.headers?.get('x-anonymous-id') ?? '').trim();
+        (ctx.req?.headers?.get('x-anonymous-id') ?? '').trim() ||
+        networkId ||
+        'anonymous';
       let wordsUsed = 0;
       if (!auth) {
-        if (!anonymousId) {
-          throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sign in required to translate.' });
+        if (isBlocked([anonymousId, networkId])) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'blocked' });
         }
-        const db = await getDB();
-        wordsUsed = await anonymousWordsUsed(db, anonymousId);
+        if (isRateLimited([`d:${anonymousId}`, networkId ? `n:${networkId}` : ''])) {
+          throw new TRPCError({ code: 'TOO_MANY_REQUESTS', message: 'rate_limited' });
+        }
+        if (input.text.length > GUEST_MAX_CHARS) {
+          throw new TRPCError({ code: 'PAYLOAD_TOO_LARGE', message: `text_too_long:${GUEST_MAX_CHARS}` });
+        }
+        try {
+          const db = await getDB();
+          wordsUsed = await anonymousWordsUsed(db, anonymousId);
+        } catch {
+          wordsUsed = 0;
+        }
         if (wordsUsed >= FREE_WORD_LIMIT) {
           throw new TRPCError({
             code: 'UNAUTHORIZED',
-            message: 'word_limit_reached: You have used your 1,500 free words. Sign in to keep translating.',
+            message: "word_limit_reached: You've used today's free words. Sign in for unlimited translation, or come back tomorrow.",
           });
         }
       }

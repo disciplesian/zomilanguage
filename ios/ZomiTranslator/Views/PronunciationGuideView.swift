@@ -4,9 +4,7 @@ import SwiftUI
 /// tone guidelines, common mistakes, practice tips) with native TTS playback.
 struct PronunciationGuideView: View {
     @Environment(ThemeManager.self) private var theme
-    @Environment(SpeechService.self) private var speech
 
-    @State private var activeExample: String?
 
     private var colors: ThemeColors { theme.colors }
 
@@ -69,10 +67,10 @@ struct PronunciationGuideView: View {
                             size: 72
                         )
                         Text("Pronunciation Guide")
-                            .font(.system(size: 24, weight: .bold))
+                            .scaledFont(size: 24, weight: .bold)
                             .foregroundStyle(colors.text)
                         Text("Master Zomi sounds and tones")
-                            .font(.system(size: 14))
+                            .scaledFont(size: 14)
                             .foregroundStyle(colors.textSecondary)
                     }
                     .frame(maxWidth: .infinity)
@@ -84,11 +82,11 @@ struct PronunciationGuideView: View {
                                 Image(systemName: "info.circle")
                                     .foregroundStyle(colors.primary)
                                 Text("About Zomi Pronunciation")
-                                    .font(.system(size: 16, weight: .semibold))
+                                    .scaledFont(size: 16, weight: .semibold)
                                     .foregroundStyle(colors.text)
                             }
                             Text("Zomi uses the Latin alphabet with some unique sounds and tonal variations. This guide will help you pronounce words correctly and understand the phonetic system.")
-                                .font(.system(size: 14))
+                                .scaledFont(size: 14)
                                 .foregroundStyle(colors.textSecondary)
                                 .lineSpacing(4)
                         }
@@ -114,28 +112,19 @@ struct PronunciationGuideView: View {
                                         .fill(index % 2 == 0 ? colors.tertiary : colors.secondary)
                                         .frame(width: 10, height: 10)
                                     Text(tone.title)
-                                        .font(.system(size: 16, weight: .semibold))
+                                        .scaledFont(size: 16, weight: .semibold)
                                         .foregroundStyle(colors.text)
                                 }
                                 Text(tone.description)
-                                    .font(.system(size: 14))
+                                    .scaledFont(size: 14)
                                     .foregroundStyle(colors.textSecondary)
                                 HStack(spacing: 8) {
                                     Text("Example:")
-                                        .font(.system(size: 12))
+                                        .scaledFont(size: 12)
                                         .foregroundStyle(colors.textMuted)
-                                    Button {
-                                        play(tone.example)
-                                    } label: {
-                                        HStack(spacing: 6) {
-                                            Text(tone.example)
-                                                .font(.system(size: 14, weight: .semibold))
-                                                .foregroundStyle(colors.accent)
-                                            Image(systemName: "play.circle")
-                                                .font(.system(size: 14))
-                                                .foregroundStyle(colors.accent)
-                                        }
-                                    }
+                                    Text(tone.example)
+                                        .scaledFont(size: 14, weight: .semibold)
+                                        .foregroundStyle(colors.accent)
                                 }
                             }
                         }
@@ -150,14 +139,14 @@ struct PronunciationGuideView: View {
                                         Image(systemName: "xmark.circle.fill")
                                             .foregroundStyle(colors.error)
                                         Text(mistake.wrong)
-                                            .font(.system(size: 14))
+                                            .scaledFont(size: 14)
                                             .foregroundStyle(colors.text)
                                     }
                                     HStack(alignment: .top, spacing: 10) {
                                         Image(systemName: "checkmark.circle.fill")
                                             .foregroundStyle(colors.success)
                                         Text(mistake.correct)
-                                            .font(.system(size: 14))
+                                            .scaledFont(size: 14)
                                             .foregroundStyle(colors.text)
                                     }
                                     if index != mistakes.count - 1 {
@@ -176,7 +165,7 @@ struct PronunciationGuideView: View {
                                 Image(systemName: "book")
                                     .foregroundStyle(colors.success)
                                 Text("Practice Tips")
-                                    .font(.system(size: 16, weight: .semibold))
+                                    .scaledFont(size: 16, weight: .semibold)
                                     .foregroundStyle(colors.text)
                             }
                             Text("""
@@ -184,11 +173,10 @@ struct PronunciationGuideView: View {
                             • Practice vowel sounds — they're longer than in English
                             • Pay attention to tones — they can change word meanings
                             • Record yourself and compare with native pronunciation
-                            • Use the audio feature in the dictionary regularly
                             • Don't be afraid to ask native speakers for feedback
                             • Practice common phrases until they feel natural
                             """)
-                            .font(.system(size: 14))
+                            .scaledFont(size: 14)
                             .foregroundStyle(colors.textSecondary)
                             .lineSpacing(5)
                         }
@@ -207,43 +195,26 @@ struct PronunciationGuideView: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text(rule.letter)
-                        .font(.system(size: 28, weight: .bold))
+                        .scaledFont(size: 28, weight: .bold)
                         .foregroundStyle(colors.text)
                     Spacer()
-                    Button {
-                        play(rule.zomiWord)
-                    } label: {
-                        Image(systemName: activeExample == rule.zomiWord ? "speaker.wave.2.fill" : "play.circle")
-                            .font(.system(size: 18))
-                            .foregroundStyle(activeExample == rule.zomiWord ? colors.accent : colors.textSecondary)
-                    }
                 }
                 Text("Sound: \"\(rule.sound)\"")
-                    .font(.system(size: 13, weight: .medium))
+                    .scaledFont(size: 13, weight: .medium)
                     .foregroundStyle(colors.textSecondary)
                 Text("Like: \(rule.example)")
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundStyle(colors.textMuted)
                 Text(rule.zomiWord)
-                    .font(.system(size: 13, weight: .semibold))
+                    .scaledFont(size: 13, weight: .semibold)
                     .foregroundStyle(colors.text)
             }
         }
     }
 
-    private func play(_ text: String) {
-        Haptics.light()
-        activeExample = text
-        speech.speak(text)
-        Task {
-            try? await Task.sleep(for: .seconds(1.5))
-            if activeExample == text { activeExample = nil }
-        }
-    }
-
     private func sectionTitle(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 18, weight: .semibold))
+            .scaledFont(size: 18, weight: .semibold)
             .foregroundStyle(colors.text)
             .padding(.top, 8)
     }

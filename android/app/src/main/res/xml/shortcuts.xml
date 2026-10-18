@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="translate"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_translate_short"
+        android:shortcutLongLabel="@string/shortcut_translate_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.rork.zomilanguageportal"
+            android:targetClass="com.rork.zomilanguageportal.MainActivity">
+            <extra android:name="route" android:value="translate" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:shortcutId="dictionary"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_dictionary_short"
+        android:shortcutLongLabel="@string/shortcut_dictionary_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.rork.zomilanguageportal"
+            android:targetClass="com.rork.zomilanguageportal.MainActivity">
+            <extra android:name="route" android:value="dictionary" />
+        </intent>
+    </shortcut>
+</shortcuts>

@@ -59,13 +59,17 @@ final class DictionaryViewModel {
     }
 
     private var aiTask: Task<Void, Never>?
+    private var searchTask: Task<Void, Never>?
+    private var searchGeneration = 0
 
     init() {
         Task { [weak self] in
-            let all = DictionaryData.load()
-            self?.totalCount = all.count
+            let (count, letters) = await Task.detached(priority: .userInitiated) {
+                (DictionaryData.index().entries.count, DictionaryData.browseLetters())
+            }.value
+            self?.totalCount = count
             self?.entriesLoaded = true
-            self?.browseLetters = DictionaryData.browseLetters()
+            self?.browseLetters = letters
             self?.refreshBrowse()
             self?.refreshResults()
 
@@ -89,13 +93,34 @@ final class DictionaryViewModel {
     }
 
     private func queryChanged() {
+        aiTask?.cancel()
+        aiResult = nil
+        aiError = nil
+        isAskingAI = false
         refreshResults()
-        scheduleAIFallback()
     }
 
+    /// Searches off the main thread so typing never stutters; only the
+    /// newest keystroke's results are applied.
     private func refreshResults() {
-        results = DictionaryData.search(trimmedQuery, limit: 60)
-        suggestions = DictionaryData.suggest(trimmedQuery)
+        let q = trimmedQuery
+        searchGeneration += 1
+        let generation = searchGeneration
+        guard !q.isEmpty else {
+            results = []
+            suggestions = []
+            return
+        }
+        searchTask?.cancel()
+        searchTask = Task { [weak self] in
+            let (found, suggested) = await Task.detached(priority: .userInitiated) {
+                (DictionaryData.search(q, limit: 60), DictionaryData.suggest(q))
+            }.value
+            guard let self, generation == self.searchGeneration else { return }
+            self.results = found
+            self.suggestions = suggested
+            self.scheduleAIFallback()
+        }
     }
 
     private func refreshBrowse() {
@@ -117,7 +142,7 @@ final class DictionaryViewModel {
         guard aiConsentGiven else { return }
 
         aiTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(700))
+            try? await Task.sleep(for: .milliseconds(350))
             guard !Task.isCancelled else { return }
             await self?.askAI(text: text, englishToZomi: direction)
         }
@@ -151,6 +176,8 @@ final class DictionaryViewModel {
                 break
             case .delta:
                 break
+            case .usage:
+                break
             case .done(let full, _, _, _):
                 let trimmed = full.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty {
@@ -158,25 +185,8 @@ final class DictionaryViewModel {
                     return
                 }
             case .failure(let message):
-                switch message {
-                case "cancelled":
-                    return
-                case "word_limit_reached":
-                    aiError = "You've used your 1,500 free words — sign in from the Settings tab to keep going."
-                case "sign_in_required":
-                    aiError = "Sign in required — please sign in from the Settings tab."
-                default:
-                    let lower = message.lowercased()
-                    if lower.contains("offline")
-                        || lower.contains("network")
-                        || lower.contains("internet")
-                        || lower.contains("connect")
-                        || lower.contains("timed out") {
-                        aiError = "You appear to be offline. The verified dictionary still works — reconnect for AI answers."
-                    } else {
-                        aiError = "AI lookup is unavailable right now. Check your connection and try again."
-                    }
-                }
+                if message == "cancelled" { return }
+                aiError = TranslatorViewModel.friendlyMessage(for: message)
                 return
             }
         }

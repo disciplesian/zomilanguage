@@ -1,837 +1,550 @@
-import PhotosUI
 import SwiftUI
 
-/// Main Translate screen — clone of the Expo translator (language selector,
-/// quick menu, input card with voice/paste/camera/photo/clear, streaming
-/// output card with favorite/share/copy/speak, quality bar).
+/// Main Translate screen: Zomi ⇄ English with instant dictionary words,
+/// streaming sentences, and a keyboard that never gets in the way.
+/// Phones stack input over output; iPad and wide windows show them side by side.
 struct TranslatorView: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(TranslationStore.self) private var translationStore
-    @Environment(GlossaryStore.self) private var glossaryStore
-    @Environment(SpeechService.self) private var speech
+    @Environment(AppRouter.self) private var router
+    @Environment(NetworkMonitor.self) private var network
+    @Environment(AuthManager.self) private var auth
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var viewModel = TranslatorViewModel()
-    @State private var recorder = AudioRecorderService()
+    @FocusState private var inputFocused: Bool
 
-    @State private var copied = false
-    @State private var isFavorite = false
-    @State private var showSpeedOptions = false
-    @State private var showShareSheet = false
-    @State private var pdfExport: PDFShareItem?
-    @State private var isExportingPDF = false
-    @State private var photoPickerItem: PhotosPickerItem?
-    @State private var showCamera = false
-    @State private var isExtractingText = false
-    @State private var alertMessage: String?
+    @State private var toast: String?
+    @State private var swapTurns = 0.0
+    @State private var shareItems: ShareItems?
     @State private var showAIConsent = false
-    @State private var showAudioConsent = false
 
     private var colors: ThemeColors { theme.colors }
-
-    private var aiConsentGiven: Bool {
-        UserDefaults.standard.bool(forKey: "ai_consent_given")
-    }
-
-    private var audioConsentGiven: Bool {
-        UserDefaults.standard.bool(forKey: "audio_consent_given")
-    }
+    private var isWide: Bool { sizeClass == .regular }
+    private var guestCharLimit: Int? { auth.isSignedIn ? nil : 500 }
 
     var body: some View {
         ZStack {
-            AppBackground(colors: colors, isDark: theme.isDark)
+            AppBackground(colors: colors, isDark: true)
+                .onTapGesture { inputFocused = false }
 
             ScrollView {
-                VStack(spacing: 12) {
+                VStack(spacing: 14) {
                     header
+                    if !network.isOnline { offlineNote }
                     languageSelector
-                    quickMenu
-                    inputCard
-                    outputCard
+                    if isWide {
+                        HStack(alignment: .top, spacing: 16) {
+                            inputCard
+                            outputCard
+                        }
+                    } else {
+                        inputCard
+                        outputCard
+                    }
+                    if let left = viewModel.freeWordsLeft, left > 0, !auth.isSignedIn {
+                        freeWordsNote(left)
+                    }
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 90)
+                .padding(.horizontal, isWide ? 32 : 16)
+                .padding(.bottom, 32)
+                .frame(maxWidth: isWide ? 1100 : .infinity)
+                .frame(maxWidth: .infinity)
             }
-            .scrollDismissesKeyboard(.interactively)
+            .scrollDismissesKeyboard(.immediately)
+
+            if let toast {
+                VStack {
+                    Spacer()
+                    Text(toast)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color(hex: 0x0B1020))
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 10)
+                        .background(colors.success, in: Capsule())
+                        .padding(.bottom, 24)
+                        .accessibilityAddTraits(.isStaticText)
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .allowsHitTesting(false)
+            }
         }
-        .photosPicker(isPresented: .constant(false), selection: .constant(nil))
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") {
+                    inputFocused = false
+                    viewModel.translateNow()
+                }
+                .fontWeight(.semibold)
+            }
+        }
         .onAppear {
             viewModel.translationStore = translationStore
-            viewModel.glossaryStore = glossaryStore
-            if !aiConsentGiven {
-                showAIConsent = true
-            }
+            if !viewModel.aiConsentGiven { showAIConsent = true }
         }
-        .sheet(isPresented: $showCamera) {
-            CameraPicker { image in
-                Task { await extractText(from: image) }
-            }
-            .ignoresSafeArea()
+        .onDisappear { inputFocused = false }
+        .onChange(of: router.focusRequest) { _, _ in
+            if router.selectedTab == .translate { inputFocused = true }
         }
-        .sheet(isPresented: $showShareSheet) {
-            ShareSheet(items: [shareMessage])
+        .sheet(item: $shareItems) { item in
+            ShareSheet(items: item.items)
         }
-        .sheet(item: $pdfExport) { item in
-            ShareSheet(items: [item.url])
-        }
-        .alert("Zomi Translator", isPresented: Binding(
-            get: { alertMessage != nil },
-            set: { if !$0 { alertMessage = nil } }
-        )) {
-            Button("OK", role: .cancel) {}
+        .alert("AI translation notice", isPresented: $showAIConsent) {
+            Button("Agree & Continue") { viewModel.grantAIConsent() }
+            Button("Not now", role: .cancel) {}
         } message: {
-            Text(alertMessage ?? "")
-        }
-        .onChange(of: photoPickerItem) { _, newItem in
-            guard let newItem else { return }
-            Task {
-                if let data = try? await newItem.loadTransferable(type: Data.self),
-                   let image = UIImage(data: data) {
-                    await extractText(from: image)
-                }
-                photoPickerItem = nil
-            }
-        }
-        .alert("AI Translation Consent", isPresented: $showAIConsent) {
-            Button("Agree & Continue") {
-                viewModel.grantAIConsent()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Translations are powered by AI. When you translate, your text and any glossary terms are sent securely to the Zomi AI translation service, which uses Google Gemini and may use a backup AI provider for processing. By continuing, you consent to this processing.")
-        }
-        .alert("Voice Transcription Consent", isPresented: $showAudioConsent) {
-            Button("Agree & Continue") {
-                UserDefaults.standard.set(true, forKey: "audio_consent_given")
-                Task { await handleVoiceInput() }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Voice input sends your recording to the Rork AI toolkit for transcription. By continuing, you consent to this audio processing.")
+            Text("Dictionary words are translated on your device. Sentences are sent securely to the Zomi AI translation service, which uses Google Gemini and the Rork AI gateway as a backup. Your text is not used to identify you. By continuing, you agree to this processing.")
         }
     }
 
     // MARK: - Header
 
     private var header: some View {
-        HStack(spacing: 14) {
-            AsyncImage(url: URL(string: "https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/fw1kjqxngjk7aalao0jn6")) { phase in
-                if let image = phase.image {
-                    image.resizable().scaledToFit()
-                } else {
-                    Image(systemName: "character.bubble")
-                        .font(.title2)
-                        .foregroundStyle(colors.primary)
-                }
-            }
-            .frame(width: 54, height: 54)
-            .background(Color.black.opacity(0.2))
-            .clipShape(.rect(cornerRadius: 16))
-            .overlay {
-                RoundedRectangle(cornerRadius: 16)
-                    .strokeBorder(colors.glassBorder, lineWidth: 1)
-            }
+        HStack(spacing: 12) {
+            Image(systemName: "character.bubble.fill")
+                .font(.title2)
+                .foregroundStyle(
+                    LinearGradient(colors: [Color(hex: 0x00F0FF), Color(hex: 0x8C5CFF)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                )
+                .frame(width: 48, height: 48)
+                .background(Color.white.opacity(0.08), in: .rect(cornerRadius: 14))
+                .overlay { RoundedRectangle(cornerRadius: 14).strokeBorder(colors.glassBorder, lineWidth: 1) }
+                .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text("ZOMI TRANSLATOR")
-                    .font(.system(size: 18, weight: .bold))
+                    .font(.headline.weight(.heavy))
+                    .tracking(0.6)
                     .foregroundStyle(Color(hex: 0x00D9FF))
-                Text("AI-Powered Translation")
-                    .font(.system(size: 13))
+                Text("Zomi \u{21C4} English")
+                    .font(.subheadline)
                     .foregroundStyle(colors.textSecondary)
             }
+            .accessibilityElement(children: .combine)
             Spacer()
         }
         .padding(.top, 8)
     }
 
+    private var offlineNote: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "wifi.slash")
+                .accessibilityHidden(true)
+            Text("Offline: dictionary words still work.")
+                .font(.subheadline.weight(.medium))
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(colors.warning)
+        .padding(12)
+        .background(colors.warning.opacity(0.12), in: .rect(cornerRadius: 12))
+        .overlay { RoundedRectangle(cornerRadius: 12).strokeBorder(colors.warning.opacity(0.35), lineWidth: 1) }
+    }
+
+    private func freeWordsNote(_ left: Int) -> some View {
+        Text("Free today: \(left) words left")
+            .font(.footnote.weight(.medium))
+            .foregroundStyle(colors.textMuted)
+            .frame(maxWidth: .infinity, alignment: .center)
+    }
+
     // MARK: - Language selector
 
     private var languageSelector: some View {
-        GlassCard(variant: .cyan, glow: true, padding: 10, colors: colors, isDark: theme.isDark) {
-            HStack {
-                languageButton(title: viewModel.sourceLabel, isActive: true) {
-                    Haptics.selection()
-                    viewModel.toggleSource()
-                }
+        GlassCard(variant: .cyan, glow: true, padding: 8, colors: colors, isDark: true) {
+            HStack(spacing: 8) {
+                languagePill(viewModel.sourceLabel, highlighted: false)
 
                 Button {
                     Haptics.medium()
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                    inputFocused = false
+                    if reduceMotion {
                         viewModel.swapLanguages()
+                    } else {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                            swapTurns += 180
+                            viewModel.swapLanguages()
+                        }
                     }
                 } label: {
-                    LinearGradient(
-                        colors: [Color(hex: 0x00F0FF, alpha: 0.8), Color(hex: 0x8C5CFF, alpha: 0.8)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                    .frame(width: 48, height: 48)
-                    .overlay {
-                        Image(systemName: "arrow.left.arrow.right")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .allowsHitTesting(false)
-                    }
-                    .clipShape(Circle())
+                    Image(systemName: "arrow.left.arrow.right")
+                        .font(.body.weight(.bold))
+                        .foregroundStyle(.white)
+                        .rotationEffect(.degrees(swapTurns))
+                        .frame(width: 48, height: 48)
+                        .background(
+                            LinearGradient(colors: [Color(hex: 0x00F0FF, alpha: 0.85), Color(hex: 0x8C5CFF, alpha: 0.85)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                            in: Circle()
+                        )
                 }
                 .buttonStyle(PressableButtonStyle())
                 .accessibilityLabel("Swap languages")
+                .accessibilityHint("Now translating \(viewModel.sourceLabel) to \(viewModel.targetLabel)")
 
-                targetLanguageLabel
+                languagePill(viewModel.targetLabel, highlighted: true)
             }
         }
     }
 
-    /// Target-language label — fixed: translation is Zomi ⇄ English only.
-    private var targetLanguageLabel: some View {
-        Text(viewModel.targetLabel)
-            .font(.system(size: 17, weight: .semibold))
-            .foregroundStyle(Color(hex: 0x00F0FF))
+    private func languagePill(_ title: String, highlighted: Bool) -> some View {
+        Text(title)
+            .font(.headline)
+            .foregroundStyle(highlighted ? Color(hex: 0x00F0FF) : colors.text)
             .lineLimit(1)
             .minimumScaleFactor(0.7)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .background(Color(hex: 0x00F0FF, alpha: theme.isDark ? 0.25 : 0.15))
-            .clipShape(.rect(cornerRadius: 12))
-    }
-
-    private func languageButton(title: String, isActive: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(isActive ? colors.text : colors.textSecondary)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(isActive ? Color(hex: 0x00F0FF, alpha: theme.isDark ? 0.25 : 0.15) : .clear)
-                .clipShape(.rect(cornerRadius: 12))
-        }
-    }
-
-    // MARK: - Quick menu
-
-    private struct QuickItem: Identifiable {
-        let id: String
-        let label: String
-        let systemImage: String
-        let color: Color
-        let destination: QuickDestination
-    }
-
-    private enum QuickDestination {
-        case tools, history, glossary, pronounce, tips
-    }
-
-    private var quickItems: [QuickItem] {
-        [
-            QuickItem(id: "tools", label: "Tools", systemImage: "wrench.and.screwdriver", color: Color(hex: 0x8C5CFF), destination: .tools),
-            QuickItem(id: "history", label: "History", systemImage: "clock.arrow.circlepath", color: Color(hex: 0x22D3A3), destination: .history),
-            QuickItem(id: "glossary", label: "Glossary", systemImage: "book", color: Color(hex: 0xFFB547), destination: .glossary),
-            QuickItem(id: "pronounce", label: "Pronounce", systemImage: "mic", color: Color(hex: 0xFF6B9D), destination: .pronounce),
-            QuickItem(id: "tips", label: "Tips", systemImage: "lightbulb", color: Color(hex: 0xFFD166), destination: .tips),
-        ]
-    }
-
-    private var quickMenu: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
-                ForEach(quickItems) { item in
-                    NavigationLink(value: item.id) {
-                        VStack(spacing: 6) {
-                            LinearGradient(
-                                colors: [item.color.opacity(0.2), item.color.opacity(0.08)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                            .frame(width: 52, height: 52)
-                            .overlay {
-                                Image(systemName: item.systemImage)
-                                    .font(.system(size: 20))
-                                    .foregroundStyle(item.color)
-                                    .allowsHitTesting(false)
-                            }
-                            .clipShape(.rect(cornerRadius: 16))
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 16)
-                                    .strokeBorder(item.color.opacity(0.33), lineWidth: 1)
-                            }
-
-                            Text(item.label)
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(colors.textSecondary)
-                        }
-                        .frame(width: 68)
-                    }
-                    .buttonStyle(PressableButtonStyle())
-                    .simultaneousGesture(TapGesture().onEnded { Haptics.light() })
-                }
-            }
-            .padding(.vertical, 4)
-        }
-        .contentMargins(.horizontal, 2)
-        .navigationDestination(for: String.self) { id in
-            switch id {
-            case "tools": ToolsView()
-            case "history": HistoryView()
-            case "glossary": GlossaryView()
-            case "pronounce": PronunciationGuideView()
-            case "tips": TranslationTipsView()
-            default: EmptyView()
-            }
-        }
+            .frame(maxWidth: .infinity, minHeight: 48)
+            .background(Color(hex: 0x00F0FF, alpha: highlighted ? 0.22 : 0.10), in: .rect(cornerRadius: 12))
+            .contentTransition(.opacity)
     }
 
     // MARK: - Input card
 
     private var inputCard: some View {
-        GlassCard(variant: .purple, colors: colors, isDark: theme.isDark) {
-            VStack(alignment: .leading, spacing: 12) {
+        GlassCard(variant: .purple, colors: colors, isDark: true) {
+            VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Text(viewModel.sourceLabel)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.subheadline.weight(.semibold))
                         .foregroundStyle(colors.text)
                     Spacer()
-                    HStack(spacing: 4) {
-                        micButton
-                        actionIcon("doc.on.clipboard") { pasteFromClipboard() }
-                        actionIcon("camera") { showCamera = true }
-                        photoPickerButton
-                        actionIcon("trash") {
+                    iconButton("doc.on.clipboard", label: "Paste") { pasteFromClipboard() }
+                    if !viewModel.inputText.isEmpty {
+                        iconButton("xmark.circle.fill", label: "Clear text") {
                             Haptics.light()
                             viewModel.clear()
-                            speech.stop()
                         }
-                    }
-                }
-
-                if recorder.isRecording {
-                    recordingIndicator
-                }
-
-                if isExtractingText {
-                    HStack(spacing: 8) {
-                        ProgressView()
-                            .tint(colors.accent)
-                        Text("Extracting text from image...")
-                            .font(.system(size: 13))
-                            .foregroundStyle(colors.textSecondary)
+                        .transition(.scale.combined(with: .opacity))
                     }
                 }
 
                 TextField(
-                    "Type \(viewModel.sourceLabel) text...",
-                    text: Binding(get: { viewModel.inputText }, set: { viewModel.inputText = $0 }),
+                    "Type \(viewModel.sourceLabel) text\u{2026}",
+                    text: Binding(
+                        get: { viewModel.inputText },
+                        set: { newValue in
+                            if let limit = guestCharLimit, newValue.count > limit {
+                                viewModel.inputText = String(newValue.prefix(limit))
+                            } else {
+                                viewModel.inputText = newValue
+                            }
+                        }
+                    ),
                     axis: .vertical
                 )
-                .font(.system(size: 17))
+                .font(.title3)
                 .foregroundStyle(colors.text)
-                .lineLimit(4...10)
-                .disabled(recorder.isRecording || recorder.isTranscribing)
+                .lineLimit(isWide ? 8...16 : 3...10)
+                .focused($inputFocused)
+                .autocorrectionDisabled(true)
+                .textInputAutocapitalization(.never)
+                .keyboardType(.default)
+                .submitLabel(.done)
+                .accessibilityLabel("Text to translate from \(viewModel.sourceLabel)")
 
                 HStack {
-                    Text("\(viewModel.inputText.count)/5000")
+                    if let limit = guestCharLimit {
+                        Text("\(viewModel.inputText.count)/\(limit)")
+                    } else {
+                        Text("\(viewModel.inputText.count)")
+                    }
                     Spacer()
-                    Text("\(viewModel.wordCount) words")
+                    Text("\(viewModel.wordCount) \(viewModel.wordCount == 1 ? "word" : "words")")
                 }
-                .font(.system(size: 12))
+                .font(.caption)
                 .foregroundStyle(colors.textMuted)
+                .monospacedDigit()
             }
         }
-    }
-
-    private var micButton: some View {
-        Button {
-            Task {
-                if recorder.isRecording || audioConsentGiven {
-                    await handleVoiceInput()
-                } else {
-                    showAudioConsent = true
-                }
-            }
-        } label: {
-            Group {
-                if recorder.isTranscribing {
-                    ProgressView()
-                        .tint(colors.accent)
-                } else if recorder.isRecording {
-                    Image(systemName: "stop.fill")
-                        .foregroundStyle(colors.error)
-                } else {
-                    Image(systemName: "mic")
-                        .foregroundStyle(colors.textSecondary)
-                }
-            }
-            .font(.system(size: 16))
-            .frame(width: 34, height: 34)
-            .background(recorder.isRecording ? colors.error.opacity(0.2) : .clear)
-            .clipShape(.rect(cornerRadius: 8))
-        }
-        .buttonStyle(PressableButtonStyle())
-        .disabled(recorder.isTranscribing)
-        .accessibilityLabel(recorder.isRecording ? "Stop recording" : "Voice input")
-    }
-
-    private var photoPickerButton: some View {
-        PhotosPicker(selection: $photoPickerItem, matching: .images) {
-            Image(systemName: "photo")
-                .font(.system(size: 16))
-                .foregroundStyle(colors.textSecondary)
-                .frame(width: 34, height: 34)
-        }
-        .accessibilityLabel("Extract text from photo")
-    }
-
-    private var recordingIndicator: some View {
-        HStack(spacing: 8) {
-            Circle()
-                .fill(colors.error)
-                .frame(width: 10, height: 10)
-            Text("Recording... \(formatDuration(recorder.recordingDuration))")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(colors.error)
-            Spacer()
-            Button("Cancel") {
-                recorder.cancelRecording()
-            }
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(colors.error)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(colors.error.opacity(0.2))
-            .clipShape(.rect(cornerRadius: 6))
-        }
-        .padding(10)
-        .background(colors.error.opacity(0.1))
-        .clipShape(.rect(cornerRadius: 10))
+        .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: viewModel.inputText.isEmpty)
     }
 
     // MARK: - Output card
 
     private var outputCard: some View {
-        GlassCard(variant: .green, glow: true, colors: colors, isDark: theme.isDark) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    HStack(spacing: 8) {
-                        Text(viewModel.targetLabel)
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(colors.text)
-
-                        if !viewModel.outputText.isEmpty && !viewModel.isTranslating && !viewModel.isStreaming {
-                            HStack(spacing: 3) {
-                                Image(systemName: "checkmark.seal.fill")
-                                    .font(.system(size: 10))
-                                    .foregroundStyle(Color(red: 0.39, green: 0.75, blue: 1.0))
-                                Text("Official")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundStyle(Color(red: 0.39, green: 0.75, blue: 1.0))
-                            }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(Color(red: 0.114, green: 0.608, blue: 0.941).opacity(0.15))
-                            .clipShape(.rect(cornerRadius: 20))
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 20)
-                                    .stroke(Color(red: 0.114, green: 0.608, blue: 0.941).opacity(0.35), lineWidth: 1)
-                            }
-                        }
+        GlassCard(variant: .green, glow: true, colors: colors, isDark: true) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Text(viewModel.targetLabel)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(colors.text)
+                    if viewModel.isVerifiedWord && !viewModel.outputText.isEmpty {
+                        badge("Dictionary", systemImage: "checkmark.seal.fill")
                     }
                     Spacer()
-                    HStack(spacing: 4) {
-                        actionIcon(isFavorite ? "star.fill" : "star", tint: isFavorite ? colors.accent : nil) {
-                            Haptics.light()
-                            isFavorite.toggle()
+                    if hasResult {
+                        Menu {
+                            Button("Share as image", systemImage: "photo") { shareAsImage() }
+                            Button("Share as text", systemImage: "text.alignleft") { shareAsText() }
+                        } label: {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.body)
+                                .foregroundStyle(colors.textSecondary)
+                                .frame(width: 44, height: 44)
                         }
-                        actionIcon("square.and.arrow.up") { shareTranslation() }
-                        exportPDFButton
-                        actionIcon("doc.on.doc", tint: copied ? colors.success : nil) { copyOutput() }
-                        speakButton
+                        .accessibilityLabel("Share translation")
+                        iconButton("doc.on.doc", label: "Copy translation") { copyOutput() }
                     }
-                }
-
-                if viewModel.isStreaming && !viewModel.outputText.isEmpty {
-                    streamingStatus
-                }
-
-                if showSpeedOptions {
-                    speedOptions
                 }
 
                 outputContent
 
-                if !viewModel.alternatives.isEmpty && !viewModel.isTranslating && !viewModel.isStreaming {
+                if !viewModel.alternatives.isEmpty && !viewModel.isStreaming && viewModel.errorText == nil {
                     alternativesSection
-                }
-
-                if viewModel.quality > 0 && !viewModel.isTranslating && !viewModel.isStreaming {
-                    qualitySection
                 }
             }
         }
+    }
+
+    private var hasResult: Bool {
+        !viewModel.outputText.isEmpty && viewModel.errorText == nil && !viewModel.isStreaming
     }
 
     @ViewBuilder
     private var outputContent: some View {
         if viewModel.isTranslating && viewModel.outputText.isEmpty {
-            VStack(spacing: 12) {
-                TypingDotsIndicator(color: colors.accent, dotSize: 9)
-                Text(viewModel.isConnecting ? "Connecting..." : "Translating with Zomi AI...")
-                    .font(.system(size: 14))
+            HStack(spacing: 10) {
+                TypingDotsIndicator(color: colors.accent, dotSize: 8)
+                Text(viewModel.isConnecting ? "Connecting\u{2026}" : "Translating\u{2026}")
+                    .font(.subheadline)
                     .foregroundStyle(colors.textSecondary)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 24)
-            .animation(.easeInOut(duration: 0.2), value: viewModel.isConnecting)
+            .frame(maxWidth: .infinity, minHeight: 70)
         } else if let error = viewModel.errorText {
-            VStack(spacing: 10) {
-                Image(systemName: "exclamationmark.circle")
-                    .font(.system(size: 20))
-                    .foregroundStyle(colors.error)
+            VStack(spacing: 12) {
+                Image(systemName: viewModel.isLimitNotice ? "sparkles" : "exclamationmark.circle")
+                    .font(.title3)
+                    .foregroundStyle(viewModel.isLimitNotice ? colors.primary : colors.warning)
+                    .accessibilityHidden(true)
                 Text(error)
-                    .font(.system(size: 14))
-                    .foregroundStyle(colors.error)
+                    .font(.subheadline)
+                    .foregroundStyle(colors.textSecondary)
                     .multilineTextAlignment(.center)
-                Button("Retry") {
-                    viewModel.retry()
+                HStack(spacing: 10) {
+                    if viewModel.isLimitNotice {
+                        pillButton("Sign in", filled: true) { router.open(.settings) }
+                    } else if !viewModel.aiConsentGiven {
+                        pillButton("Review notice", filled: true) { showAIConsent = true }
+                    } else {
+                        pillButton("Try again", filled: false) { viewModel.retry() }
+                    }
                 }
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(colors.text)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 8)
-                .background(colors.surface)
-                .clipShape(.rect(cornerRadius: 8))
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
+            .padding(.vertical, 8)
         } else {
-            outputTextBody
-                .font(.system(size: 17))
-                .foregroundStyle(viewModel.outputText.isEmpty ? colors.textMuted : colors.text)
-                .frame(maxWidth: .infinity, minHeight: 60, alignment: .topLeading)
-                .textSelection(.enabled)
-                .animation(.default, value: viewModel.outputText)
-        }
-    }
-
-    /// The translation text, with a blinking caret appended while the AI is
-    /// actively streaming tokens.
-    @ViewBuilder
-    private var outputTextBody: some View {
-        if viewModel.isStreaming && viewModel.hasStreamedText {
-            TimelineView(.periodic(from: .now, by: 0.5)) { timeline in
-                let blink = Int(timeline.date.timeIntervalSinceReferenceDate * 2) % 2 == 0
-                (Text(viewModel.outputText)
-                    + Text(" \u{258C}").foregroundStyle(blink ? colors.accent : Color.clear))
+            Group {
+                if viewModel.outputText.isEmpty {
+                    Text("Translation appears here")
+                        .foregroundStyle(colors.textMuted)
+                } else {
+                    Text(viewModel.outputText)
+                        .foregroundStyle(colors.text)
+                        .textSelection(.enabled)
+                }
             }
-        } else {
-            Text(viewModel.outputText.isEmpty ? "Translation will appear here..." : viewModel.outputText)
+            .font(.title3)
+            .frame(maxWidth: .infinity, minHeight: 70, alignment: .topLeading)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: viewModel.outputText)
+            .accessibilityLabel(viewModel.outputText.isEmpty ? "No translation yet" : "Translation: \(viewModel.outputText)")
         }
     }
 
-    /// Compact status row shown while a refresh translation streams in
-    /// (i.e. previous text is still on screen).
-    private var streamingStatus: some View {
-        HStack(spacing: 8) {
-            TypingDotsIndicator(color: colors.accent, dotSize: 5)
-            Text("Zomi AI is translating")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(colors.textSecondary)
-        }
-        .transition(.opacity)
-        .animation(.easeInOut(duration: 0.2), value: viewModel.isStreaming)
-    }
-
-    /// Alternative phrasings for inputs with multiple common senses — tapping
-    /// one promotes it to the main translation.
     private var alternativesSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Also common")
-                .font(.system(size: 11, weight: .bold))
+            Text("Also")
+                .font(.caption.weight(.bold))
                 .textCase(.uppercase)
                 .tracking(0.5)
-                .foregroundStyle(colors.textSecondary)
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: 8)], alignment: .leading, spacing: 8) {
+                .foregroundStyle(colors.textMuted)
+            FlowRow(spacing: 8) {
                 ForEach(viewModel.alternatives, id: \.self) { alternative in
                     Button {
                         Haptics.light()
                         viewModel.promoteAlternative(alternative)
                     } label: {
                         Text(alternative)
-                            .font(.system(size: 14))
+                            .font(.subheadline)
                             .foregroundStyle(colors.text)
-                            .multilineTextAlignment(.leading)
-                            .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 8)
-                            .background(colors.surface)
-                            .clipShape(.rect(cornerRadius: 20))
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 20)
-                                    .stroke(colors.glassBorder, lineWidth: 1)
-                            }
+                            .frame(minHeight: 36)
+                            .background(colors.surface, in: Capsule())
+                            .overlay { Capsule().strokeBorder(colors.glassBorder, lineWidth: 1) }
                     }
                     .buttonStyle(.plain)
+                    .accessibilityHint("Use this translation")
                 }
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.top, 2)
     }
 
-    private var speakButton: some View {
-        Button {
-            if speech.isSpeaking {
-                speech.stop()
-            } else if !viewModel.outputText.isEmpty {
-                speech.speak(viewModel.outputText, language: LanguageCatalog.ttsCode(viewModel.targetLanguage))
-            }
-        } label: {
-            Image(systemName: speech.isSpeaking ? "speaker.wave.2.fill" : "speaker.wave.2")
-                .font(.system(size: 16))
-                .foregroundStyle(speech.isSpeaking ? colors.accent : colors.textSecondary)
-                .frame(width: 34, height: 34)
+    // MARK: - Small components
+
+    private func badge(_ title: String, systemImage: String) -> some View {
+        Label(title, systemImage: systemImage)
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(Color(red: 0.45, green: 0.8, blue: 1.0))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Color(red: 0.11, green: 0.6, blue: 0.94).opacity(0.18), in: Capsule())
+    }
+
+    private func iconButton(_ systemImage: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.body)
+                .foregroundStyle(colors.textSecondary)
+                .frame(width: 44, height: 44)
         }
         .buttonStyle(PressableButtonStyle())
-        .simultaneousGesture(
-            LongPressGesture(minimumDuration: 0.4).onEnded { _ in
-                Haptics.light()
-                withAnimation { showSpeedOptions.toggle() }
-            }
-        )
-        .accessibilityLabel("Speak translation")
+        .accessibilityLabel(label)
     }
 
-    private var speedOptions: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("TTS Speed")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(colors.textMuted)
-            HStack(spacing: 8) {
-                ForEach(SpeechService.availableSpeeds, id: \.self) { speed in
-                    Button {
-                        speech.currentSpeed = speed
-                        withAnimation { showSpeedOptions = false }
-                    } label: {
-                        Text(speed == 1.0 ? "1x" : String(format: "%gx", speed))
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(speech.currentSpeed == speed ? colors.text : colors.textSecondary)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(speech.currentSpeed == speed ? colors.glassCyan : colors.surface)
-                            .clipShape(.rect(cornerRadius: 8))
-                    }
-                }
-            }
+    private func pillButton(_ title: String, filled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(filled ? Color(hex: 0x0B1020) : colors.text)
+                .padding(.horizontal, 20)
+                .frame(minHeight: 44)
+                .background(filled ? AnyShapeStyle(colors.primary) : AnyShapeStyle(colors.surface), in: Capsule())
         }
-        .padding(10)
-        .background(colors.surface)
-        .clipShape(.rect(cornerRadius: 10))
-    }
-
-    /// Exports the current session's translations as a formatted PDF.
-    @ViewBuilder
-    private var exportPDFButton: some View {
-        if isExportingPDF {
-            ProgressView()
-                .tint(colors.accent)
-                .frame(width: 34, height: 34)
-        } else {
-            actionIcon("arrow.down.doc") {
-                exportSessionPDF()
-            }
-            .accessibilityLabel("Export session as PDF")
-        }
-    }
-
-    private var qualitySection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Translation Quality")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(colors.textSecondary)
-                Spacer()
-                Text("\(viewModel.quality)%")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(
-                        viewModel.quality > 80 ? colors.success :
-                            viewModel.quality > 70 ? colors.warning : colors.error
-                    )
-            }
-
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(colors.surface)
-                    Capsule()
-                        .fill(
-                            LinearGradient(
-                                colors: viewModel.quality > 80
-                                    ? [colors.success, colors.successLight]
-                                    : [colors.warning, colors.accent],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .frame(width: geo.size.width * CGFloat(viewModel.quality) / 100)
-                        .animation(.spring(response: 0.6, dampingFraction: 0.8), value: viewModel.quality)
-                }
-            }
-            .frame(height: 6)
-
-            if viewModel.quality < 80 && viewModel.wordCount <= 3 {
-                NavigationLink(value: "tips") {
-                    HStack(spacing: 6) {
-                        Image(systemName: "exclamationmark.circle")
-                            .font(.system(size: 12))
-                        Text("Tip: Add more context for better results")
-                            .font(.system(size: 12))
-                    }
-                    .foregroundStyle(colors.warning)
-                }
-            }
-        }
-        .padding(.top, 4)
+        .buttonStyle(PressableButtonStyle())
     }
 
     // MARK: - Actions
 
-    private func actionIcon(_ systemImage: String, tint: Color? = nil, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: 16))
-                .foregroundStyle(tint ?? colors.textSecondary)
-                .frame(width: 34, height: 34)
+    private func showToast(_ message: String) {
+        withAnimation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.8)) { toast = message }
+        Task {
+            try? await Task.sleep(for: .seconds(1.6))
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) { toast = nil }
         }
-        .buttonStyle(PressableButtonStyle())
-    }
-
-    private var shareMessage: String {
-        let sourceLabel = viewModel.sourceLabel
-        let targetLabel = viewModel.targetLabel
-        return "\(sourceLabel): \(viewModel.inputText)\n\n\(targetLabel): \(viewModel.outputText)\n\nTranslated with Zomi Translator"
-    }
-
-    private func shareTranslation() {
-        guard !viewModel.outputText.isEmpty, viewModel.errorText == nil else {
-            alertMessage = "No translation available to share"
-            return
-        }
-        showShareSheet = true
     }
 
     private func copyOutput() {
-        guard !viewModel.outputText.isEmpty, viewModel.errorText == nil else { return }
+        guard hasResult else { return }
         UIPasteboard.general.string = viewModel.outputText
         Haptics.success()
-        copied = true
-        Task {
-            try? await Task.sleep(for: .seconds(2))
-            copied = false
-        }
-    }
-
-    private func exportSessionPDF() {
-        guard !viewModel.sessionTranslations.isEmpty else {
-            alertMessage = "Nothing to export yet — translate a few phrases first, then export the whole session as a PDF."
-            return
-        }
-        Haptics.light()
-        isExportingPDF = true
-        Task {
-            defer { isExportingPDF = false }
-            do {
-                let url = try PDFExportService.makeSessionPDF(viewModel.sessionTranslations)
-                Haptics.success()
-                pdfExport = PDFShareItem(url: url)
-            } catch {
-                alertMessage = "Could not create the PDF. Please try again."
-            }
-        }
+        showToast("Copied")
     }
 
     private func pasteFromClipboard() {
-        if let text = UIPasteboard.general.string, !text.isEmpty {
-            viewModel.inputText = text
-            Haptics.success()
-        }
+        guard let text = UIPasteboard.general.string, !text.isEmpty else { return }
+        viewModel.inputText = guestCharLimit.map { String(text.prefix($0)) } ?? text
+        Haptics.success()
     }
 
-    private func handleVoiceInput() async {
-        if recorder.isRecording {
-            if let transcription = await recorder.stopRecordingAndTranscribe() {
-                viewModel.inputText = transcription
-                Haptics.success()
-            } else if let error = recorder.errorMessage {
-                alertMessage = error
-            }
+    private func shareAsText() {
+        guard hasResult else { return }
+        let message = "\(viewModel.sourceLabel): \(viewModel.inputText)\n\n\(viewModel.targetLabel): \(viewModel.outputText)\n\nTranslated with Zomi Translator"
+        shareItems = ShareItems(items: [message])
+    }
+
+    private func shareAsImage() {
+        guard hasResult else { return }
+        let card = TranslationShareCard(
+            sourceLabel: viewModel.sourceLabel,
+            targetLabel: viewModel.targetLabel,
+            sourceText: viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines),
+            translatedText: viewModel.outputText
+        )
+        let renderer = ImageRenderer(content: card)
+        renderer.scale = 3
+        if let image = renderer.uiImage {
+            shareItems = ShareItems(items: [image])
         } else {
-            Haptics.medium()
-            await recorder.startRecording()
-            if let error = recorder.errorMessage {
-                alertMessage = error
-            }
+            shareAsText()
         }
-    }
-
-    private func extractText(from image: UIImage) async {
-        isExtractingText = true
-        defer { isExtractingText = false }
-        do {
-            let text = try await OCRService.extractText(from: image)
-            if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                alertMessage = "Could not detect any text in the image."
-            } else {
-                viewModel.inputText = text
-                Haptics.success()
-            }
-        } catch {
-            alertMessage = "Failed to extract text from image. Please try again."
-        }
-    }
-
-    private func formatDuration(_ seconds: Int) -> String {
-        String(format: "%d:%02d", seconds / 60, seconds % 60)
-    }
-
-    /// Identifiable wrapper so a sheet can present the exported PDF file URL.
-    private struct PDFShareItem: Identifiable {
-        let id = UUID()
-        let url: URL
     }
 }
 
-/// UIKit camera wrapper for OCR capture.
-struct CameraPicker: UIViewControllerRepresentable {
-    let onImage: (UIImage) -> Void
-    @Environment(\.dismiss) private var dismiss
+/// Identifiable wrapper so a sheet can present share items.
+struct ShareItems: Identifiable {
+    let id = UUID()
+    let items: [Any]
+}
 
-    func makeUIViewController(context: Context) -> UIImagePickerController {
-        let picker = UIImagePickerController()
-        picker.sourceType = UIImagePickerController.isSourceTypeAvailable(.camera) ? .camera : .photoLibrary
-        picker.delegate = context.coordinator
-        return picker
-    }
+/// Branded image card for sharing a translation.
+struct TranslationShareCard: View {
+    let sourceLabel: String
+    let targetLabel: String
+    let sourceText: String
+    let translatedText: String
 
-    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-
-    final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
-        let parent: CameraPicker
-        init(_ parent: CameraPicker) { self.parent = parent }
-
-        func imagePickerController(
-            _ picker: UIImagePickerController,
-            didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
-        ) {
-            if let image = info[.originalImage] as? UIImage {
-                parent.onImage(image)
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 8) {
+                Image(systemName: "character.bubble.fill")
+                    .foregroundStyle(Color(hex: 0x00F0FF))
+                Text("ZOMI TRANSLATOR")
+                    .scaledFont(size: 15, weight: .heavy)
+                    .tracking(1)
+                    .foregroundStyle(Color(hex: 0x00D9FF))
             }
-            parent.dismiss()
+            VStack(alignment: .leading, spacing: 6) {
+                Text(sourceLabel.uppercased())
+                    .scaledFont(size: 12, weight: .bold)
+                    .foregroundStyle(.white.opacity(0.6))
+                Text(sourceText)
+                    .scaledFont(size: 20)
+                    .foregroundStyle(.white.opacity(0.85))
+            }
+            Rectangle().fill(.white.opacity(0.15)).frame(height: 1)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(targetLabel.uppercased())
+                    .scaledFont(size: 12, weight: .bold)
+                    .foregroundStyle(Color(hex: 0x00FF88))
+                Text(translatedText)
+                    .scaledFont(size: 26, weight: .semibold)
+                    .foregroundStyle(.white)
+            }
+            Text("zomitranslator.com")
+                .scaledFont(size: 12, weight: .medium)
+                .foregroundStyle(.white.opacity(0.5))
         }
+        .padding(28)
+        .frame(width: 400, alignment: .leading)
+        .background(
+            LinearGradient(colors: [Color(hex: 0x2A2F45), Color(hex: 0x363D5A), Color(hex: 0x1E2236)], startPoint: .topLeading, endPoint: .bottomTrailing)
+        )
+    }
+}
 
-        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            parent.dismiss()
+/// Wrapping row for chips (alternatives).
+struct FlowRow: Layout {
+    var spacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0, widest: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(ProposedViewSize(width: maxWidth, height: nil))
+            if x > 0 && x + size.width > maxWidth {
+                y += rowHeight + spacing
+                x = 0
+                rowHeight = 0
+            }
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+            widest = max(widest, x - spacing)
+        }
+        return CGSize(width: min(widest, maxWidth), height: y + rowHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX, y = bounds.minY, rowHeight: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(ProposedViewSize(width: bounds.width, height: nil))
+            if x > bounds.minX && x + size.width > bounds.maxX {
+                y += rowHeight + spacing
+                x = bounds.minX
+                rowHeight = 0
+            }
+            view.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(width: min(size.width, bounds.width), height: size.height))
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
         }
     }
 }

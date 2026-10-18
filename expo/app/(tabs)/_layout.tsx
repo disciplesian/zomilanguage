@@ -1,5 +1,5 @@
 import { Tabs } from "expo-router";
-import { Languages, Settings, Wrench, History, BookOpen } from "lucide-react-native";
+import { Languages, Settings, History, BookOpen } from "lucide-react-native";
 import React, { useMemo } from "react";
 import { Platform, Dimensions } from "react-native";
 
@@ -58,7 +58,7 @@ export default function TabLayout() {
         headerShown: false,
         tabBarStyle,
         tabBarLabelStyle: {
-          fontSize: 10,
+          fontSize: 11,
           fontWeight: '600' as const,
           marginTop: 2,
         },
@@ -82,25 +82,6 @@ export default function TabLayout() {
       />
 
       <Tabs.Screen
-        name="image-translate"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="learn"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="tools"
-        options={{
-          title: "Tools",
-          tabBarIcon: ({ color, size }) => <Wrench color={color} size={size} />,
-        }}
-      />
-      <Tabs.Screen
         name="history"
         options={{
           title: "History",
@@ -112,12 +93,6 @@ export default function TabLayout() {
         options={{
           title: "Settings",
           tabBarIcon: ({ color, size }) => <Settings color={color} size={size} />,
-        }}
-      />
-      <Tabs.Screen
-        name="learn-community"
-        options={{
-          href: null,
         }}
       />
     </Tabs>

@@ -190,7 +190,7 @@ export default function Dictionary() {
       } catch (err) {
         if (controller.signal.aborted || queryRef.current.trim() !== current) return;
         if (err instanceof Error && err.message === WORD_LIMIT_ERROR) {
-          setAiError('You have used your 1,500 free words. Sign in to keep going — it is free.');
+          setAiError("You've used today's free words. Sign in for unlimited lookups, or come back tomorrow. Dictionary words still work.");
         } else if (!navigator.onLine) {
           setAiError(OFFLINE_MESSAGE);
         } else {
@@ -277,14 +277,14 @@ export default function Dictionary() {
 
   return (
     <SiteLayout>
-      <div className="mx-auto w-full max-w-3xl px-5 py-10">
+      <div className="mx-auto w-full max-w-3xl px-4 pt-5 sm:px-6 md:pt-10">
         <div className="flex items-center gap-3">
           <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#00f0ff]/10 border border-[#00f0ff]/30 shadow-[0_0_24px_rgba(0,240,255,0.15)]">
             <BookOpen className="h-5 w-5 text-[#00f0ff]" />
           </span>
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-white">Zomi Dictionary</h1>
-            <p className="text-sm text-white/60">
+            <p className="text-sm text-white/75">
               {activeDictionaryCount().toLocaleString()} verified entries · English ⇄ Zomi
             </p>
           </div>
@@ -313,16 +313,23 @@ export default function Dictionary() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search English or Zomi..."
-              className="w-full bg-transparent text-base text-white placeholder:text-white/35 focus:outline-none"
+              placeholder="Search English or Zomi…"
+              aria-label="Search English or Zomi"
+              className="min-h-7 w-full bg-transparent text-base text-white placeholder:text-white/50 focus:outline-none"
               autoComplete="off"
+              autoCapitalize="off"
+              autoCorrect="off"
+              enterKeyHint="search"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+              }}
               spellCheck={false}
             />
             {query && (
               <button
                 onClick={() => setQuery('')}
                 aria-label="Clear search"
-                className="shrink-0 rounded-full p-1 text-white/40 transition hover:bg-white/10 hover:text-white/70"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white/60 transition hover:bg-white/10 hover:text-white/70"
               >
                 <X className="h-4 w-4" />
               </button>

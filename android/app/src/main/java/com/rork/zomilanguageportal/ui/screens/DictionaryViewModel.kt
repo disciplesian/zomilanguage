@@ -8,6 +8,7 @@ import com.rork.zomilanguageportal.data.DictionaryEntry
 import com.rork.zomilanguageportal.data.DictionaryRepository
 import com.rork.zomilanguageportal.data.EntryExample
 import com.rork.zomilanguageportal.data.PortalApi
+import com.rork.zomilanguageportal.data.ServiceNoticeException
 import com.rork.zomilanguageportal.data.SessionExpiredException
 import com.rork.zomilanguageportal.data.Suggestion
 import com.rork.zomilanguageportal.data.WordLimitException
@@ -247,7 +248,7 @@ class DictionaryViewModel(application: Application) : AndroidViewModel(applicati
     private fun scheduleAI(text: String) {
         val englishToZomi = _uiState.value.englishToZomi
         aiJob = viewModelScope.launch {
-            delay(700)
+            delay(350)
             if (_uiState.value.query.trim() != text) return@launch
             _uiState.update { it.copy(isAskingAI = true, aiResult = null, aiError = null) }
             try {
@@ -283,12 +284,16 @@ class DictionaryViewModel(application: Application) : AndroidViewModel(applicati
                 if (_uiState.value.query.trim() == text) {
                     _uiState.update { it.copy(isAskingAI = false, aiError = e.message) }
                 }
+            } catch (e: ServiceNoticeException) {
+                if (_uiState.value.query.trim() == text) {
+                    _uiState.update { it.copy(isAskingAI = false, aiError = e.message) }
+                }
             } catch (e: IOException) {
                 if (_uiState.value.query.trim() == text) {
                     _uiState.update {
                         it.copy(
                             isAskingAI = false,
-                            aiError = "You appear to be offline. The verified dictionary still works — reconnect for AI answers.",
+                            aiError = "You're offline. The dictionary still works. Reconnect for AI answers.",
                         )
                     }
                 }

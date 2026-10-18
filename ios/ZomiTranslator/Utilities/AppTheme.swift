@@ -80,7 +80,7 @@ struct ThemeColors {
         glassGreenBorder: Color(hex: 0x00FF88, alpha: 0.45),
         text: .white,
         textSecondary: Color.white.opacity(0.90),
-        textMuted: Color.white.opacity(0.60),
+        textMuted: Color.white.opacity(0.68),
         tabBar: Color(hex: 0x2A2F45, alpha: 0.95)
     )
 
@@ -155,26 +155,13 @@ final class ThemeManager {
     var systemIsDark: Bool = true
 
     init() {
-        let saved = UserDefaults.standard.string(forKey: Self.storageKey)
-        // Dark is the default appearance; a persisted user choice overrides it.
-        mode = ThemeMode(rawValue: saved ?? "") ?? .dark
+        // The app uses one consistent dark theme on every device.
+        mode = .dark
     }
 
-    var isDark: Bool {
-        switch mode {
-        case .system: return systemIsDark
-        case .dark: return true
-        case .light: return false
-        }
-    }
+    var isDark: Bool { true }
 
-    var colors: ThemeColors { isDark ? .dark : .light }
+    var colors: ThemeColors { .dark }
 
-    var preferredColorScheme: ColorScheme? {
-        switch mode {
-        case .system: return nil
-        case .dark: return .dark
-        case .light: return .light
-        }
-    }
+    var preferredColorScheme: ColorScheme? { .dark }
 }

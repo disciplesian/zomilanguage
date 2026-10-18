@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Zomi AI Translator",
+    "name": "Zomi Translator",
     "slug": "zomilanguage",
     "version": "2.3.0",
     "orientation": "default",
@@ -20,9 +20,6 @@
       "supportsTablet": true,
       "bundleIdentifier": "app.zomi.language",
       "infoPlist": {
-        "NSPhotoLibraryUsageDescription": "Allow $(PRODUCT_NAME) to access your photos",
-        "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to access your camera",
-        "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone",
         "CFBundleAllowMixedLocalizations": true,
         "CFBundleLocalizations": [
           "en"
@@ -39,12 +36,7 @@
       "package": "app.zomi.language",
       "permissions": [
         "android.permission.VIBRATE",
-        "android.permission.CAMERA",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.RECORD_AUDIO",
-        "android.permission.INTERNET",
-        "android.permission.MODIFY_AUDIO_SETTINGS"
+        "android.permission.INTERNET"
       ]
     },
     "web": {
@@ -58,25 +50,7 @@
         }
       ],
       "expo-font",
-      "expo-web-browser",
-      [
-        "expo-image-picker",
-        {
-          "photosPermission": "The app accesses your photos to let you share them with your friends."
-        }
-      ],
-      [
-        "expo-document-picker",
-        {
-          "iCloudContainerEnvironment": "Production"
-        }
-      ],
-      [
-        "expo-av",
-        {
-          "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone for voice features."
-        }
-      ]
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true

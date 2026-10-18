@@ -1,0 +1,268 @@
+{
+  "version": 3,
+  "lastUpdated": "October 17, 2026",
+  "supportEmail": "support@zomitranslator.com",
+  "website": "https://zomitranslator.com",
+  "about": {
+    "tagline": "Free, instant Zomi \u21c4 English translation.",
+    "sections": [
+      {
+        "id": "mission",
+        "title": "Our Mission",
+        "body": "Zomi Translator makes the Zomi language easy to use every day. We help Zomi families, students, churches, and friends around the world understand each other, and we are dedicated to preserving and promoting the Zomi language for future generations."
+      },
+      {
+        "id": "free",
+        "title": "Free to Use",
+        "body": "Anyone can translate without signing in. Dictionary words are always free and unlimited, and work offline. Sentences are free up to a generous daily amount on each device. Signing in with Google or Apple is optional and gives you unlimited translation and history that syncs between your devices."
+      },
+      {
+        "id": "community",
+        "title": "Community",
+        "body": "Made with love for the Zomi community by the Zomi Language & Literature Resource Center. Your feedback helps us keep improving. Write to us any time at support@zomitranslator.com."
+      }
+    ]
+  },
+  "privacy": {
+    "title": "Privacy Policy",
+    "summary": [
+      "You can use Zomi Translator without an account.",
+      "Dictionary words are looked up on your device and never leave it.",
+      "Sentences are sent securely to our AI translation service to be translated.",
+      "We use an anonymous device ID and your network address only to share the free daily allowance fairly and stop abuse.",
+      "We never sell your data, show ads, or track you across other apps."
+    ],
+    "intro": "Zomi Translator (\"we\", \"us\") provides a Zomi \u21c4 English translation service in our iPhone app, Android app, and website. This policy explains what we collect, why, and the choices you have.",
+    "sections": [
+      {
+        "title": "1. Information we collect",
+        "paragraphs": [
+          "Text you translate. Sentences you translate are sent to our translation service to produce the result. Dictionary words are answered on your device and are not sent.",
+          "Anonymous device ID and network address. A random ID created on your device and the network (IP) address of your request are used only to count the free daily allowance, limit how fast requests can be made, and block abuse. Network addresses are kept in memory for minutes, not stored with your translations.",
+          "Account information (optional). If you sign in with Google or Apple we receive your user identifier, email address and, if you allow it, your name and profile picture. We never receive your password.",
+          "Saved history (optional). When you are signed in, your translation history is stored with your account so it syncs between your devices. Without an account, history stays only on your device."
+        ]
+      },
+      {
+        "title": "2. How we use your information",
+        "bullets": [
+          "To translate the text you submit and return the result.",
+          "To share the free daily allowance fairly and keep the service available for everyone.",
+          "To detect and stop automated or abusive use.",
+          "To sync your history when you choose to sign in.",
+          "To answer your support requests."
+        ],
+        "paragraphs": [
+          "We do not sell your personal information and we do not use it for advertising."
+        ]
+      },
+      {
+        "title": "3. AI processing and service providers",
+        "paragraphs": [
+          "Sentence translation is powered by AI. The text you submit is sent securely to these providers to create the translation. Please do not submit sensitive personal information or another person's private data."
+        ],
+        "bullets": [
+          "Google (Gemini API) creates translations from the text you submit.",
+          "Rork provides app hosting, database storage, sign-in, and a backup AI gateway.",
+          "Google and Apple provide optional sign-in."
+        ]
+      },
+      {
+        "title": "4. Shared translation memory",
+        "paragraphs": [
+          "To answer common sentences instantly, the server briefly remembers recent translations (the text and its translation only, for up to 24 hours). This memory never records who asked."
+        ]
+      },
+      {
+        "title": "5. Administrator access",
+        "paragraphs": [
+          "Our administrators can see signed-in accounts and service activity, and can block a device or network that abuses the service. This access is used only to operate and protect the service."
+        ]
+      },
+      {
+        "title": "6. Data sharing",
+        "paragraphs": [
+          "We share information only with the providers listed above, and when required by law, to enforce our Terms, or to protect the rights and safety of our users. We never share your data with advertisers or data brokers."
+        ]
+      },
+      {
+        "title": "7. Retention",
+        "paragraphs": [
+          "History on your device stays until you delete it. Account history is kept while your account is active. The daily allowance counter resets every day. When you delete your account, we remove your profile and history within 30 days, unless the law requires us to keep a record."
+        ]
+      },
+      {
+        "title": "8. Your rights and choices",
+        "paragraphs": [
+          "You can delete history items or clear all history at any time in the app. Signed-in users can delete their account in Settings. You can also ask us for access to, correction of, export of, or deletion of your data by emailing support@zomitranslator.com."
+        ]
+      },
+      {
+        "title": "9. Security",
+        "paragraphs": [
+          "All data is sent over encrypted HTTPS connections. Sign-in tokens are kept in the secure keychain on iPhone and in protected app storage on Android and the web, and they are excluded from device backups."
+        ]
+      },
+      {
+        "title": "10. Children",
+        "paragraphs": [
+          "Zomi Translator is not directed to children under 13, and we do not knowingly collect their personal information. If you believe a child has given us information, contact us and we will delete it."
+        ]
+      },
+      {
+        "title": "11. International users",
+        "paragraphs": [
+          "Our service runs on infrastructure that may process data in the United States and other countries. By using the service you agree to this transfer."
+        ]
+      },
+      {
+        "title": "12. Changes and contact",
+        "paragraphs": [
+          "We may update this policy. Important changes will be announced in the app and on our website with a new \"Last updated\" date. Questions? Email support@zomitranslator.com."
+        ]
+      }
+    ]
+  },
+  "terms": {
+    "title": "Terms of Service",
+    "summary": [
+      "Zomi Translator is free to use, with or without an account.",
+      "Guests get a daily allowance of AI sentence translation; dictionary words are unlimited.",
+      "Please use the service fairly and don't automate or abuse it.",
+      "AI translations can contain mistakes. Check important text with a fluent speaker."
+    ],
+    "intro": "These Terms govern your use of the Zomi Translator iPhone app, Android app, and website (the \"Service\"). By using the Service you agree to these Terms.",
+    "sections": [
+      {
+        "title": "1. Using the Service",
+        "paragraphs": [
+          "You can use the Service without an account. Signing in with Google or Apple is optional. If you create an account, you are responsible for activity under it and must be at least 13 years old."
+        ]
+      },
+      {
+        "title": "2. Free use and fair-use limits",
+        "paragraphs": [
+          "Dictionary words are free and unlimited. Guests may translate a daily amount of sentences on each device, which resets every day. To keep the Service available to everyone, we limit how many requests can be made per minute and how long a single guest request can be, and we may temporarily answer guests with dictionary results only during unusually heavy use."
+        ]
+      },
+      {
+        "title": "3. Licence",
+        "paragraphs": [
+          "We grant you a personal, non-exclusive, non-transferable, revocable licence to use the Service for your own language, study, ministry, family, and community purposes. You may not resell or commercially redistribute the Service or bulk translation output without our written permission."
+        ]
+      },
+      {
+        "title": "4. Acceptable use",
+        "bullets": [
+          "Don't submit unlawful, hateful, harassing, obscene, or deliberately deceptive content.",
+          "Don't submit another person's private or confidential information without their consent.",
+          "Don't scrape, overload, reverse-engineer, or automate access to the Service.",
+          "Don't use the Service to build a competing translation dataset or product."
+        ],
+        "paragraphs": [
+          "We may block devices or networks that break these rules."
+        ]
+      },
+      {
+        "title": "5. Your content",
+        "paragraphs": [
+          "You keep ownership of the text you submit. You give us a limited licence to process, store, and transmit it to operate the Service, including sending it to our AI providers to produce a translation."
+        ]
+      },
+      {
+        "title": "6. AI translation disclaimer",
+        "paragraphs": [
+          "Translations are produced by AI and may contain errors or wording that doesn't fit the context. The Service is a language aid, not a certified translation service. Don't rely on it alone for legal, medical, financial, safety-critical, or official publication purposes. Have important material reviewed by a qualified translator or fluent speaker."
+        ]
+      },
+      {
+        "title": "7. Availability and changes",
+        "paragraphs": [
+          "We may change, pause, or stop any part of the Service at any time. Some features depend on AI providers whose availability we don't control. The Service is currently free; if paid options are ever introduced, prices and terms will be shown before you are charged."
+        ]
+      },
+      {
+        "title": "8. Termination",
+        "paragraphs": [
+          "You can stop using the Service at any time, and signed-in users can delete their account in Settings. We may suspend access that breaks these Terms or puts the Service at risk."
+        ]
+      },
+      {
+        "title": "9. Disclaimers",
+        "paragraphs": [
+          "The Service is provided \"as is\" and \"as available\" without warranties of any kind, including accuracy of translation and fitness for a particular purpose."
+        ]
+      },
+      {
+        "title": "10. Limitation of liability",
+        "paragraphs": [
+          "To the fullest extent allowed by law, we are not liable for indirect, incidental, special, or consequential damages, or for any loss caused by relying on a translation."
+        ]
+      },
+      {
+        "title": "11. Changes to these Terms",
+        "paragraphs": [
+          "We may update these Terms. Using the Service after an update means you accept the new Terms. The \"Last updated\" date always shows the current version."
+        ]
+      },
+      {
+        "title": "12. Contact",
+        "paragraphs": [
+          "Questions about these Terms? Email support@zomitranslator.com."
+        ]
+      }
+    ]
+  },
+  "help": {
+    "title": "Help & Support",
+    "intro": "Answers to common questions, and a direct line to a real person when you need one. We aim to reply within 2 business days.",
+    "faqs": [
+      {
+        "q": "Do I need an account to translate?",
+        "a": "No. Anyone can translate for free. Dictionary words are unlimited, and sentences are free up to a daily amount on each device. Signing in is optional and gives you unlimited translation and synced history."
+      },
+      {
+        "q": "How accurate are the translations?",
+        "a": "Words come straight from our verified Zomi dictionary. Sentences are translated by AI and checked against the verified Zomi dictionary, so common terms stay consistent. For important documents, please ask a fluent speaker to review."
+      },
+      {
+        "q": "Does it work offline?",
+        "a": "Yes, for dictionary words. The full dictionary is stored on your device. Sentences need an internet connection."
+      },
+      {
+        "q": "What happens when I reach the daily free amount?",
+        "a": "You'll see a friendly note. Dictionary words keep working. You can sign in for unlimited translation, or come back tomorrow when the allowance resets."
+      },
+      {
+        "q": "Is my history private?",
+        "a": "Without an account, your history stays only on your device. When you're signed in, it's stored with your account so it syncs between your devices. See the Privacy Policy for details."
+      },
+      {
+        "q": "How do I delete my data?",
+        "a": "Swipe a history item to delete it, or use Clear all. Signed-in users can delete their account in Settings. You can also email support@zomitranslator.com."
+      },
+      {
+        "q": "A translation looks wrong. What should I do?",
+        "a": "Email the text and the better wording to support@zomitranslator.com. Your examples help us improve the Zomi dictionary for everyone."
+      }
+    ],
+    "troubleshooting": [
+      {
+        "title": "\"Lots of translations at once\"",
+        "body": "Wait a moment and try again. This limit protects the service from automated use."
+      },
+      {
+        "title": "Translation doesn't come through",
+        "body": "Check your internet connection and tap Try again. Dictionary words still work offline."
+      },
+      {
+        "title": "\"Session expired\"",
+        "body": "Sign out and sign back in from Settings."
+      },
+      {
+        "title": "History missing on a new device",
+        "body": "Make sure you signed in with the same Google or Apple account."
+      }
+    ]
+  }
+}

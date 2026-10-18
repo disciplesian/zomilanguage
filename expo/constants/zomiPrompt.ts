@@ -54,6 +54,8 @@ You are a professional, high-fidelity translation system for the Zomi language �
 - The target language "Zomi" means EXACTLY Tedim Chin (ISO 639-3: ctd) — no other variety.
 - Use ONLY standard Zomi (Tedim Chin, ISO 639-3: ctd) vocabulary, grammar, spelling, and phonology.
 - NEVER use words, spellings, or grammatical patterns from related varieties such as Paite (pck), Mizo/Lushai (lus), Hakha/Lai Chin (cnh), Falam Chin (cfm), Mara (mrh), Zou (zom), or any other Kuki-Chin variety. They are DIFFERENT languages — mixing them in is a failure.
+- Also NEVER use Sihzang, Thado/Thadou, Kom, Vaiphei, Gangte, Simte, or Siyin-specific forms.
+- PURITY: prefer native Zomi words over Burmese (Myanmar) loanwords whenever an established Zomi word exists; use a loanword only when it is the normal, universally understood Zomi term.
 - If no established Zomi word exists for a term, build a clear descriptive Zomi phrase. NEVER borrow from related varieties.
 
 ### CORE TRANSLATION PROTOCOL:
@@ -162,7 +164,7 @@ export function buildUserPrompt(
 
   if (involvesZomi) {
     lines.push(
-      `When translating INTO Zomi, use EXCLUSIVELY standard Zomi (Tedim Chin, ISO 639-3: ctd) — never a related variety such as Paite, Mizo/Lushai, Hakha/Lai Chin, Falam Chin, Mara, or Zou. Zomi = Tedim Chin (ctd) ONLY.`,
+      `When translating INTO Zomi, use EXCLUSIVELY standard Zomi (Tedim Chin, ISO 639-3: ctd) — never a related variety such as Paite, Mizo/Lushai, Hakha/Lai Chin, Falam Chin, Sihzang, Thado, Mara, or Zou. Prefer native Zomi words over Burmese loanwords. Zomi = Tedim Chin (ctd) ONLY.`,
     );
     const mergedGlossary: Record<string, string> = { ...ZOMI_GLOSSARY, ...(extraGlossary ?? {}) };
     lines.push('', `GLOSSARY_DATA_JSON:\n${JSON.stringify({ glossary: mergedGlossary, examples: ZOMI_EXAMPLES })}`);
@@ -171,7 +173,7 @@ export function buildUserPrompt(
   if (verifiedEntries && verifiedEntries.length > 0) {
     lines.push(
       '',
-      `VERIFIED_DICTIONARY_DATA_JSON (authoritative human-verified English ⇄ Zomi entries; when one covers the input's meaning, use exactly that rendering as "translation" and put the other senses in "alternatives"):\n${JSON.stringify(verifiedEntries.slice(0, 6))}`
+      `VERIFIED_DICTIONARY_DATA_JSON (authoritative human-verified English ⇄ Zomi entries; when one covers the input's meaning, use exactly that rendering as "translation" and put the other senses in "alternatives". For sentences, use these verified terms for the matching words wherever they fit the context):\n${JSON.stringify(verifiedEntries.slice(0, 14))}`
     );
   }
 

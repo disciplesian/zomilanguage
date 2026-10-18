@@ -157,7 +157,7 @@ struct HeaderIconTile: View {
             .frame(width: size, height: size)
             .overlay {
                 Image(systemName: systemImage)
-                    .font(.system(size: size * 0.45, weight: .semibold))
+                    .scaledFont(size: size * 0.45, weight: .semibold)
                     .foregroundStyle(.white)
                     .allowsHitTesting(false)
             }
@@ -173,6 +173,7 @@ struct HeaderIconTile: View {
 struct PressableButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
+            .contentShape(.rect)
             .scaleEffect(configuration.isPressed ? 0.88 : 1)
             .opacity(configuration.isPressed ? 0.7 : 1)
             .animation(.spring(response: 0.25, dampingFraction: 0.6), value: configuration.isPressed)
@@ -191,6 +192,9 @@ enum Haptics {
     }
     static func success() {
         UINotificationFeedbackGenerator().notificationOccurred(.success)
+    }
+    static func error() {
+        UINotificationFeedbackGenerator().notificationOccurred(.error)
     }
     static func warning() {
         UINotificationFeedbackGenerator().notificationOccurred(.warning)

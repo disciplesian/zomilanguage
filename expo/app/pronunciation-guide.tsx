@@ -20,7 +20,6 @@ import * as Haptics from 'expo-haptics';
 import GlassCard from '@/components/GlassCard';
 import PageBottomNav, { PAGE_BOTTOM_NAV_SPACING } from '@/components/PageBottomNav';
 import Colors from '@/constants/colors';
-import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 
 interface PronunciationRule {
   letter: string;
@@ -59,14 +58,12 @@ const COMMON_MISTAKES = [
 
 export default function PronunciationGuideScreen() {
   const [activeExample, setActiveExample] = useState<string | null>(null);
-  const { speak } = useTextToSpeech();
 
   const handlePlayExample = (zomiWord: string) => {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     setActiveExample(zomiWord);
-    speak(zomiWord, { language: 'zomi' });
     setTimeout(() => setActiveExample(null), 1500);
   };
 
@@ -210,7 +207,6 @@ export default function PronunciationGuideScreen() {
             • Practice vowel sounds - they're longer than in English{'\n'}
             • Pay attention to tones - they can change word meanings{'\n'}
             • Record yourself and compare with native pronunciation{'\n'}
-            • Use the audio feature in the dictionary regularly{'\n'}
             • Don't be afraid to ask native speakers for feedback{'\n'}
             • Practice common phrases until they feel natural
           </Text>

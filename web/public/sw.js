@@ -1,9 +1,9 @@
-/* Zomi Language Portal service worker.
+/* Zomi Translator service worker.
  * Network-first with offline cache fallback: the site (including the
- * 10,620-entry bundled dictionary) stays fully usable with no connection
+ * bundled dictionary) stays fully usable with no connection
  * after the first visit. API/streaming requests always go to the network.
  */
-const CACHE_NAME = 'zomi-portal-v1';
+const CACHE_NAME = 'zomi-translator-v2';
 
 self.addEventListener('install', () => {
   self.skipWaiting();

@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**
  * Stable per-device identifier for the anonymous translation free tier.
- * Generated once and persisted so the 1,500-word guest allowance is tracked
+ * Generated once and persisted so the guest daily allowance is tracked
  * across app restarts. Sent to the backend with every translation request.
  */
 const STORAGE_KEY = '@zomi_anonymous_id';

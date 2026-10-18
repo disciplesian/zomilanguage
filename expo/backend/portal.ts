@@ -6,8 +6,13 @@ import type { ZomiDB } from "./db/client";
  * All persistence goes through secret-guarded SECURITY DEFINER RPCs.
  */
 
-/** Free tier: words an anonymous visitor may translate before sign-in is required. */
-export const FREE_WORD_LIMIT = 1500;
+/** Free tier: AI-translated words a guest device may use per day (resets daily, UTC). */
+export const FREE_WORD_LIMIT = 1000;
+
+/** Daily quota key: the counter resets every UTC day without any schema change. */
+function dailyKey(anonymousId: string): string {
+  return `${anonymousId}@${new Date().toISOString().slice(0, 10)}`;
+}
 
 /** Splits text into words the same way on every quota check. */
 export function countWords(text: string): number {
@@ -19,7 +24,7 @@ export function countWords(text: string): number {
 export async function anonymousWordsUsed(db: ZomiDB, anonymousId: string): Promise<number> {
   try {
     const words = await db.rpc<number>("get_anonymous_words", {
-      p_anonymous_id: anonymousId,
+      p_anonymous_id: dailyKey(anonymousId),
     });
     return Math.max(0, Number(words ?? 0));
   } catch {
@@ -28,7 +33,7 @@ export async function anonymousWordsUsed(db: ZomiDB, anonymousId: string): Promi
 }
 
 /**
- * Adds `words` to an anonymous visitor's lifetime counter and returns the new
+ * Adds `words` to a guest device's daily counter and returns the new
  * total. Failures are non-fatal — quota tracking must never break a translation.
  */
 export async function recordAnonymousWords(
@@ -39,7 +44,7 @@ export async function recordAnonymousWords(
   if (words <= 0) return anonymousWordsUsed(db, anonymousId);
   try {
     const total = await db.rpc<number>("increment_anonymous_words", {
-      p_anonymous_id: anonymousId,
+      p_anonymous_id: dailyKey(anonymousId),
       p_words: words,
     });
     return Math.max(0, Number(total ?? 0));

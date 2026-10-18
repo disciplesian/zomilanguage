@@ -9,6 +9,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.text.Normalizer
 
 /** One row of the bundled English → Zomi dictionary (33,444 entries; the original
  *  10,620 are human-verified, expanded from the community dictionary archive). */
@@ -83,8 +84,140 @@ object DictionaryRepository {
             activeVersion = version
             entries = newEntries
             browseSections = null
+            index = null
         }
         return true
+    }
+
+    // MARK: Fast search index
+
+    /** Pre-normalized keys so each keystroke is a cheap scan with no allocation,
+     *  plus exact-match maps for instant word translation. */
+    private class SearchIndex(
+        val entries: List<DictionaryEntry>,
+        val english: Array<String>,
+        val zomi: Array<String>,
+        val exactEnglish: Map<String, IntArray>,
+        val exactZomi: Map<String, IntArray>,
+    )
+
+    @Volatile
+    private var index: SearchIndex? = null
+
+    private val markRegex = Regex("\\p{M}+")
+    private val parenRegex = Regex("\\([^)]*\\)")
+    private val headwordRegex = Regex("^[A-Za-z][A-Za-z' -]*$")
+    private val spaceRegex = Regex("\\s+")
+
+    /** Lowercases and strips tone marks so "Pasiân" matches "pasian". */
+    fun fold(s: String): String =
+        markRegex.replace(Normalizer.normalize(s.trim().lowercase(), Normalizer.Form.NFD), "")
+
+    /** Individual Zomi renderings of an entry ("khial, dik lo" → ["khial", "dik lo"]). */
+    fun zomiParts(zomi: String): List<String> =
+        parenRegex.replace(zomi, " ")
+            .split(',', ';', '/')
+            .map { it.trim().trimEnd('.', '!', '?') }
+            .filter { it.isNotEmpty() && it.length <= 40 && it.split(' ').size <= 5 }
+
+    private fun buildIndex(): SearchIndex? {
+        index?.let { return it }
+        synchronized(this) {
+            index?.let { return it }
+            val all = entries ?: return null
+            val english = Array(all.size) { fold(all[it].english) }
+            val zomi = Array(all.size) { fold(all[it].zomi) }
+            val exactEnglish = HashMap<String, MutableList<Int>>()
+            val zomiRanked = HashMap<String, MutableList<Pair<Int, Int>>>()
+            all.forEachIndexed { i, e ->
+                exactEnglish.getOrPut(english[i]) { mutableListOf() }.add(i)
+                if (!headwordRegex.matches(e.english.trim())) return@forEachIndexed
+                zomiParts(e.zomi).forEachIndexed { position, part ->
+                    zomiRanked.getOrPut(fold(part)) { mutableListOf() }.add(position to i)
+                }
+            }
+            val built = SearchIndex(
+                entries = all,
+                english = english,
+                zomi = zomi,
+                exactEnglish = exactEnglish.mapValues { it.value.toIntArray() },
+                exactZomi = run {
+                    // Popularity proxy: common words have many derived headwords
+                    // ("water", "waterfall", …), so they outrank rare synonyms.
+                    val sorted = english.sortedArray()
+                    fun lowerBound(key: String): Int {
+                        var lo = 0
+                        var hi = sorted.size
+                        while (lo < hi) {
+                            val mid = (lo + hi) ushr 1
+                            if (sorted[mid] < key) lo = mid + 1 else hi = mid
+                        }
+                        return lo
+                    }
+                    val cache = HashMap<Int, Int>()
+                    fun popularity(i: Int): Int = cache.getOrPut(i) {
+                        val w = english[i]
+                        if (w.length < 3) lowerBound(w + "\u0001") - lowerBound(w)
+                        else lowerBound(w + "\uFFFF") - lowerBound(w)
+                    }
+                    zomiRanked.mapValues { (_, list) ->
+                        list.sortedWith(
+                            compareBy<Pair<Int, Int>>({ it.first }, { -popularity(it.second) }, { it.second })
+                        ).map { it.second }.toIntArray()
+                    }
+                },
+            )
+            index = built
+            return built
+        }
+    }
+
+    /** Builds the index in the background so the first keystroke is instant. */
+    fun warmUp(context: Context) {
+        load(context)
+        buildIndex()
+    }
+
+    /** Instant on-device translation of a dictionary word or short phrase, or
+     *  null for sentences and words not in the verified dictionary. */
+    fun instantTranslation(text: String, zomiToEnglish: Boolean): Pair<String, List<String>>? {
+        val idx = buildIndex() ?: return null
+        val q = spaceRegex.replace(fold(text).trim('"', '\'', '“', '”', '‘', '’', '.', '!', '?', '…', ' '), " ")
+        if (q.isEmpty() || q.length > 80 || q.split(' ').size > 5 || q.any { it in ".;:!?" }) return null
+        val candidates = ArrayList<String>()
+        if (zomiToEnglish) {
+            val hits = idx.exactZomi[q] ?: return null
+            hits.forEach { candidates.add(idx.entries[it].english) }
+        } else {
+            val hits = idx.exactEnglish[q] ?: return null
+            hits.forEach { i ->
+                val parts = parenRegex.replace(idx.entries[i].zomi, " ").split(',', ';')
+                    .map { spaceRegex.replace(it.trim(), " ") }
+                    .filter { it.isNotEmpty() && it.length <= 40 }
+                candidates.addAll(parts.ifEmpty { listOf(idx.entries[i].zomi) })
+            }
+        }
+        val unique = candidates.distinctBy { it.lowercase() }
+        val first = unique.firstOrNull() ?: return null
+        return first to unique.drop(1).take(2)
+    }
+
+    private fun withinOneEdit(a: String, b: String): Boolean {
+        if (kotlin.math.abs(a.length - b.length) > 1) return false
+        var i = 0
+        var j = 0
+        var edits = 0
+        while (i < a.length && j < b.length) {
+            if (a[i] == b[j]) { i++; j++; continue }
+            edits++
+            if (edits > 1) return false
+            when {
+                a.length > b.length -> i++
+                a.length < b.length -> j++
+                else -> { i++; j++ }
+            }
+        }
+        return edits + (a.length - i) + (b.length - j) <= 1
     }
 
     private fun toEntries(rows: List<List<String>>): List<DictionaryEntry> =
@@ -146,37 +279,49 @@ object DictionaryRepository {
      * exact Zomi → Zomi prefix → Zomi contains.
      */
     fun search(query: String, limit: Int = 60): List<DictionaryEntry> {
-        val all = entries ?: return emptyList()
-        val q = query.trim().lowercase()
+        val idx = buildIndex() ?: return emptyList()
+        val q = fold(query)
         if (q.isEmpty()) return emptyList()
 
-        data class Scored(val entry: DictionaryEntry, val score: Int, val index: Int)
+        data class Scored(val score: Int, val index: Int)
 
         val scored = ArrayList<Scored>(128)
-        for ((i, e) in all.withIndex()) {
-            val en = e.english.lowercase()
-            val zo = e.zomi.lowercase()
+        val used = HashSet<Int>()
+        idx.exactEnglish[q]?.forEach { if (used.add(it)) scored.add(Scored(0, it)) }
+        idx.exactZomi[q]?.forEach { if (used.add(it)) scored.add(Scored(1, it)) }
+        val short = q.length < 2
+        for (i in idx.english.indices) {
+            if (i in used) continue
+            val en = idx.english[i]
+            val zo = idx.zomi[i]
             val score = when {
-                en == q -> 0
-                en.startsWith(q) -> 1
-                en.contains(q) -> 2
-                zo == q -> 3
-                zo.startsWith(q) -> 4
+                en.startsWith(q) -> 2
+                zo.startsWith(q) -> 3
+                short -> continue
+                en.contains(q) -> 4
                 zo.contains(q) -> 5
                 else -> continue
             }
-            scored.add(Scored(e, score, i))
+            scored.add(Scored(score, i))
         }
-        scored.sortWith(compareBy({ it.score }, { it.index }))
-        return scored.take(limit).map { it.entry }
+        if (scored.isEmpty() && q.length >= 4) {
+            for (i in idx.english.indices) {
+                val en = idx.english[i]
+                if (en.isEmpty() || en[0] != q[0]) continue
+                if (withinOneEdit(en, q)) scored.add(Scored(6, i))
+                if (scored.size >= limit) break
+            }
+        }
+        scored.sortWith(compareBy({ it.score }, { idx.english[it.index].length }, { it.index }))
+        return scored.take(limit).map { idx.entries[it.index] }
     }
 
     /** True when the query matches an entry exactly (gates the AI fallback). */
     fun hasExactMatch(query: String): Boolean {
-        val all = entries ?: return true
-        val q = query.trim().lowercase()
+        val idx = buildIndex() ?: return true
+        val q = fold(query)
         if (q.isEmpty()) return true
-        return all.any { it.english.lowercase() == q || it.zomi.lowercase() == q }
+        return idx.exactEnglish.containsKey(q) || idx.exactZomi.containsKey(q) || idx.zomi.contains(q)
     }
 
     /**
@@ -186,33 +331,35 @@ object DictionaryRepository {
      * suggestion advances the query toward a full word.
      */
     fun suggest(query: String, limit: Int = 8): List<Suggestion> {
-        val all = entries ?: return emptyList()
-        val q = query.trim().lowercase()
+        val idx = buildIndex() ?: return emptyList()
+        val q = fold(query)
         if (q.isEmpty()) return emptyList()
 
         data class Scored(val suggestion: Suggestion, val score: Int, val index: Int)
 
         val best = HashMap<String, Scored>()
-        for ((i, e) in all.withIndex()) {
-            val en = e.english.lowercase()
-            val zo = e.zomi.lowercase()
+        for (i in idx.english.indices) {
+            val en = idx.english[i]
+            val zo = idx.zomi[i]
             val enScore = when {
                 en == q -> 0
                 en.startsWith(q) -> 2
-                en.contains(q) -> 4
+                q.length >= 2 && en.contains(q) -> 4
                 else -> -1
             }
             val zoScore = when {
                 zo == q -> 1
                 zo.startsWith(q) -> 3
-                zo.contains(q) -> 5
+                q.length >= 2 && zo.contains(q) -> 5
                 else -> -1
             }
+            if (enScore < 0 && zoScore < 0) continue
+            val e = idx.entries[i]
             listOf(
                 Suggestion(e.english, e.zomi, "en") to enScore,
                 Suggestion(e.zomi, e.english, "zo") to zoScore,
             ).forEach { (candidate, score) ->
-                if (score < 0 || candidate.text.lowercase() == q) return@forEach
+                if (score < 0 || fold(candidate.text) == q) return@forEach
                 val key = candidate.text.lowercase()
                 val prev = best[key]
                 if (prev == null || prev.score > score) {

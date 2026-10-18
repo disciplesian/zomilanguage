@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -108,6 +109,18 @@ fun DictionaryScreen(viewModel: DictionaryViewModel = viewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val clipboard = LocalClipboardManager.current
     val haptics = LocalHapticFeedback.current
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val dismissOnScroll = androidx.compose.runtime.remember(focusManager) {
+        object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
+            override fun onPreScroll(
+                available: androidx.compose.ui.geometry.Offset,
+                source: androidx.compose.ui.input.nestedscroll.NestedScrollSource,
+            ): androidx.compose.ui.geometry.Offset {
+                if (available.y != 0f) focusManager.clearFocus()
+                return androidx.compose.ui.geometry.Offset.Zero
+            }
+        }
+    }
 
     fun copy(text: String) {
         clipboard.setText(AnnotatedString(text))
@@ -117,6 +130,7 @@ fun DictionaryScreen(viewModel: DictionaryViewModel = viewModel()) {
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
+            .nestedScroll(dismissOnScroll)
             .padding(horizontal = 20.dp),
     ) {
         item {
@@ -176,15 +190,17 @@ fun DictionaryScreen(viewModel: DictionaryViewModel = viewModel()) {
                     singleLine = true,
                     textStyle = TextStyle(fontSize = 16.sp, color = PortalColors.TextPrimary),
                     keyboardOptions = KeyboardOptions(
+                        capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.None,
+                        autoCorrectEnabled = false,
                         keyboardType = KeyboardType.Text,
                         imeAction = ImeAction.Search,
                     ),
-                    keyboardActions = KeyboardActions.Default,
+                    keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
                     decorationBox = { inner ->
                         Box(Modifier.fillMaxWidth()) {
                             if (state.query.isEmpty()) {
                                 Text(
-                                    "Search English or Zomi...",
+                                    "Search English or Zomi…",
                                     fontSize = 16.sp,
                                     color = PortalColors.TextFaint,
                                 )

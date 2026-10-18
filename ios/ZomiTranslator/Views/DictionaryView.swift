@@ -6,9 +6,12 @@ import UIKit
 /// not in the verified dataset.
 struct DictionaryView: View {
     @Environment(ThemeManager.self) private var theme
+    @Environment(AppRouter.self) private var router
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var model = DictionaryViewModel()
     @State private var showAIConsent = false
     @State private var detailEntry: DictionaryEntry?
+    @FocusState private var searchFocused: Bool
 
     private var colors: ThemeColors { theme.colors }
 
@@ -18,6 +21,7 @@ struct DictionaryView: View {
     var body: some View {
         ZStack {
             AppBackground(colors: colors, isDark: theme.isDark)
+                .onTapGesture { searchFocused = false }
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
@@ -30,7 +34,7 @@ struct DictionaryView: View {
 
                     if !model.trimmedQuery.isEmpty && !model.results.isEmpty {
                         Text("\(model.results.count == 60 ? "60+" : "\(model.results.count)") verified \(model.results.count == 1 ? "match" : "matches") for “\(model.trimmedQuery)”")
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                             .foregroundStyle(colors.textMuted)
                             .padding(.bottom, 2)
                     }
@@ -38,7 +42,7 @@ struct DictionaryView: View {
                     if model.isBrowsing {
                         letterIndex
                         Text("\(model.browseEntries.count.formatted()) \(model.browseEntries.count == 1 ? "entry" : "entries") under “\(model.selectedLetter)”")
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                             .foregroundStyle(colors.textMuted)
                             .padding(.bottom, 2)
                         ForEach(model.browseExpanded ? model.browseEntries : Array(model.browseEntries.prefix(browsePreviewCount))) { entry in
@@ -57,18 +61,33 @@ struct DictionaryView: View {
                         aiCard
                     }
                 }
-                .padding(.horizontal, 20)
+                .padding(.horizontal, sizeClass == .regular ? 32 : 16)
                 .padding(.top, 16)
-                .padding(.bottom, 90)
+                .padding(.bottom, 32)
+                .frame(maxWidth: 820)
+                .frame(maxWidth: .infinity)
             }
-            .scrollDismissesKeyboard(.interactively)
-        .refreshable {
-            await model.refreshDictionary()
-        }
+            .scrollDismissesKeyboard(.immediately)
+            .refreshable {
+                await model.refreshDictionary()
+            }
         }
         .navigationTitle("Dictionary")
         .navigationBarTitleDisplayMode(.inline)
-        .onDisappear { model.cancelAI() }
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { searchFocused = false }
+                    .fontWeight(.semibold)
+            }
+        }
+        .onDisappear {
+            searchFocused = false
+            model.cancelAI()
+        }
+        .onChange(of: router.focusRequest) { _, _ in
+            if router.selectedTab == .dictionary { searchFocused = true }
+        }
         .sheet(item: $detailEntry) { entry in
             EntryDetailSheet(entry: entry)
         }
@@ -78,7 +97,7 @@ struct DictionaryView: View {
                 model.grantAIConsent()
             }
         } message: {
-            Text("Words not found in the verified dictionary are answered by Google Gemini AI. When you use this, your search word is sent securely to Google for processing. By continuing, you consent to this processing.")
+            Text("Words not found in the verified dictionary are answered by the Zomi AI service, which uses Google Gemini and the Rork AI gateway as a backup. Your search word is sent securely for processing. By continuing, you agree to this processing.")
         }
     }
 
@@ -87,22 +106,22 @@ struct DictionaryView: View {
     private var header: some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: "book.fill")
-                .font(.system(size: 26))
+                .scaledFont(size: 26)
                 .foregroundStyle(colors.primary)
             VStack(alignment: .leading, spacing: 4) {
                 Text("Zomi Dictionary")
-                    .font(.system(size: 22, weight: .bold))
+                    .scaledFont(size: 22, weight: .bold)
                     .foregroundStyle(colors.text)
                 Text("\(model.totalCount.formatted()) verified entries · English ⇄ Zomi")
-                    .font(.system(size: 13))
+                    .scaledFont(size: 13)
                     .foregroundStyle(colors.textSecondary)
             }
             Spacer()
             HStack(spacing: 4) {
                 Image(systemName: "wifi.slash")
-                    .font(.system(size: 10))
+                    .scaledFont(size: 10)
                 Text("Offline ready")
-                    .font(.system(size: 10, weight: .bold))
+                    .scaledFont(size: 10, weight: .bold)
                     .textCase(.uppercase)
             }
             .foregroundStyle(colors.warning)
@@ -123,23 +142,27 @@ struct DictionaryView: View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(colors.textMuted)
-            TextField("Search English or Zomi...", text: $model.query)
-                .font(.system(size: 16))
+            TextField("Search English or Zomi…", text: $model.query)
+                .font(.body)
                 .foregroundStyle(colors.text)
+                .focused($searchFocused)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
                 .submitLabel(.search)
+                .onSubmit { searchFocused = false }
             if !model.query.isEmpty {
                 Button {
                     model.query = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(colors.textMuted)
+                        .frame(width: 32, height: 32)
                 }
                 .accessibilityLabel("Clear search")
             }
         }
-        .padding(12)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 14)
                 .fill(colors.surface)
@@ -157,22 +180,23 @@ struct DictionaryView: View {
             ForEach(model.suggestions) { suggestion in
                 Button {
                     model.query = suggestion.text
+                    searchFocused = false
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "magnifyingglass")
-                            .font(.system(size: 13))
+                            .scaledFont(size: 13)
                             .foregroundStyle(colors.textMuted)
                         Text(suggestion.text)
-                            .font(.system(size: 14, weight: .semibold))
+                            .scaledFont(size: 14, weight: .semibold)
                             .foregroundStyle(colors.text)
                             .lineLimit(1)
                         Spacer(minLength: 8)
                         Text(suggestion.hint)
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                             .foregroundStyle(colors.primaryLight)
                             .lineLimit(1)
                         Image(systemName: "arrow.right")
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                             .foregroundStyle(colors.textMuted)
                     }
                     .padding(.horizontal, 12)
@@ -215,7 +239,7 @@ struct DictionaryView: View {
     private func directionChip(title: String, active: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 12, weight: .semibold))
+                .scaledFont(size: 12, weight: .semibold)
                 .foregroundStyle(active ? colors.primary : colors.textSecondary)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
@@ -247,7 +271,7 @@ struct DictionaryView: View {
                     ? "Show fewer entries"
                     : "Show all \(model.browseEntries.count.formatted()) entries"
             )
-            .font(.system(size: 13, weight: .semibold))
+            .scaledFont(size: 13, weight: .semibold)
             .foregroundStyle(colors.primaryLight)
             .padding(.horizontal, 18)
             .padding(.vertical, 10)
@@ -269,7 +293,7 @@ struct DictionaryView: View {
                         model.selectLetter(letter)
                     } label: {
                         Text(letter)
-                            .font(.system(size: 14, weight: .bold))
+                            .scaledFont(size: 14, weight: .bold)
                             .foregroundStyle(
                                 model.selectedLetter == letter ? colors.primary : colors.textSecondary
                             )
@@ -303,6 +327,7 @@ struct DictionaryView: View {
 
     private func entryRow(_ entry: DictionaryEntry) -> some View {
         Button {
+            searchFocused = false
             detailEntry = entry
         } label: {
             HStack(alignment: .center, spacing: 10) {
@@ -329,7 +354,7 @@ struct DictionaryView: View {
                 }
                 Spacer(minLength: 8)
                 Image(systemName: "doc.on.doc")
-                    .font(.system(size: 14))
+                    .scaledFont(size: 14)
                     .foregroundStyle(colors.textMuted)
             }
             .padding(14)
@@ -395,7 +420,7 @@ struct DictionaryView: View {
     private func posChip(_ entry: DictionaryEntry) -> some View {
         let color = categoryColor(entry.category)
         return Text(posLabel(entry))
-            .font(.system(size: 10, weight: .bold))
+            .scaledFont(size: 10, weight: .bold)
             .textCase(.uppercase)
             .foregroundStyle(color)
             .padding(.horizontal, 8)
@@ -410,9 +435,9 @@ struct DictionaryView: View {
     private var verifiedBadge: some View {
         HStack(spacing: 4) {
             Image(systemName: "checkmark.seal.fill")
-                .font(.system(size: 10))
+                .scaledFont(size: 10)
             Text("Verified")
-                .font(.system(size: 10, weight: .bold))
+                .scaledFont(size: 10, weight: .bold)
                 .textCase(.uppercase)
         }
         .foregroundStyle(colors.success)
@@ -433,7 +458,7 @@ struct DictionaryView: View {
                 Image(systemName: "sparkles")
                     .foregroundStyle(colors.accent)
                 Text("No verified entry for “\(model.trimmedQuery)”")
-                    .font(.system(size: 13, weight: .semibold))
+                    .scaledFont(size: 13, weight: .semibold)
                     .foregroundStyle(colors.textSecondary)
             }
 
@@ -441,21 +466,21 @@ struct DictionaryView: View {
                 HStack(spacing: 10) {
                     ProgressView()
                     Text("Asking Zomi AI...")
-                        .font(.system(size: 14))
+                        .scaledFont(size: 14)
                         .foregroundStyle(colors.textSecondary)
                 }
             } else if !model.aiConsentGiven {
-                Text("This word isn't in the verified dictionary yet. Zomi AI can answer it — your search word would be sent securely to Google Gemini AI.")
-                    .font(.system(size: 14))
+                Text("This word isn't in the verified dictionary yet. Zomi AI can answer it. Your search word would be sent securely to the Zomi AI service.")
+                    .scaledFont(size: 14)
                     .foregroundStyle(colors.textSecondary)
                 Button {
                     showAIConsent = true
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "sparkles")
-                            .font(.system(size: 13))
+                            .scaledFont(size: 13)
                         Text("Ask Zomi AI")
-                            .font(.system(size: 14, weight: .semibold))
+                            .scaledFont(size: 14, weight: .semibold)
                     }
                     .foregroundStyle(colors.accent)
                     .padding(.horizontal, 16)
@@ -469,14 +494,14 @@ struct DictionaryView: View {
                 .buttonStyle(.plain)
             } else if let result = model.aiResult {
                 Text(result)
-                    .font(.system(size: 17, weight: .semibold))
+                    .scaledFont(size: 17, weight: .semibold)
                     .foregroundStyle(colors.text)
                 HStack {
                     HStack(spacing: 4) {
                         Image(systemName: "sparkles")
-                            .font(.system(size: 10))
+                            .scaledFont(size: 10)
                         Text("Zomi AI")
-                            .font(.system(size: 10, weight: .bold))
+                            .scaledFont(size: 10, weight: .bold)
                             .textCase(.uppercase)
                     }
                     .foregroundStyle(colors.accent)
@@ -492,7 +517,7 @@ struct DictionaryView: View {
                         copy(result)
                     } label: {
                         Image(systemName: "doc.on.doc")
-                            .font(.system(size: 14))
+                            .scaledFont(size: 14)
                             .foregroundStyle(colors.textSecondary)
                             .padding(8)
                             .background(Circle().fill(colors.glass))
@@ -504,7 +529,7 @@ struct DictionaryView: View {
                     Image(systemName: "exclamationmark.circle")
                         .foregroundStyle(colors.error)
                     Text(error)
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                         .foregroundStyle(colors.textSecondary)
                 }
             }
@@ -611,14 +636,14 @@ private struct EntryDetailSheet: View {
                     sectionLabel("Definition")
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
                         Text(current.zomi)
-                            .font(.system(size: 20, weight: .semibold))
+                            .scaledFont(size: 20, weight: .semibold)
                             .foregroundStyle(colors.primaryLight)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         Button {
                             copy(current.zomi)
                         } label: {
                             Image(systemName: "doc.on.doc")
-                                .font(.system(size: 14))
+                                .scaledFont(size: 14)
                                 .foregroundStyle(colors.textSecondary)
                                 .padding(8)
                                 .background(Circle().fill(colors.glass))
@@ -628,11 +653,11 @@ private struct EntryDetailSheet: View {
 
                     sectionLabel("Grammatical category")
                     Text(current.category.capitalized)
-                        .font(.system(size: 15, weight: .semibold))
+                        .scaledFont(size: 15, weight: .semibold)
                         .foregroundStyle(colors.text)
                     Text(DictionaryData.categoryDescriptions[current.category]
                         ?? "A word that does not fit the standard grammatical categories.")
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                         .foregroundStyle(colors.textSecondary)
                         .padding(.top, 2)
 
@@ -648,13 +673,13 @@ private struct EntryDetailSheet: View {
                                 } label: {
                                     HStack(spacing: 10) {
                                         Text(relatedEntry.english)
-                                            .font(.system(size: 14, weight: .semibold))
+                                            .scaledFont(size: 14, weight: .semibold)
                                             .foregroundStyle(colors.text)
                                         Image(systemName: "arrow.right")
-                                            .font(.system(size: 11))
+                                            .scaledFont(size: 11)
                                             .foregroundStyle(colors.textMuted)
                                         Text(relatedEntry.zomi)
-                                            .font(.system(size: 14))
+                                            .scaledFont(size: 14)
                                             .foregroundStyle(colors.primaryLight)
                                             .lineLimit(1)
                                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -693,7 +718,7 @@ private struct EntryDetailSheet: View {
                     Task { await loadExamples() }
                 }
             } message: {
-                Text("Example sentences are generated by Google Gemini AI. When you use this, the dictionary entry is sent securely to Google for processing. By continuing, you consent to this processing.")
+                Text("Example sentences are written by the Zomi AI service, which uses Google Gemini and the Rork AI gateway as a backup. The dictionary entry is sent securely for processing. By continuing, you agree to this processing.")
             }
         }
     }
@@ -704,7 +729,7 @@ private struct EntryDetailSheet: View {
         HStack(spacing: 8) {
             let color = detailCategoryColor(current.category, isDark: theme.isDark)
             Text(current.pos.isEmpty ? current.category : current.pos)
-                .font(.system(size: 10, weight: .bold))
+                .scaledFont(size: 10, weight: .bold)
                 .textCase(.uppercase)
                 .foregroundStyle(color)
                 .padding(.horizontal, 8)
@@ -716,9 +741,9 @@ private struct EntryDetailSheet: View {
                 )
             HStack(spacing: 4) {
                 Image(systemName: "checkmark.seal.fill")
-                    .font(.system(size: 10))
+                    .scaledFont(size: 10)
                 Text("Verified")
-                    .font(.system(size: 10, weight: .bold))
+                    .scaledFont(size: 10, weight: .bold)
                     .textCase(.uppercase)
             }
             .foregroundStyle(colors.success)
@@ -737,17 +762,17 @@ private struct EntryDetailSheet: View {
     private var examplesSection: some View {
         if !consentGiven {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Zomi AI can write example sentences for this entry — the entry would be sent securely to Google Gemini AI.")
-                    .font(.system(size: 14))
+                Text("Zomi AI can write example sentences for this entry. The entry would be sent securely to the Zomi AI service.")
+                    .scaledFont(size: 14)
                     .foregroundStyle(colors.textSecondary)
                 Button {
                     showConsent = true
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "sparkles")
-                            .font(.system(size: 13))
+                            .scaledFont(size: 13)
                         Text("Generate examples")
-                            .font(.system(size: 14, weight: .semibold))
+                            .scaledFont(size: 14, weight: .semibold)
                     }
                     .foregroundStyle(colors.accent)
                     .padding(.horizontal, 16)
@@ -764,12 +789,12 @@ private struct EntryDetailSheet: View {
             HStack(spacing: 10) {
                 ProgressView()
                 Text("Asking Zomi AI...")
-                    .font(.system(size: 14))
+                    .scaledFont(size: 14)
                     .foregroundStyle(colors.textSecondary)
             }
         } else if failedExamples {
             Text("Examples need an internet connection — the dictionary itself works offline.")
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundStyle(colors.textSecondary)
         } else {
             VStack(alignment: .leading, spacing: 10) {
@@ -779,11 +804,11 @@ private struct EntryDetailSheet: View {
                     } label: {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(example.english)
-                                .font(.system(size: 14))
+                                .scaledFont(size: 14)
                                 .foregroundStyle(colors.text)
                                 .multilineTextAlignment(.leading)
                             Text(example.zomi)
-                                .font(.system(size: 14))
+                                .scaledFont(size: 14)
                                 .foregroundStyle(colors.primaryLight)
                                 .multilineTextAlignment(.leading)
                         }
@@ -800,9 +825,9 @@ private struct EntryDetailSheet: View {
                 }
                 HStack(spacing: 4) {
                     Image(systemName: "sparkles")
-                        .font(.system(size: 10))
+                        .scaledFont(size: 10)
                     Text("Zomi AI")
-                        .font(.system(size: 10, weight: .bold))
+                        .scaledFont(size: 10, weight: .bold)
                         .textCase(.uppercase)
                 }
                 .foregroundStyle(colors.accent)
@@ -821,7 +846,7 @@ private struct EntryDetailSheet: View {
 
     private func sectionLabel(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 11, weight: .bold))
+            .scaledFont(size: 11, weight: .bold)
             .textCase(.uppercase)
             .tracking(1)
             .foregroundStyle(colors.textMuted)

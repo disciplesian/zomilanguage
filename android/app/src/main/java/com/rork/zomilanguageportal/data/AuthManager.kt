@@ -180,8 +180,23 @@ object AuthManager {
         return tokenStore.accessToken
     }
 
-    /** Stable per-device ID for the anonymous 1,500-word translation free tier. */
+    /** Stable per-device ID for the guest daily free allowance. */
     fun anonymousId(): String = tokenStore.anonymousId()
+
+    /**
+     * Permanently deletes the signed-in account on the server, then signs out.
+     * Returns true on success (Google Play in-app account deletion requirement).
+     */
+    suspend fun deleteAccount(): Boolean {
+        val token = accessToken() ?: return false
+        return try {
+            PortalApi.deleteAccount(token)
+            signOut()
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
 
     fun hasStoredSession(): Boolean =
         tokenStore.accessToken != null || tokenStore.refreshToken != null

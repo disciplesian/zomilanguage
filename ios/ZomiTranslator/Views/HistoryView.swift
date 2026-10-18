@@ -1,23 +1,25 @@
 import SwiftUI
 
-/// Translation History screen — clone of the Expo History tab with search,
-/// favorites filter, and swipe-free card actions (local-first storage).
+/// Translation History: search, filters, swipe to delete, and Clear all.
+/// Stored on this device (and synced when signed in).
 struct HistoryView: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(TranslationStore.self) private var store
+    @Environment(AppRouter.self) private var router
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     @State private var searchQuery = ""
-    @State private var showFilters = false
     @State private var filter: HistoryFilter = .all
-    @State private var pendingDelete: SavedTranslation?
+    @State private var showClearAll = false
+    @State private var copiedId: String?
 
     private var colors: ThemeColors { theme.colors }
 
     enum HistoryFilter: String, CaseIterable, Identifiable {
         case all = "All"
         case favorites = "Favorites"
-        case toEnglish = "Zomi → English"
-        case toZomi = "English → Zomi"
+        case toEnglish = "Zomi \u{2192} English"
+        case toZomi = "English \u{2192} Zomi"
 
         var id: String { rawValue }
     }
@@ -30,10 +32,10 @@ struct HistoryView: View {
         case .toEnglish: items = items.filter { $0.targetLanguage == "english" }
         case .toZomi: items = items.filter { $0.targetLanguage == "zomi" }
         }
-        let query = searchQuery.trimmingCharacters(in: .whitespaces).lowercased()
+        let query = searchQuery.trimmingCharacters(in: .whitespaces)
         if !query.isEmpty {
             items = items.filter {
-                $0.sourceText.lowercased().contains(query) || $0.translatedText.lowercased().contains(query)
+                $0.sourceText.localizedStandardContains(query) || $0.translatedText.localizedStandardContains(query)
             }
         }
         return items
@@ -41,228 +43,173 @@ struct HistoryView: View {
 
     var body: some View {
         ZStack {
-            AppBackground(colors: colors, isDark: theme.isDark)
+            AppBackground(colors: colors, isDark: true)
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    header
-                    searchBar
-                    if showFilters { filterChips }
-
+            List {
+                Group {
+                    filterChips
                     if filteredHistory.isEmpty {
                         emptyState
                     } else {
                         ForEach(filteredHistory) { item in
                             historyCard(item)
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button(role: .destructive) {
+                                        withAnimation { store.remove(id: item.id) }
+                                        Haptics.success()
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                }
+                                .swipeActions(edge: .leading) {
+                                    Button {
+                                        Haptics.selection()
+                                        store.toggleFavorite(id: item.id)
+                                    } label: {
+                                        Label(item.isFavorite ? "Unfavorite" : "Favorite", systemImage: item.isFavorite ? "star.slash" : "star")
+                                    }
+                                    .tint(colors.accent.opacity(0.8))
+                                }
                         }
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 90)
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets(top: 6, leading: sizeClass == .regular ? 32 : 16, bottom: 6, trailing: sizeClass == .regular ? 32 : 16))
             }
-            .scrollDismissesKeyboard(.interactively)
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .scrollDismissesKeyboard(.immediately)
+            .searchable(text: $searchQuery, prompt: "Search history")
+            .autocorrectionDisabled()
+            .textInputAutocapitalization(.never)
         }
         .navigationTitle("History")
-        .navigationBarTitleDisplayMode(.inline)
-        .confirmationDialog(
-            "Delete Translation",
-            isPresented: Binding(
-                get: { pendingDelete != nil },
-                set: { if !$0 { pendingDelete = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive) {
-                if let item = pendingDelete {
-                    withAnimation { store.remove(id: item.id) }
-                    Haptics.success()
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            if !store.entries.isEmpty {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Clear all", role: .destructive) { showClearAll = true }
                 }
-                pendingDelete = nil
             }
-            Button("Cancel", role: .cancel) { pendingDelete = nil }
+        }
+        .confirmationDialog("Clear all history?", isPresented: $showClearAll, titleVisibility: .visible) {
+            Button("Clear all", role: .destructive) {
+                Haptics.warning()
+                withAnimation { store.clear() }
+            }
+            Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Are you sure you want to delete this translation?")
-        }
-    }
-
-    private var header: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Translation History")
-                    .font(.system(size: 28, weight: .bold))
-                    .foregroundStyle(colors.text)
-                Text("\(filteredHistory.count) \(filteredHistory.count == 1 ? "translation" : "translations")")
-                    .font(.system(size: 14))
-                    .foregroundStyle(colors.textSecondary)
-            }
-            Spacer()
-            Button {
-                Haptics.selection()
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                    showFilters.toggle()
-                }
-            } label: {
-                Image(systemName: "line.3.horizontal.decrease")
-                    .font(.system(size: 18))
-                    .foregroundStyle(showFilters ? colors.accent : colors.textSecondary)
-                    .frame(width: 44, height: 44)
-                    .background(colors.glass)
-                    .clipShape(.rect(cornerRadius: 12))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 12)
-                            .strokeBorder(colors.glassBorder, lineWidth: 1)
-                    }
-            }
-        }
-        .padding(.top, 8)
-    }
-
-    private var searchBar: some View {
-        GlassCard(variant: .cyan, padding: 12, colors: colors, isDark: theme.isDark) {
-            HStack(spacing: 12) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 18))
-                    .foregroundStyle(colors.textSecondary)
-                TextField("Search translations...", text: $searchQuery)
-                    .font(.system(size: 16))
-                    .foregroundStyle(colors.text)
-                if !searchQuery.isEmpty {
-                    Button {
-                        searchQuery = ""
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 16))
-                            .foregroundStyle(colors.textSecondary)
-                    }
-                }
-            }
+            Text("This removes every saved translation on this device. It can't be undone.")
         }
     }
 
     private var filterChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 ForEach(HistoryFilter.allCases) { option in
+                    let active = filter == option
                     Button {
                         Haptics.selection()
                         filter = option
                     } label: {
                         Text(option.rawValue)
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(filter == option ? colors.accent : colors.textSecondary)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .background(filter == option ? Color(hex: 0x00F0FF, alpha: 0.15) : colors.surface)
-                            .clipShape(Capsule())
-                            .overlay {
-                                Capsule().strokeBorder(
-                                    filter == option ? colors.accent : colors.glassBorder,
-                                    lineWidth: 1
-                                )
-                            }
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(active ? colors.primary : colors.textSecondary)
+                            .padding(.horizontal, 14)
+                            .frame(minHeight: 36)
+                            .background(active ? colors.glassCyan : colors.surface, in: Capsule())
+                            .overlay { Capsule().strokeBorder(active ? colors.glassCyanBorder : colors.glassBorder, lineWidth: 1) }
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(active ? .isSelected : [])
                 }
             }
         }
-        .contentMargins(.horizontal, 2)
     }
 
     private var emptyState: some View {
         VStack(spacing: 12) {
-            Image(systemName: "clock.arrow.circlepath")
-                .font(.system(size: 56))
-                .foregroundStyle(colors.textSecondary)
-            Text("No Translations Yet")
-                .font(.system(size: 22, weight: .bold))
+            Image(systemName: store.entries.isEmpty ? "clock.arrow.circlepath" : "magnifyingglass")
+                .scaledFont(size: 48)
+                .foregroundStyle(colors.textMuted)
+                .accessibilityHidden(true)
+            Text(store.entries.isEmpty ? "No translations yet" : "Nothing found")
+                .font(.title3.bold())
                 .foregroundStyle(colors.text)
-            Text(
-                searchQuery.isEmpty && filter == .all
-                    ? "Your translation history will appear here"
-                    : "No translations match your search"
-            )
-            .font(.system(size: 16))
-            .foregroundStyle(colors.textSecondary)
-            .multilineTextAlignment(.center)
+            Text(store.entries.isEmpty
+                 ? "Your translations are saved here automatically."
+                 : "Try a different word or filter.")
+                .font(.body)
+                .foregroundStyle(colors.textSecondary)
+                .multilineTextAlignment(.center)
+            if store.entries.isEmpty {
+                Button {
+                    router.open(.translate, focus: true)
+                } label: {
+                    Text("Start translating")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color(hex: 0x0B1020))
+                        .padding(.horizontal, 20)
+                        .frame(minHeight: 44)
+                        .background(colors.primary, in: Capsule())
+                }
+                .buttonStyle(PressableButtonStyle())
+                .padding(.top, 4)
+            }
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 80)
+        .padding(.vertical, 60)
     }
 
     private func historyCard(_ item: SavedTranslation) -> some View {
-        GlassCard(variant: .purple, padding: 16, colors: colors, isDark: theme.isDark) {
-            VStack(alignment: .leading, spacing: 12) {
+        GlassCard(variant: .purple, padding: 16, colors: colors, isDark: true) {
+            VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    HStack(spacing: 8) {
-                        Image(systemName: "textformat")
-                            .font(.system(size: 14))
+                    Text("\(LanguageCatalog.label(item.sourceLanguage)) \u{2192} \(LanguageCatalog.label(item.targetLanguage))")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(colors.textSecondary)
+                    if item.isFavorite {
+                        Image(systemName: "star.fill")
+                            .font(.caption)
                             .foregroundStyle(colors.accent)
-                        Text("\(LanguageCatalog.label(item.sourceLanguage)) → \(LanguageCatalog.label(item.targetLanguage))")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(colors.textSecondary)
+                            .accessibilityLabel("Favorite")
                     }
                     Spacer()
-                    HStack(spacing: 8) {
-                        Button {
-                            Haptics.selection()
-                            store.toggleFavorite(id: item.id)
-                        } label: {
-                            Image(systemName: item.isFavorite ? "star.fill" : "star")
-                                .font(.system(size: 16))
-                                .foregroundStyle(item.isFavorite ? colors.accent : colors.textSecondary)
-                        }
-                        Button {
-                            pendingDelete = item
-                        } label: {
-                            Image(systemName: "trash")
-                                .font(.system(size: 16))
-                                .foregroundStyle(colors.error)
-                        }
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("SOURCE")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(colors.textMuted)
-                    Text(item.sourceText)
-                        .font(.system(size: 15))
-                        .foregroundStyle(colors.text)
-                        .lineLimit(2)
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("TRANSLATION")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(colors.textMuted)
-                    Text(item.translatedText)
-                        .font(.system(size: 15))
-                        .foregroundStyle(colors.text)
-                        .lineLimit(2)
-                }
-
-                Rectangle()
-                    .fill(colors.glassBorder)
-                    .frame(height: 1)
-
-                HStack {
                     Text(item.createdAt.formatted(date: .abbreviated, time: .shortened))
-                        .font(.system(size: 12))
+                        .font(.caption)
                         .foregroundStyle(colors.textMuted)
+                }
+                Text(item.sourceText)
+                    .font(.body)
+                    .foregroundStyle(colors.textSecondary)
+                    .lineLimit(3)
+                Text(item.translatedText)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(colors.text)
+                    .lineLimit(4)
+                    .textSelection(.enabled)
+                HStack {
                     Spacer()
                     Button {
                         UIPasteboard.general.string = item.translatedText
                         Haptics.success()
-                    } label: {
-                        HStack(spacing: 4) {
-                            Text("Copy")
-                                .font(.system(size: 13, weight: .semibold))
-                            Image(systemName: "doc.on.doc")
-                                .font(.system(size: 12))
+                        copiedId = item.id
+                        Task {
+                            try? await Task.sleep(for: .seconds(1.5))
+                            if copiedId == item.id { copiedId = nil }
                         }
-                        .foregroundStyle(colors.accent)
+                    } label: {
+                        Label(copiedId == item.id ? "Copied" : "Copy", systemImage: copiedId == item.id ? "checkmark" : "doc.on.doc")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(copiedId == item.id ? colors.success : colors.primary)
+                            .frame(minHeight: 36)
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("Swipe left to delete, right to favorite")
     }
 }

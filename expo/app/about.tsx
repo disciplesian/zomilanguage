@@ -8,16 +8,20 @@ import {
 } from 'react-native';
 import { Stack } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { 
-  Info, 
-  Globe, 
-  Heart, 
-  Target,
-  BookOpen,
-} from 'lucide-react-native';
+import { Info, Heart, Target, Gift } from 'lucide-react-native';
+import Constants from 'expo-constants';
+import infoPages from '@/constants/infoPages.json';
 import GlassCard from '@/components/GlassCard';
 import PageBottomNav, { PAGE_BOTTOM_NAV_SPACING } from '@/components/PageBottomNav';
 import Colors from '@/constants/colors';
+
+interface AboutSection {
+  id?: string;
+  title: string;
+  body?: string;
+}
+
+const INFO = infoPages as unknown as { about: { tagline: string; sections: AboutSection[] } };
 
 export default function AboutScreen() {
   return (
@@ -57,103 +61,26 @@ export default function AboutScreen() {
           <Text style={styles.appName}>Zomi Translator</Text>
         </View>
 
-        <GlassCard variant="cyan" glow style={styles.missionCard}>
-          <View style={styles.missionHeader}>
-            <Target size={24} color={Colors.primary} />
-            <Text style={styles.missionTitle}>Our Mission</Text>
-          </View>
-          <Text style={styles.missionText}>
-            Zomi Translator is dedicated to preserving and promoting the Zomi language through modern technology. 
-            Our mission is to make the Zomi language accessible to everyone, from native speakers wanting to 
-            preserve their heritage to language enthusiasts eager to learn this beautiful Tibeto-Burman language.
-          </Text>
-        </GlassCard>
+        <Text style={styles.tagline}>{INFO.about.tagline}</Text>
+        <Text style={styles.versionLine}>Version {Constants.expoConfig?.version ?? '1.2.0'}</Text>
 
-        <GlassCard variant="purple" style={styles.scriptureCard}>
-          <View style={styles.scriptureHeader}>
-            <BookOpen size={20} color={Colors.tertiary} />
-            <Text style={styles.scriptureLabel}>Guiding Scripture</Text>
-          </View>
-          <Text style={styles.scriptureVerse}>
-            {"\u201CGo therefore and make disciples of all nations, baptizing them in the name of the Father and of the Son and of the Holy Spirit, teaching them to observe all that I have commanded you.\u201D"}
-          </Text>
-          <Text style={styles.scriptureReference}>— Matthew 28:19-20 (ESV)</Text>
-        </GlassCard>
-
-        <GlassCard style={styles.infoCard}>
-          <View style={styles.infoHeader}>
-            <Globe size={20} color={Colors.success} />
-            <Text style={styles.infoTitle}>About the Zomi Language</Text>
-          </View>
-          <Text style={styles.infoText}>
-            Zomi is a Tibeto-Burman language spoken by approximately 500,000 people across Myanmar, 
-            India, and Bangladesh. The Zomi people are an ethnic group comprising various tribes 
-            who share cultural and linguistic similarities.
-          </Text>
-          <Text style={styles.infoText}>
-            The language has a rich oral tradition with songs, stories, and proverbs passed down 
-            through generations. Our app aims to document and digitize this linguistic heritage 
-            for future generations.
-          </Text>
-        </GlassCard>
-
-        <GlassCard variant="purple" style={styles.featuresCard}>
-          <Text style={styles.featuresTitle}>Key Features</Text>
-          <View style={styles.featuresList}>
-            {[
-              'AI-powered translation between Zomi and English',
-              'Comprehensive dictionary',
-              'Interactive language learning lessons',
-              'Pronunciation guides with phonetic spelling',
-              'Community-driven word contributions',
-              'Offline access to essential phrases',
-              'Daily word of the day feature',
-              'Grammar tips and cultural notes',
-            ].map((feature, index) => (
-              <View key={index} style={styles.featureItem}>
-                <View style={styles.featureBullet} />
-                <Text style={styles.featureText}>{feature}</Text>
+        {INFO.about.sections.map((section, i) => {
+          const Icon = [Target, Gift, Heart][i % 3];
+          const variant = (['cyan', 'green', 'pink'] as const)[i % 3];
+          return (
+            <GlassCard key={section.id ?? section.title} variant={variant} style={styles.missionCard}>
+              <View style={styles.missionHeader}>
+                <Icon size={22} color={Colors.primary} />
+                <Text style={styles.missionTitle} accessibilityRole="header">{section.title}</Text>
               </View>
-            ))}
-          </View>
-        </GlassCard>
-
-        <GlassCard variant="green" style={styles.sourceCard}>
-          <Text style={styles.sourceTitle}>Powered by AI</Text>
-          <Text style={styles.sourceText}>
-            Our translations are powered by Zomi AI, specifically tuned for the Zomi language to ensure high accuracy and natural-sounding translations.
-          </Text>
-        </GlassCard>
-
-        <GlassCard variant="yellow" style={styles.disclaimerCard}>
-          <Text style={styles.disclaimerTitle}>AI-Generated Content Notice</Text>
-          <Text style={styles.disclaimerText}>
-            This application utilizes AI-powered translation and language processing technologies. While we strive for accuracy, AI technology is continuously evolving. Due to the nature of AI development, the app's performance and accuracy will gradually improve over time, but no guarantee of perfection is provided. We recommend verifying critical translations with native speakers.
-          </Text>
-        </GlassCard>
-
-        <GlassCard style={styles.teamCard}>
-          <View style={styles.teamHeader}>
-            <Heart size={20} color={Colors.secondary} fill={Colors.secondary} />
-            <Text style={styles.teamTitle}>Made with Love</Text>
-          </View>
-          <Text style={styles.teamText}>
-            Zomi Translator is developed by a passionate team dedicated to language preservation 
-            and cultural heritage. We believe that every language is a unique window into human 
-            experience and deserves to be celebrated and protected.
-          </Text>
-          <Text style={styles.teamText}>
-            Special thanks to all the native speakers, linguists, and community members who 
-            have contributed to making this app possible.
-          </Text>
-          <Text style={styles.blessingText}>
-            May God bless everyone who uses this tool, and may it serve as a blessing for generations to come.
-          </Text>
-        </GlassCard>
+              <Text style={styles.missionText}>{section.body}</Text>
+            </GlassCard>
+          );
+        })}
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>© 2026 Zomi Language & Literature Resource Center</Text>
-          <Text style={styles.footerSubtext}>Preserving Heritage Through Technology</Text>
+          <Text style={styles.footerSubtext}>support@zomitranslator.com</Text>
         </View>
       </ScrollView>
       <PageBottomNav />
@@ -162,6 +89,19 @@ export default function AboutScreen() {
 }
 
 const styles = StyleSheet.create({
+  tagline: {
+    color: Colors.textSecondary,
+    fontSize: 15,
+    textAlign: 'center' as const,
+    marginTop: -8,
+  },
+  versionLine: {
+    color: Colors.textMuted,
+    fontSize: 13,
+    textAlign: 'center' as const,
+    marginTop: 4,
+    marginBottom: 16,
+  },
   container: {
     flex: 1,
     backgroundColor: Colors.background,
