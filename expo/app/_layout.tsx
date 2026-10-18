@@ -14,8 +14,10 @@ import { SyncProvider } from "@/contexts/SyncContext";
 import { StoreCaptionsProvider } from "@/contexts/StoreCaptionsContext";
 import { trpc, getTrpcClient } from "@/lib/trpc";
 import { setupGlobalErrorHandlers } from "@/lib/errorHandler";
+import { installProblemReporting, reportProblem } from "@/lib/problems";
 
 setupGlobalErrorHandlers();
+installProblemReporting();
 
 if (Platform.OS !== 'web') {
   try {
@@ -200,6 +202,7 @@ export default function RootLayout() {
 
   const handleBoundaryError = useCallback((error: Error) => {
     console.error('[RootLayout] ErrorBoundary caught:', error?.message);
+    reportProblem('crash', `${error?.name ?? 'Error'}: ${error?.message ?? ''}`, 'root');
   }, []);
 
   if (!isReady) {

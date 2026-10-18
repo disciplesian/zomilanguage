@@ -36,6 +36,7 @@ import {
   type BlockEntry,
 } from "./guard";
 import { usageSnapshot } from "./usage";
+import { flushProblemsNow, parseProblem, recordProblem } from "./problems";
 import {
   FREE_WORD_LIMIT,
   anonymousWordsUsed,
@@ -283,8 +284,9 @@ app.post("/translate/stream", async (c) => {
     networkId ||
     "anonymous";
 
-  // Abuse protection — all in-memory, zero added latency.
-  void ensureBlockListLoaded();
+  // Abuse protection — in-memory; only a cold instance's first request waits
+  // (≤400ms) for the shared block list, refreshes happen in the background.
+  await ensureBlockListLoaded();
   if (!auth && isBlocked([anonymousId, networkId])) {
     return c.json({ error: "blocked", message: "This device can't use translation right now." }, 403);
   }
@@ -589,6 +591,56 @@ app.post("/translate/stream", async (c) => {
       data: JSON.stringify({ code: "SERVICE_UNAVAILABLE", message: "All models failed" }),
     });
   });
+});
+
+/**
+ * Privacy-safe problem reports from the apps. Body: { reports: [...] } or a
+ * single report. Only scrubbed error signatures are kept (see ./problems).
+ */
+app.post("/telemetry/problems", async (c) => {
+  const networkId =
+    (c.req.header("cf-connecting-ip") ?? "").trim() ||
+    (c.req.header("x-forwarded-for") ?? "").split(",")[0].trim();
+  if (isRateLimited([networkId ? `p:${networkId}` : "p:unknown"], 10)) {
+    return c.json({ ok: false }, 429);
+  }
+  let body: unknown = null;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_json" }, 400);
+  }
+  const raw = (body as { reports?: unknown })?.reports;
+  const list = Array.isArray(raw) ? raw.slice(0, 20) : [body];
+  let accepted = 0;
+  for (const item of list) {
+    const report = parseProblem(item);
+    if (report) {
+      recordProblem(report);
+      accepted += 1;
+    }
+  }
+  // Reports are rare and rate limited; write now so short-lived server
+  // instances never drop them.
+  if (accepted > 0) await flushProblemsNow();
+  return c.json({ ok: true, accepted });
+});
+
+/** Admin: aggregated problem reports for the last N days (default 7). */
+app.get("/admin/problems", async (c) => {
+  const guard = await requireAdmin(c);
+  if (!guard.ok) return guard.response;
+  const days = Math.min(90, Math.max(1, Number(c.req.query("days") ?? 7) || 7));
+  try {
+    const rows = await guard.db.rpc<unknown[]>("admin_client_problems", {
+      p_admin_user_id: guard.auth.userId,
+      p_days: days,
+    });
+    return c.json({ days, problems: Array.isArray(rows) ? rows : [] });
+  } catch (err) {
+    console.warn("[admin] problems unavailable:", err instanceof Error ? err.message : err);
+    return c.json({ days, problems: [], unavailable: true });
+  }
 });
 
 /** Loads persisted blocks once per instance (no-op if the table is absent). */

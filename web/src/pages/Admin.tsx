@@ -20,6 +20,7 @@ import { SiteLayout, GlassCard, RoleBadge } from '@/components/SiteLayout';
 import { SignInPanel } from '@/components/SignInPanel';
 import DictionaryManager from '@/components/admin/DictionaryManager';
 import UsageDashboard from '@/components/admin/UsageDashboard';
+import ProblemReports from '@/components/admin/ProblemReports';
 import { useAuth } from '@/lib/auth';
 import {
   fetchAdminOverview,
@@ -343,6 +344,9 @@ const Admin = () => {
 
         {/* AI usage, spend estimate & rate-limit alerts */}
         <UsageDashboard token={token} />
+
+        {/* Crashes, errors & slow screens from all apps (aggregate only) */}
+        <ProblemReports token={token} />
 
         {/* Top translators */}
         {overview && overview.topUsers.length > 0 && (

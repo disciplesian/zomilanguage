@@ -1,10 +1,10 @@
 {
-  "version": 3,
-  "lastUpdated": "October 17, 2026",
+  "version": 4,
+  "lastUpdated": "October 18, 2026",
   "supportEmail": "support@zomitranslator.com",
   "website": "https://zomitranslator.com",
   "about": {
-    "tagline": "Free, instant Zomi \u21c4 English translation.",
+    "tagline": "Free, instant Zomi ⇄ English translation.",
     "sections": [
       {
         "id": "mission",
@@ -30,15 +30,17 @@
       "Dictionary words are looked up on your device and never leave it.",
       "Sentences are sent securely to our AI translation service to be translated.",
       "We use an anonymous device ID and your network address only to share the free daily allowance fairly and stop abuse.",
+      "If the app crashes or freezes, it sends a short technical report with no personal data so we can fix it.",
       "We never sell your data, show ads, or track you across other apps."
     ],
-    "intro": "Zomi Translator (\"we\", \"us\") provides a Zomi \u21c4 English translation service in our iPhone app, Android app, and website. This policy explains what we collect, why, and the choices you have.",
+    "intro": "Zomi Translator (\"we\", \"us\") provides a Zomi ⇄ English translation service in our iPhone app, Android app, and website. This policy explains what we collect, why, and the choices you have.",
     "sections": [
       {
         "title": "1. Information we collect",
         "paragraphs": [
           "Text you translate. Sentences you translate are sent to our translation service to produce the result. Dictionary words are answered on your device and are not sent.",
           "Anonymous device ID and network address. A random ID created on your device and the network (IP) address of your request are used only to count the free daily allowance, limit how fast requests can be made, and block abuse. Network addresses are kept in memory for minutes, not stored with your translations.",
+          "Crash and problem reports. If the app crashes, freezes, or hits an error, it sends a short technical report: the type of problem, a shortened error message with any text and numbers removed, the screen, the app version, and the platform. Reports contain no account, device ID, network address, or translated text, and are stored only as daily totals for up to 90 days.",
           "Account information (optional). If you sign in with Google or Apple we receive your user identifier, email address and, if you allow it, your name and profile picture. We never receive your password.",
           "Saved history (optional). When you are signed in, your translation history is stored with your account so it syncs between your devices. Without an account, history stays only on your device."
         ]
@@ -49,6 +51,7 @@
           "To translate the text you submit and return the result.",
           "To share the free daily allowance fairly and keep the service available for everyone.",
           "To detect and stop automated or abusive use.",
+          "To find and fix crashes, freezes, and errors.",
           "To sync your history when you choose to sign in.",
           "To answer your support requests."
         ],
@@ -88,7 +91,7 @@
       {
         "title": "7. Retention",
         "paragraphs": [
-          "History on your device stays until you delete it. Account history is kept while your account is active. The daily allowance counter resets every day. When you delete your account, we remove your profile and history within 30 days, unless the law requires us to keep a record."
+          "History on your device stays until you delete it. Account history is kept while your account is active. The daily allowance counter resets every day. Crash and problem report totals are deleted after 90 days. When you delete your account, we remove your profile and history within 30 days, unless the law requires us to keep a record."
         ]
       },
       {

@@ -70,17 +70,45 @@ export interface BlockEntry {
   createdAt: string;
 }
 
-const blocked = new Map<string, BlockEntry>();
-let blockListLoaded = false;
+let blocked = new Map<string, BlockEntry>();
+let blockListLoadedAt = 0;
+let blockListInFlight: Promise<void> | null = null;
 
-/** Loads persisted blocks once (table optional — see backend/sql/abuse-protection.sql). */
+/** How long an instance trusts its copy before re-reading the shared list. */
+const BLOCK_LIST_TTL_MS = 30_000;
+/** Cap on how long a cold instance waits for its first copy. */
+const BLOCK_LIST_FIRST_LOAD_WAIT_MS = 400;
+
+/**
+ * Keeps this instance's copy of the persisted block list fresh. Many server
+ * instances run at once, so blocks/unblocks made through any of them reach
+ * the others within BLOCK_LIST_TTL_MS. The first load on a cold instance is
+ * awaited briefly so a blocked client can't slip through right after a
+ * restart; later refreshes run in the background (zero added latency).
+ */
 export async function loadBlockList(loader: () => Promise<BlockEntry[]>): Promise<void> {
-  if (blockListLoaded) return;
-  blockListLoaded = true;
-  try {
-    for (const entry of await loader()) blocked.set(entry.value, entry);
-  } catch {
-    // table not created yet — in-memory list still works
+  const isStale = Date.now() - blockListLoadedAt > BLOCK_LIST_TTL_MS;
+  if (!isStale) return;
+  const isFirstLoad = blockListLoadedAt === 0;
+  if (!blockListInFlight) {
+    blockListInFlight = (async () => {
+      try {
+        const next = new Map<string, BlockEntry>();
+        for (const entry of await loader()) next.set(entry.value, entry);
+        blocked = next;
+      } catch {
+        // Store unavailable — keep the current in-memory list.
+      } finally {
+        blockListLoadedAt = Date.now();
+        blockListInFlight = null;
+      }
+    })();
+  }
+  if (isFirstLoad) {
+    await Promise.race([
+      blockListInFlight,
+      new Promise<void>((resolve) => setTimeout(resolve, BLOCK_LIST_FIRST_LOAD_WAIT_MS)),
+    ]);
   }
 }
 

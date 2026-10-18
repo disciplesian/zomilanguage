@@ -167,14 +167,6 @@ export const getUserFriendlyMessage = (error: any): string => {
       return 'Storage issue detected. Please free up space and try again.';
     }
 
-    const message = String(error?.message || '').toLowerCase();
-    if (message.indexOf('camera') !== -1) {
-      return 'Camera is not available. Please check permissions.';
-    }
-    if (message.indexOf('microphone') !== -1 || message.indexOf('audio') !== -1) {
-      return 'Microphone is not available. Please check permissions.';
-    }
-
     return 'Something went wrong. Please try again.';
   } catch {
     return 'An unexpected error occurred.';

@@ -17,6 +17,7 @@ struct ZomiTranslatorApp: App {
         // keystroke on Translate or Dictionary is instant.
         DictionaryData.warmUp()
         AppRouter.registerQuickActions()
+        ProblemReporter.shared.start()
     }
 
     var body: some Scene {

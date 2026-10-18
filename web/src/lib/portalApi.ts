@@ -348,6 +348,23 @@ export interface DictionaryVersion {
 }
 
 /** Admin: version history — every upload and entry mutation, newest first. */
+/** One aggregated problem report (crash, error, or slow screen). No personal data. */
+export interface ProblemRow {
+  platform: string;
+  appVersion: string;
+  kind: 'crash' | 'error' | 'slow';
+  signature: string;
+  screen: string;
+  total: number;
+  firstSeen: string;
+  lastSeen: string;
+}
+
+export async function fetchAdminProblems(token: string, days = 7): Promise<ProblemRow[]> {
+  const body = await portalFetch(`/api/admin/problems?days=${days}`, token);
+  return Array.isArray(body.problems) ? (body.problems as ProblemRow[]) : [];
+}
+
 export async function fetchDictionaryHistory(token: string): Promise<DictionaryVersion[]> {
   const body = await portalFetch('/api/admin/dictionary/history', token);
   return Array.isArray(body.versions) ? (body.versions as DictionaryVersion[]) : [];

@@ -117,7 +117,7 @@ const TranslationShareCard = forwardRef<Svg, TranslationShareCardProps>(
         {/* Footer */}
         <Rect x={PAD} y={H - 128} width={W - PAD * 2} height={2} fill="#FFFFFF" opacity={0.14} />
         <SvgText x={PAD} y={H - 74} fontSize={28} fontWeight="600" fill="#FFFFFF" opacity={0.5}>
-          zomi.me
+          zomitranslator.com
         </SvgText>
         <SvgText x={W - PAD} y={H - 74} fontSize={28} fontWeight="700" fill="#00F0FF" textAnchor="end">
           Lungdam!

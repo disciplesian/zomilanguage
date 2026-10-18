@@ -99,6 +99,42 @@ export type Database = {
         }
         Relationships: []
       }
+      client_problems: {
+        Row: {
+          app_version: string
+          count: number
+          day: string
+          first_seen: string
+          kind: string
+          last_seen: string
+          platform: string
+          screen: string
+          signature: string
+        }
+        Insert: {
+          app_version: string
+          count?: number
+          day: string
+          first_seen?: string
+          kind: string
+          last_seen?: string
+          platform: string
+          screen?: string
+          signature: string
+        }
+        Update: {
+          app_version?: string
+          count?: number
+          day?: string
+          first_seen?: string
+          kind?: string
+          last_seen?: string
+          platform?: string
+          screen?: string
+          signature?: string
+        }
+        Relationships: []
+      }
       dictionary_dataset: {
         Row: {
           count: number
@@ -541,6 +577,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      admin_client_problems: {
+        Args: { p_admin_user_id: string; p_days: number; p_secret: string }
+        Returns: Json
+      }
       admin_dictionary_history: {
         Args: { p_admin_user_id: string; p_secret: string }
         Returns: Json
@@ -666,6 +706,10 @@ export type Database = {
           p_user_id: string
           p_word_count: number
         }
+        Returns: undefined
+      }
+      record_client_problems: {
+        Args: { p_items: Json; p_secret: string }
         Returns: undefined
       }
       record_gemini_usage: {
