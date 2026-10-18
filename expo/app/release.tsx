@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   StyleSheet,
   Image,
+  TextInput,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -54,11 +55,11 @@ const RELEASE = {
   listingStatus: 'Text updated for current features',
 };
 
-const SCREENSHOTS: { key: string; source: number }[] = [
-  { key: '01-translator', source: require('../assets/store/01-translator.png') },
-  { key: '02-glossary', source: require('../assets/store/02-glossary.png') },
-  { key: '03-pronunciation', source: require('../assets/store/03-pronunciation.png') },
-  { key: '04-settings', source: require('../assets/store/04-settings.png') },
+const SCREENSHOTS: { key: string; source: number; defaultCaption: string }[] = [
+  { key: '01-translator', source: require('../assets/store/01-translator.png'), defaultCaption: 'Instant Zomi translation' },
+  { key: '02-glossary', source: require('../assets/store/02-glossary.png'), defaultCaption: 'Offline Zomi dictionary' },
+  { key: '03-pronunciation', source: require('../assets/store/03-pronunciation.png'), defaultCaption: 'Say it right' },
+  { key: '04-settings', source: require('../assets/store/04-settings.png'), defaultCaption: 'Made your own' },
 ];
 
 const FEATURE_GRAPHIC = require('../assets/store/feature-graphic.png');
@@ -81,6 +82,9 @@ export default function StoreReleaseScreen() {
   const { user, getAccessToken } = useAuth();
   const router = useRouter();
   const [expanded, setExpanded] = useState<'about' | 'notes' | null>(null);
+  const [captions, setCaptions] = useState<Record<string, string>>(() =>
+    Object.fromEntries(SCREENSHOTS.map((s) => [s.key, s.defaultCaption])),
+  );
 
   const profileQuery = useQuery({
     queryKey: ['portal-profile', user?.id],
@@ -233,6 +237,18 @@ export default function StoreReleaseScreen() {
                   style={styles.playScreenshot}
                   resizeMode="cover"
                   accessibilityLabel="Store screenshot"
+                />
+                <TextInput
+                  style={styles.playCaptionInput}
+                  value={captions[shot.key] ?? ''}
+                  onChangeText={(text) =>
+                    setCaptions((prev) => ({ ...prev, [shot.key]: text }))
+                  }
+                  placeholder="Caption…"
+                  placeholderTextColor={PLAY.textMuted}
+                  maxLength={40}
+                  returnKeyType="done"
+                  accessibilityLabel={`Caption for screenshot ${shot.key}`}
                 />
               </View>
             ))}
@@ -480,6 +496,19 @@ const styles = StyleSheet.create({
   playScreenshot: {
     width: 130,
     height: 282,
+  },
+  playCaptionInput: {
+    width: 130,
+    marginTop: 6,
+    marginBottom: 4,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    fontSize: 11,
+    color: PLAY.text,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
   },
   playSection: {
     paddingHorizontal: 16,
