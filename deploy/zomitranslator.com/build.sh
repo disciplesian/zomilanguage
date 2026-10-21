@@ -10,18 +10,16 @@ STAMP="$(date +%Y-%m-%d)"
 OUT="$(mktemp -d)"
 NAME="zomitranslator-public_html-$STAMP.zip"
 
-# Off Rork hosting there is no /~api proxy, so call the Zomi backend directly
-# (its CORS list already allows zomitranslator.com).
+# Same build as Rork hosting: on zomitranslator.com the app detects the host
+# and calls the Zomi backend directly (see web/src/lib/config.ts).
 cd "$ROOT/web"
-# Sign-in only works on Rork-hosted addresses, so the buttons open the official site.
-VITE_RORK_API_BASE_URL="https://zomilanguage-backend.rork.app" \
-VITE_SIGN_IN_HOME="https://zomilanguage.rork.app" \
-  bunx vite build --outDir "$OUT/site" --emptyOutDir
+bunx vite build --outDir "$OUT/site" --emptyOutDir
 
 # Never ship download archives inside the site itself
 rm -rf "$OUT/site/downloads"
 
-cp "$HERE/htaccess.txt" "$OUT/site/.htaccess"
+mv "$OUT/site/cpanel-htaccess.txt" "$OUT/site/.htaccess"
+rm -f "$OUT/site/cpanel-index.txt"
 cp "$HERE/UPLOAD-GUIDE.txt" "$OUT/site/UPLOAD-GUIDE.txt"
 
 mkdir -p "$ROOT/web/public/downloads"

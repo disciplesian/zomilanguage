@@ -68,6 +68,8 @@ const Translate = () => {
   const [isLimit, setIsLimit] = useState<boolean>(false);
   const [freeLeft, setFreeLeft] = useState<number | null>(null);
   const [consent, setConsent] = useState<boolean>(() => localStorage.getItem(CONSENT_KEY) === '1');
+  // Read by runTranslation so agreeing takes effect immediately (state updates land a render later).
+  const consentRef = useRef<boolean>(consent);
   const [showBanner, setShowBanner] = useState<boolean>(() => localStorage.getItem(BANNER_KEY) !== '1');
   const [turns, setTurns] = useState<number>(0);
   const abortRef = useRef<AbortController | null>(null);
@@ -119,7 +121,7 @@ const Translate = () => {
     async (text: string, from: Lang, force = false): Promise<void> => {
       if (!text) return;
       if (showInstant(text, from)) return;
-      if (!consent) {
+      if (!consentRef.current) {
         setError('Please review the AI notice above to translate sentences.');
         return;
       }
@@ -189,8 +191,18 @@ const Translate = () => {
         }
       }
     },
-    [consent, getAccessToken, showInstant, user, freeLeft]
+    [getAccessToken, showInstant, user, freeLeft]
   );
+
+  const acceptConsent = (): void => {
+    localStorage.setItem(CONSENT_KEY, '1');
+    consentRef.current = true;
+    setConsent(true);
+    setError(null);
+    lastKeyRef.current = '';
+    const text = input.trim();
+    if (text) void runTranslation(text, source, true);
+  };
 
   // Auto-translate: dictionary words instantly, sentences after a short pause.
   useEffect(() => {
@@ -311,13 +323,7 @@ const Translate = () => {
             </p>
             <button
               type="button"
-              onClick={() => {
-                localStorage.setItem(CONSENT_KEY, '1');
-                setConsent(true);
-                lastKeyRef.current = '';
-                const text = input.trim();
-                if (text) void runTranslation(text, source, true);
-              }}
+              onClick={acceptConsent}
               className="mt-3 inline-flex min-h-11 items-center rounded-full bg-[#00f0ff] px-5 text-sm font-semibold text-[#0b1020] transition-transform active:scale-95"
             >
               Agree &amp; continue
@@ -433,6 +439,14 @@ const Translate = () => {
                     <Link to="/settings" className="inline-flex min-h-11 items-center rounded-full bg-[#00f0ff] px-5 text-sm font-semibold text-[#0b1020]">
                       {t('Sign in')}
                     </Link>
+                  ) : !consent ? (
+                    <button
+                      type="button"
+                      onClick={acceptConsent}
+                      className="inline-flex min-h-11 items-center rounded-full bg-[#00f0ff] px-5 text-sm font-semibold text-[#0b1020] transition-transform active:scale-95"
+                    >
+                      Agree &amp; continue
+                    </button>
                   ) : (
                     <button
                       type="button"

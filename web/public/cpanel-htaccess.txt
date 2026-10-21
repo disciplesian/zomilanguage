@@ -1,8 +1,11 @@
 # Zomi Translator - Apache / cPanel settings for public_html
-# (Copied into the package as ".htaccess".)
+# Installed as ".htaccess" by the upload package and by zomi-sync.php.
+# Not used on Rork hosting.
 
 Options -Indexes
 DirectoryIndex index.html
+# Leftover folders (e.g. an old /privacy/) must not hijack app pages with a 301
+DirectorySlash Off
 
 <IfModule mod_rewrite.c>
   RewriteEngine On
@@ -16,10 +19,16 @@ DirectoryIndex index.html
   RewriteCond %{HTTP_HOST} ^www\.(.+)$ [NC]
   RewriteRule ^ https://%1%{REQUEST_URI} [L,R=301]
 
-  # Single-page app: real files and folders are served as-is,
-  # every other address (/privacy, /support, /t/abc ...) loads index.html.
-  RewriteCond %{REQUEST_FILENAME} -f [OR]
-  RewriteCond %{REQUEST_FILENAME} -d
+  # The sync script and its state are for cron only, never the web
+  RewriteRule ^(zomi-sync\.php|\.zomi-) - [F,L]
+
+  # cPanel SSL checks and system folders keep working
+  RewriteRule ^(\.well-known|cgi-bin|cpanel|webmail)(/|$) - [L]
+
+  # Single-page app: real files are served as-is; every other address
+  # (/privacy, /support, /t/abc ...) loads index.html, even if an old
+  # folder with that name is still on the server.
+  RewriteCond %{REQUEST_FILENAME} -f
   RewriteRule ^ - [L]
   RewriteRule ^ index.html [L]
 </IfModule>
@@ -43,7 +52,7 @@ DirectoryIndex index.html
     Header set Cache-Control "public, max-age=31536000, immutable"
   </If>
 
-  # The page, service worker and manifest must always be fresh so new uploads show right away
+  # The page, service worker and manifest must always be fresh so new versions show right away
   <FilesMatch "^(index\.html|sw\.js|manifest\.webmanifest)$">
     Header set Cache-Control "no-cache"
   </FilesMatch>

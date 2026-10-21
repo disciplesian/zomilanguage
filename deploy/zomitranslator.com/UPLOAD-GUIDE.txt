@@ -32,7 +32,30 @@ else (no database, no PHP) is needed on this host. Guest translation works
 right away. The Sign in buttons open https://zomilanguage.rork.app, where
 accounts are managed (the sign-in service doesn't support other domains yet).
 
-Updating later: upload and extract the new zip the same way. Old files in
-assets/ can be deleted first to keep the folder tidy.
+AUTOMATIC UPDATES (set up once)
+-------------------------------
+zomi-sync.php (included) copies every new version of the official site
+(https://zomilanguage.rork.app) onto zomitranslator.com by itself.
+
+1. cPanel > "Cron Jobs".
+2. Common Settings: "Once Per Fifteen Minutes (*/15 * * * *)".
+3. Command (replace YOUR_CPANEL_USER with your cPanel username, shown
+   at the top right of cPanel or in the path of File Manager):
+
+   /usr/local/bin/php /home/YOUR_CPANEL_USER/public_html/zomi-sync.php >> /home/YOUR_CPANEL_USER/zomi-sync.log 2>&1
+
+4. Click "Add New Cron Job".
+
+Within 15 minutes of a website publish, zomitranslator.com shows the new
+version. Each file is checked before it is installed; if anything fails,
+the live site stays as it was. zomi-sync.log shows what happened
+("Up to date" or "Installed N files"). The script can't be opened from a
+browser; it only runs from cron.
+
+To update manually instead: upload and extract a new zip the same way.
+
+Old site leftovers: if public_html still has folders from a previous site
+(for example "privacy" or "support"), you can delete them. The site works
+either way.
 
 Support: support@zomitranslator.com
