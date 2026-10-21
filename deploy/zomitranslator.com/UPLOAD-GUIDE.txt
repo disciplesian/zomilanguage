@@ -1,0 +1,38 @@
+ZOMI TRANSLATOR - UPLOAD GUIDE FOR zomitranslator.com (cPanel)
+===============================================================
+
+This zip holds the complete website. Everything in it goes directly into
+public_html (not into a sub-folder).
+
+1. Log in to cPanel and open "File Manager".
+2. Open the "public_html" folder.
+3. Click "Settings" (top right) and tick "Show Hidden Files (dotfiles)",
+   so you can see the ".htaccess" file after extracting.
+4. Click "Upload" and choose this zip file. Wait until it says 100%.
+5. Back in public_html, right-click the zip and choose "Extract".
+   Extract to: /public_html   (overwrite existing files if asked)
+6. Check that public_html now contains: index.html, .htaccess, assets/,
+   favicon.png, icon.png, manifest.webmanifest, sw.js, robots.txt.
+   If they ended up inside a sub-folder, move them up into public_html.
+7. Delete the zip from public_html.
+8. Make sure SSL is on: cPanel > "SSL/TLS Status" > Run AutoSSL
+   (the site redirects everyone to https://).
+
+Test it:
+  https://zomitranslator.com              Translate (type "water" -> tui)
+  https://zomitranslator.com/dictionary   Dictionary
+  https://zomitranslator.com/privacy      Privacy Policy
+  https://zomitranslator.com/support      Support
+
+If /privacy or /support show "Not Found", the .htaccess file is missing
+(step 3/6) or your host has mod_rewrite turned off - ask the host to enable it.
+
+Translation and dictionary updates run on the Zomi servers, so nothing
+else (no database, no PHP) is needed on this host. Guest translation works
+right away. The Sign in buttons open https://zomilanguage.rork.app, where
+accounts are managed (the sign-in service doesn't support other domains yet).
+
+Updating later: upload and extract the new zip the same way. Old files in
+assets/ can be deleted first to keep the folder tidy.
+
+Support: support@zomitranslator.com

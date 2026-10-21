@@ -1,0 +1,54 @@
+# Zomi Translator - Apache / cPanel settings for public_html
+# (Copied into the package as ".htaccess".)
+
+Options -Indexes
+DirectoryIndex index.html
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # Always use HTTPS
+  RewriteCond %{HTTPS} !=on
+  RewriteCond %{HTTP:X-Forwarded-Proto} !https
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+  # Use the bare domain (www.zomitranslator.com -> zomitranslator.com)
+  RewriteCond %{HTTP_HOST} ^www\.(.+)$ [NC]
+  RewriteRule ^ https://%1%{REQUEST_URI} [L,R=301]
+
+  # Single-page app: real files and folders are served as-is,
+  # every other address (/privacy, /support, /t/abc ...) loads index.html.
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+  RewriteRule ^ index.html [L]
+</IfModule>
+
+# Correct types for the app manifest and modern assets
+<IfModule mod_mime.c>
+  AddType application/manifest+json .webmanifest
+  AddType text/javascript .js .mjs
+  AddType image/svg+xml .svg
+  AddType font/woff2 .woff2
+</IfModule>
+
+# Compression
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css text/javascript application/javascript application/json application/manifest+json image/svg+xml
+</IfModule>
+
+<IfModule mod_headers.c>
+  # Hashed build files never change: cache for a year
+  <If "%{REQUEST_URI} =~ m#^/assets/#">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </If>
+
+  # The page, service worker and manifest must always be fresh so new uploads show right away
+  <FilesMatch "^(index\.html|sw\.js|manifest\.webmanifest)$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set X-Frame-Options "SAMEORIGIN"
+</IfModule>

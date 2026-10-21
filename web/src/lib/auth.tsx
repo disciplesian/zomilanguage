@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 
-import { APP_KEY, AUTH_URL } from './config';
+import { APP_KEY, AUTH_URL, SIGN_IN_HOME } from './config';
 import {
   clearStoredTokens,
   getStoredAccessToken,
@@ -176,6 +176,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (provider: 'google' | 'apple'): Promise<void> => {
       if (!AUTH_URL || !APP_KEY) {
         setError('Sign-in is not configured for this site yet.');
+        return;
+      }
+      // Self-hosted copies (e.g. zomitranslator.com) cannot reach the sign-in
+      // service directly; send people to the official site to sign in there.
+      if (SIGN_IN_HOME) {
+        window.open(`${SIGN_IN_HOME}/settings`, '_blank', 'noopener');
         return;
       }
       setIsSigningIn(true);

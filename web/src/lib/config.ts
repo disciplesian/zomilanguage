@@ -24,6 +24,13 @@ export const API_BASE_URL: string = pick(
   '/~api'
 );
 
+/**
+ * Set only for self-hosted builds (e.g. the zomitranslator.com cPanel package):
+ * sign-in opens this official site, because the sign-in service only accepts
+ * requests from Rork-hosted addresses.
+ */
+export const SIGN_IN_HOME: string = pick(import.meta.env.VITE_SIGN_IN_HOME as string | undefined, '');
+
 export const SUPPORT_EMAIL = 'support@zomitranslator.com';
 
 export const APP_NAME = 'Zomi Translator';
